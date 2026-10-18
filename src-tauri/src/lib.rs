@@ -1,4 +1,4 @@
-mod audio;
+pub mod audio;
 
 use std::sync::atomic::Ordering;
 use std::thread;
@@ -7,10 +7,10 @@ use std::time::Duration;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use audio::ENGINE_RATE;
 use audio::devices::{self, DeviceList};
 use audio::engine::{Engine, EngineConfig, EngineInfo};
 use audio::mixer::{ChannelId, ChannelParams, Mixer, Output, OutputId, OutputParams};
-use audio::ENGINE_RATE;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -108,10 +108,12 @@ fn snapshot(engine: &Engine) -> Meters {
 fn spawn_meter_loop(app: AppHandle) {
     thread::Builder::new()
         .name("ode-meters".into())
-        .spawn(move || loop {
-            thread::sleep(Duration::from_millis(33));
-            let meters = snapshot(&app.state::<Engine>());
-            let _ = app.emit("engine://meters", meters);
+        .spawn(move || {
+            loop {
+                thread::sleep(Duration::from_millis(33));
+                let meters = snapshot(&app.state::<Engine>());
+                let _ = app.emit("engine://meters", meters);
+            }
         })
         .expect("Pegel-Thread konnte nicht starten");
 }

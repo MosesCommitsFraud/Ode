@@ -2,8 +2,8 @@
 //! gesteuert. Mikrofon → Kanal-Fader → je ein Puffer pro Ausgang →
 //! Routing, Ausgangs-Fader, Limiter → Kopfhörer (A) und Kabel (B).
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::thread;
 
 use cpal::traits::{DeviceTrait, StreamTrait};
@@ -11,16 +11,16 @@ use cpal::{
     BufferSize, Device, FromSample, Host, Sample, SampleFormat, SizedSample, Stream, StreamConfig,
     SupportedStreamConfig,
 };
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
 use parking_lot::Mutex;
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 use serde::{Deserialize, Serialize};
 
-use super::dsp::{peak, Limiter, SmoothedGain};
+use super::dsp::{Limiter, SmoothedGain, peak};
 use super::mixer::{ChannelId, Mixer, OutputId};
 use super::resample::{PullResampler, PushResampler};
-use super::{devices, BLOCK_FRAMES, ENGINE_RATE};
+use super::{BLOCK_FRAMES, ENGINE_RATE, devices};
 
 /// Größter Callback, für den Puffer vorab angelegt werden.
 const MAX_CALLBACK_FRAMES: usize = 16_384;
@@ -165,8 +165,8 @@ fn start(
     mixer.out_a.reset_stats();
     mixer.out_b.reset_stats();
 
-    let target_frames = ((config.buffer_ms.clamp(2.0, 200.0) / 1000.0) * ENGINE_RATE as f32)
-        as usize;
+    let target_frames =
+        ((config.buffer_ms.clamp(2.0, 200.0) / 1000.0) * ENGINE_RATE as f32) as usize;
 
     let mut producers = Vec::new();
     let mut streams = Vec::new();
@@ -179,14 +179,15 @@ fn start(
     ] {
         let Some(id) = id else { continue };
         let device = devices::find(host, id)?;
-        let mut producer_consumer = HeapRb::<f32>::new(RING_FRAMES).split();
-        // Vorlauf mit Stille, damit kleine Schwankungen keine Aussetzer erzeugen.
-        for _ in 0..target_frames {
-            let _ = producer_consumer.0.try_push(0.0);
-        }
-        let (producer, consumer) = producer_consumer;
-        let (stream, stream_info) =
-            build_output(&device, mixer.clone(), errors.clone(), output, consumer, target_frames)?;
+        let (producer, consumer) = HeapRb::<f32>::new(RING_FRAMES).split();
+        let (stream, stream_info) = build_output(
+            &device,
+            mixer.clone(),
+            errors.clone(),
+            output,
+            consumer,
+            target_frames,
+        )?;
         producers.push((output, producer));
         streams.push(stream);
         match output {
@@ -200,7 +201,8 @@ fn start(
         build_input(&input_device, mixer.clone(), errors.clone(), producers)?;
     streams.push(input_stream);
 
-    for stream in &streams {
+    // Mikrofon zuerst starten, damit die Ausgänge nicht leer anlaufen.
+    for stream in streams.iter().rev() {
         stream.play()?;
     }
 
@@ -327,7 +329,10 @@ impl InputProcessor {
         for (output, producer) in &mut self.producers {
             let pushed = producer.push_slice(&self.engine);
             if pushed < self.engine.len() {
-                self.mixer.output(*output).overruns.fetch_add(1, Ordering::Relaxed);
+                self.mixer
+                    .output(*output)
+                    .overruns
+                    .fetch_add(1, Ordering::Relaxed);
             }
         }
     }
@@ -401,6 +406,8 @@ struct OutputProcessor {
     resampler: PullResampler,
     channels: usize,
     target_frames: usize,
+    /// Erst ausgeben, wenn der Puffer einmal den Zielwert erreicht hat.
+    primed: bool,
     mono: Vec<f32>,
     gain: SmoothedGain,
     limiter: Limiter,
@@ -415,8 +422,17 @@ impl OutputProcessor {
         let out = self.mixer.output(self.output);
         out.callback_frames.store(frames as u32, Ordering::Relaxed);
 
-        // Drift-Ausgleich: läuft der Puffer voll, auf den Zielwert kürzen.
+        // Bis das Mikrofon den Puffer gefüllt hat, Stille ohne Aussetzer-Zählung.
         let buffered = self.consumer.occupied_len();
+        if !self.primed {
+            if buffered < self.target_frames {
+                data.fill(T::EQUILIBRIUM);
+                return;
+            }
+            self.primed = true;
+        }
+
+        // Drift-Ausgleich: läuft der Puffer voll, auf den Zielwert kürzen.
         let high_water = self.target_frames + 2 * BLOCK_FRAMES + frames;
         if buffered > high_water {
             self.consumer.skip(buffered - self.target_frames);
@@ -450,7 +466,8 @@ impl OutputProcessor {
 
         if out.limiter_enabled() {
             self.limiter.process(&mut self.mono);
-            out.gain_reduction_db.store(self.limiter.gain_reduction_db());
+            out.gain_reduction_db
+                .store(self.limiter.gain_reduction_db());
         } else {
             self.mono.iter_mut().for_each(|s| *s = s.clamp(-1.0, 1.0));
         }
@@ -477,7 +494,10 @@ fn build_output(
     );
     let info = stream_info(device, &supported);
     let rate = supported.sample_rate();
-    mixer.output(output).device_rate.store(rate, Ordering::Relaxed);
+    mixer
+        .output(output)
+        .device_rate
+        .store(rate, Ordering::Relaxed);
 
     let processor = OutputProcessor {
         mixer,
@@ -486,6 +506,7 @@ fn build_output(
         resampler: PullResampler::new(ENGINE_RATE, rate),
         channels: supported.channels() as usize,
         target_frames,
+        primed: false,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),
         gain: SmoothedGain::new(0.0),
         limiter: Limiter::new(-1.0, 80.0, rate),

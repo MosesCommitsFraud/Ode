@@ -77,20 +77,20 @@ mod tests {
     #[test]
     fn push_resampler_ratio() {
         let mut r = PushResampler::new(44_100, 48_000);
-        let mut count = 0;
+        let mut count: i32 = 0;
         r.process(&vec![0.5; 44_100], |_| count += 1);
-        assert!((count as i32 - 48_000).abs() <= 1);
+        assert!((count - 48_000).abs() <= 1);
     }
 
     #[test]
     fn pull_resampler_ratio() {
         let mut r = PullResampler::new(48_000, 44_100);
-        let mut pulled = 0;
+        let mut pulled: i32 = 0;
         let mut out = vec![0.0; 44_100];
         r.process(&mut out, || {
             pulled += 1;
             0.5
         });
-        assert!((pulled as i32 - 48_000).abs() <= 2);
+        assert!((pulled - 48_000).abs() <= 2);
     }
 }
