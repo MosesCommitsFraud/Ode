@@ -86,7 +86,9 @@ function withDefaults(config: EngineConfig, devices: DeviceList): EngineConfig {
   const has = (list: DeviceList["inputs"], id: string | null) => !!id && list.some((d) => d.id === id);
   const physicalInput = devices.inputs.find((d) => d.isDefault && !d.isVirtualCable) ??
     devices.inputs.find((d) => !d.isVirtualCable);
-  const cable = devices.outputs.find((d) => d.isVirtualCable);
+  // VB-Cable ist der Standard; "CABLE In 16ch" ist nur die Mehrkanal-Variante.
+  const cable = devices.outputs.find((d) => d.name.startsWith("CABLE Input")) ??
+    devices.outputs.find((d) => d.isVirtualCable);
   const monitor = devices.outputs.find((d) => d.isDefault && !d.isVirtualCable) ??
     devices.outputs.find((d) => !d.isVirtualCable);
   return {

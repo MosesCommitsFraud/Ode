@@ -125,7 +125,7 @@ Tauri mit Rust-Backend und React-Oberfläche; so passt das T3-Design (React, Tai
 | Hotkeys | `global-hotkey` bzw. Tauri-Plugin | Tasten auch im Spiel |
 | Bibliothek | SQLite (`rusqlite`) | Sounds, Playlists, Kategorien, Einstellungen |
 | Downloader | yt-dlp und FFmpeg als mitgelieferte Programme | Download, Umwandlung, Lautheit |
-| Treiber | VB-Cable oder VAC Lite (signiert) | virtuelles Mikrofon |
+| Treiber | VB-Cable (signiert, im Installer mitgeliefert) | virtuelles Mikrofon |
 
 Die Audio-Engine läuft in einem eigenen Thread mit fester Blockgröße (10 ms bei 48 kHz = 480 Samples, passend zu RNNoise); die Oberfläche steuert sie nur über Nachrichten.
 
@@ -152,7 +152,19 @@ Das größte Risiko ist die Latenz der Kette Mikrofon → App → Kabel; sie mus
 
 **Offene Fragen**
 
-- [ ] VB-Cable oder VAC Lite als Standard-Treiber?
+- [x] VB-Cable oder VAC Lite als Standard-Treiber? → **VB-Cable.** Darf laut VB-Audio als Donationware mit Herkunftsangabe im eigenen Installer (auch still) mitgeliefert werden; VAC Lite nicht frei weitergebbar.
 - [ ] Soll die App das echte Mikrofon exklusiv belegen oder geteilt?
 - [ ] Spotify-Steuerung über die Web-API nötig, oder reicht der Loopback?
 - [ ] Sollen Sounds pro Spiel oder Profil getrennte Hotkeys haben?
+
+## Messungen
+
+**18.10.2026 – Phase 1, Mikrofon → VB-Cable** (fifine USB-Mikrofon, alles 48 kHz / f32, `cargo run --release --example latency`)
+
+| Ode-Puffer | Verzögerung bis „CABLE Output“ | Aussetzer |
+| --- | --- | --- |
+| 5 ms | 117,2 ms | 1 |
+| 10 ms | 115,5 ms | 0 |
+| 20 ms | 128,9 ms | 0 |
+
+Ode selbst trägt rund 30 ms bei (je 10 ms Eingangs-, Zwischen- und Ausgangspuffer). Der Rest liegt im Treiber: VB-Cable steht ab Werk auf `Max Latency = 7168` Samples (Registry `HKLM\SYSTEM\CurrentControlSet\Services\VB-Cable`, Wert `VBAudioCableWDM_Latency`). Wenn der Wert kleiner ist, sollte die Kette unter 30 ms liegen. Der Installer von Ode sollte ihn bei der stillen Installation gleich mitsetzen.

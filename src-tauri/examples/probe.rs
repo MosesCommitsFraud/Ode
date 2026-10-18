@@ -57,7 +57,11 @@ fn main() -> anyhow::Result<()> {
     let fallback = args.next();
     let cable = match &fallback {
         Some(part) => list.outputs.iter().find(|d| d.name.contains(part.as_str())),
-        None => list.outputs.iter().find(|d| d.is_virtual_cable),
+        None => list
+            .outputs
+            .iter()
+            .find(|d| d.name.starts_with("CABLE Input"))
+            .or_else(|| list.outputs.iter().find(|d| d.is_virtual_cable)),
     }
     .ok_or_else(|| anyhow::anyhow!("kein virtuelles Kabel"))?;
 

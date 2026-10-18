@@ -103,8 +103,8 @@ export function DeviceSetup() {
 
       {noCable && (
         <p className="mt-3 rounded-md bg-warning/10 px-2.5 py-2 text-xs text-warning-foreground">
-          Kein virtuelles Kabel gefunden. Installiere VB-Cable oder Virtual Audio Cable Lite und lade
-          die Geräte neu.
+          Kein virtuelles Kabel gefunden. Installiere VB-Cable (vb-audio.com/Cable) und lade die
+          Geräte neu.
         </p>
       )}
       {error && (
