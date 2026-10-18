@@ -49,10 +49,19 @@ export interface OutputParams {
   limiter: boolean;
 }
 
+export interface DuckingParams {
+  enabled: boolean;
+  /** Absenkung von Soundboard und Musik in dB. */
+  amountDb: number;
+  /** Ab diesem Mikrofonpegel (dBFS) gilt: es wird gesprochen. */
+  thresholdDb: number;
+}
+
 export interface MixerState {
   channels: [ChannelId, ChannelParams][];
   outA: OutputParams;
   outB: OutputParams;
+  ducking: DuckingParams;
 }
 
 export interface OutputMeters {
@@ -74,6 +83,8 @@ export interface Meters {
   errors: string[];
   /** Laufende Soundboard-Sounds mit Fortschritt 0–1. */
   playing: { id: number; progress: number }[];
+  /** Aktuelle Absenkung durch Ducking in dB, 0 = keine. */
+  duckingDb: number;
 }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -88,6 +99,7 @@ export const engine = {
     invoke<void>("set_channel", { channel, params }),
   setOutput: (output: OutputId, params: OutputParams) =>
     invoke<void>("set_output", { output, params }),
+  setDucking: (params: DuckingParams) => invoke<void>("set_ducking", { params }),
   onMeters: (handler: (meters: Meters) => void): Promise<UnlistenFn> =>
     listen<Meters>("engine://meters", (event) => handler(event.payload)),
 };

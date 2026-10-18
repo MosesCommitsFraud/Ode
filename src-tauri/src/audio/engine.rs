@@ -18,7 +18,7 @@ use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 use serde::{Deserialize, Serialize};
 
-use super::dsp::{Limiter, SmoothedGain, peak};
+use super::dsp::{Ducker, Limiter, SmoothedGain, peak};
 use super::mixer::{ChannelId, Mixer, OutputId};
 use super::resample::{PullResampler, PushResampler};
 use super::sampler::{PlayingSound, Sampler, SamplerCommand};
@@ -455,6 +455,7 @@ struct OutputProcessor {
     /// Weich nachgeführte Kanal-Pegel für dieses Ziel (pro Sample).
     mic_send: f32,
     soundboard_send: f32,
+    ducker: Ducker,
     /// Erst ausgeben, wenn der Puffer einmal den Zielwert erreicht hat.
     primed: bool,
     mono: Vec<f32>,
@@ -498,6 +499,11 @@ impl OutputProcessor {
         let soundboard_fader = soundboard.gain();
         let soundboard_target = soundboard_fader * soundboard.send(self.output);
         let mut soundboard_peak = 0.0f32;
+        let ducking = &self.mixer.ducking;
+        let (duck_on, duck_threshold, duck_reduction) =
+            (ducking.enabled(), ducking.threshold(), ducking.reduction());
+        let ducker = &mut self.ducker;
+        let mut duck_min = 1.0f32;
 
         self.mono.resize(frames, 0.0);
         let mut starved = false;
@@ -512,9 +518,12 @@ impl OutputProcessor {
             });
             *mic_send += (mic_target - *mic_send) * SMOOTHING;
             *soundboard_send += (soundboard_target - *soundboard_send) * SMOOTHING;
+            // Ducking hört auf das Mikrofon nach dem Fader, vor dem Routing.
+            let duck = ducker.next(mic, duck_threshold, duck_reduction, duck_on);
+            duck_min = duck_min.min(duck);
             let mut sum = mic * *mic_send;
             if !sampler.is_idle() {
-                let sound = sampler.next_sample();
+                let sound = sampler.next_sample() * duck;
                 soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
                 sum += sound * *soundboard_send;
             }
@@ -530,6 +539,14 @@ impl OutputProcessor {
         }
         soundboard.meter.fetch_max(soundboard_peak);
         self.sampler.report();
+        if self.output == OutputId::B || !self.mixer.out_b.is_active() {
+            let db = if duck_min < 1.0 {
+                20.0 * duck_min.max(1e-6).log10()
+            } else {
+                0.0
+            };
+            ducking.reduction_db.store(db);
+        }
 
         self.gain.apply(&mut self.mono, out.gain());
 
@@ -579,6 +596,7 @@ fn build_output(
         target_frames,
         mic_send: 0.0,
         soundboard_send: 0.0,
+        ducker: Ducker::new(ENGINE_RATE),
         primed: false,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),
         gain: SmoothedGain::new(0.0),

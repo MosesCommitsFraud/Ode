@@ -157,6 +157,11 @@ impl Output {
         }
     }
 
+    /// Hat einen laufenden Geräte-Stream.
+    pub fn is_active(&self) -> bool {
+        self.device_rate.load(Ordering::Relaxed) != 0
+    }
+
     pub fn limiter_enabled(&self) -> bool {
         self.limiter.load(Ordering::Relaxed)
     }
@@ -171,9 +176,68 @@ impl Output {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuckingParams {
+    pub enabled: bool,
+    /// Um so viel werden Soundboard und Musik abgesenkt.
+    pub amount_db: f32,
+    /// Ab diesem Mikrofonpegel gilt: es wird gesprochen.
+    pub threshold_db: f32,
+}
+
+#[derive(Debug)]
+pub struct Ducking {
+    enabled: AtomicBool,
+    amount_db: AtomicF32,
+    threshold_db: AtomicF32,
+    /// Aktuelle Absenkung in dB, für die Anzeige.
+    pub reduction_db: AtomicF32,
+}
+
+impl Ducking {
+    fn new(params: DuckingParams) -> Self {
+        Self {
+            enabled: AtomicBool::new(params.enabled),
+            amount_db: AtomicF32::new(params.amount_db),
+            threshold_db: AtomicF32::new(params.threshold_db),
+            reduction_db: AtomicF32::new(0.0),
+        }
+    }
+
+    pub fn set(&self, params: DuckingParams) {
+        self.enabled.store(params.enabled, Ordering::Relaxed);
+        self.amount_db.store(params.amount_db.clamp(0.0, 40.0));
+        self.threshold_db
+            .store(params.threshold_db.clamp(-70.0, 0.0));
+    }
+
+    pub fn params(&self) -> DuckingParams {
+        DuckingParams {
+            enabled: self.enabled.load(Ordering::Relaxed),
+            amount_db: self.amount_db.load(),
+            threshold_db: self.threshold_db.load(),
+        }
+    }
+
+    pub fn enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// Ziel-Verstärkung beim Sprechen (linear).
+    pub fn reduction(&self) -> f32 {
+        db_to_gain(-self.amount_db.load())
+    }
+
+    pub fn threshold(&self) -> f32 {
+        db_to_gain(self.threshold_db.load())
+    }
+}
+
 #[derive(Debug)]
 pub struct Mixer {
     channels: [Channel; 3],
+    pub ducking: Ducking,
     pub out_a: Output,
     pub out_b: Output,
     pub input_callback_frames: AtomicU32,
@@ -193,6 +257,11 @@ impl Default for Mixer {
         Self {
             // Die eigene Stimme hört man standardmäßig nicht mit.
             channels: [channel(false), channel(true), channel(true)],
+            ducking: Ducking::new(DuckingParams {
+                enabled: false,
+                amount_db: 12.0,
+                threshold_db: -40.0,
+            }),
             out_a: Output::new(OutputParams {
                 gain_db: 0.0,
                 muted: false,

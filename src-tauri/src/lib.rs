@@ -12,7 +12,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use audio::ENGINE_RATE;
 use audio::devices::{self, DeviceList};
 use audio::engine::{Engine, EngineConfig, EngineInfo};
-use audio::mixer::{ChannelId, ChannelParams, Mixer, Output, OutputId, OutputParams};
+use audio::mixer::{
+    ChannelId, ChannelParams, DuckingParams, Mixer, Output, OutputId, OutputParams,
+};
 use audio::sampler::PlayingSound;
 use library::Library;
 
@@ -22,6 +24,7 @@ struct MixerState {
     channels: Vec<(ChannelId, ChannelParams)>,
     out_a: OutputParams,
     out_b: OutputParams,
+    ducking: DuckingParams,
 }
 
 #[derive(Serialize, Clone)]
@@ -54,6 +57,8 @@ struct Meters {
     latency_ms: f32,
     errors: Vec<String>,
     playing: Vec<PlayingSound>,
+    /// Aktuelle Absenkung durch Ducking in dB (0 = keine).
+    ducking_db: f32,
 }
 
 fn frames_to_ms(frames: u32, rate: u32) -> f32 {
@@ -108,6 +113,11 @@ fn snapshot(engine: &Engine) -> Meters {
         latency_ms,
         errors: engine.errors.lock().clone(),
         playing: engine.playing.lock().clone(),
+        ducking_db: if running {
+            mixer.ducking.reduction_db.load()
+        } else {
+            0.0
+        },
     }
 }
 
@@ -154,6 +164,7 @@ fn get_mixer(engine: State<Engine>) -> MixerState {
             .collect(),
         out_a: mixer.out_a.params(),
         out_b: mixer.out_b.params(),
+        ducking: mixer.ducking.params(),
     }
 }
 
@@ -165,6 +176,11 @@ fn set_channel(engine: State<Engine>, channel: ChannelId, params: ChannelParams)
 #[tauri::command]
 fn set_output(engine: State<Engine>, output: OutputId, params: OutputParams) {
     engine.mixer.output(output).set(params);
+}
+
+#[tauri::command]
+fn set_ducking(engine: State<Engine>, params: DuckingParams) {
+    engine.mixer.ducking.set(params);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -192,6 +208,7 @@ pub fn run() {
             get_mixer,
             set_channel,
             set_output,
+            set_ducking,
             soundboard::library_list,
             soundboard::library_import,
             soundboard::library_update,

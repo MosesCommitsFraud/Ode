@@ -5,6 +5,7 @@ import {
   type ChannelId,
   type ChannelParams,
   type DeviceList,
+  type DuckingParams,
   type EngineConfig,
   type EngineInfo,
   type Meters,
@@ -18,6 +19,7 @@ export interface State {
   info: EngineInfo | null;
   channels: Record<ChannelId, ChannelParams>;
   outputs: Record<OutputId, OutputParams>;
+  ducking: DuckingParams;
   meters: Meters | null;
   starting: boolean;
   error: string | null;
@@ -51,6 +53,7 @@ let state: State = {
     a: { gainDb: 0, muted: false, limiter: false },
     b: { gainDb: 0, muted: false, limiter: true },
   },
+  ducking: { enabled: false, amountDb: 12, thresholdDb: -40 },
   meters: null,
   starting: false,
   error: null,
@@ -111,6 +114,7 @@ export const actions = {
       info,
       channels: Object.fromEntries(mixer.channels) as State["channels"],
       outputs: { a: mixer.outA, b: mixer.outB },
+      ducking: mixer.ducking,
     });
     await actions.refreshDevices();
     // Ohne laufende Engine bleibt das Soundboard stumm – also gleich starten.
@@ -166,6 +170,22 @@ export const actions = {
     const params = { ...state.channels[id], ...patch };
     set({ channels: { ...state.channels, [id]: params } });
     if (isTauri) void engine.setChannel(id, params);
+  },
+
+  setDucking(patch: Partial<DuckingParams>) {
+    const ducking = { ...state.ducking, ...patch };
+    set({ ducking });
+    if (isTauri) void engine.setDucking(ducking);
+  },
+
+  /** Setzt alle Fader auf die Grundlautstärke 0 dB; Mute und Routing bleiben. */
+  resetLevels() {
+    for (const id of Object.keys(state.channels) as ChannelId[]) {
+      if (state.channels[id].gainDb !== 0) actions.setChannel(id, { gainDb: 0 });
+    }
+    for (const id of Object.keys(state.outputs) as OutputId[]) {
+      if (state.outputs[id].gainDb !== 0) actions.setOutput(id, { gainDb: 0 });
+    }
   },
 
   setOutput(id: OutputId, patch: Partial<OutputParams>) {
@@ -243,6 +263,7 @@ function startDemo() {
         latencyMs: 29.6 + Math.sin(t) * 0.4,
         errors: [],
         playing: demoPlaying(t),
+        duckingDb: state.ducking.enabled && voice > 0.05 ? -state.ducking.amountDb : 0,
       },
     });
   }, 33);

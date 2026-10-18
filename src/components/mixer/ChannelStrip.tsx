@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Headphones, Mic2, VolumeX } from "lucide-react";
+import { Headphones, Mic2, RotateCcw, VolumeX } from "lucide-react";
 import { cn, formatDb, gainToDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
@@ -108,15 +108,22 @@ export function ChannelStrip({
         </div>
       </div>
 
-      <div
+      <button
+        type="button"
+        title={gainDb === 0 ? "Grundlautstärke 0 dB" : "Auf 0 dB zurücksetzen"}
+        disabled={disabled || gainDb === 0}
+        onClick={() => onGain(0)}
         className={cn(
-          "well mt-3 rounded-lg py-1.5 text-center font-mono text-sm font-medium tabular-nums transition-colors",
+          "well group/db relative mt-3 cursor-default rounded-lg py-1.5 text-center font-mono text-sm font-medium tabular-nums transition-colors",
           muted ? "text-error-foreground" : gainDb > 0 ? "text-[var(--ch)]" : "text-foreground",
         )}
       >
         {muted ? "MUTE" : formatDb(gainDb)}
         {!muted && <span className="ml-1 text-3xs text-muted-foreground">dB</span>}
-      </div>
+        {gainDb !== 0 && !disabled && (
+          <RotateCcw className="absolute top-1/2 right-2 size-3 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover/db:opacity-100" />
+        )}
+      </button>
 
       <div className="flex min-h-0 flex-1 justify-center">
         <Fader

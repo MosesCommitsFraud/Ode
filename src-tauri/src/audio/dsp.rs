@@ -118,9 +118,85 @@ impl Limiter {
     }
 }
 
+/// Senkt andere Kanäle ab, solange am Mikrofon gesprochen wird.
+/// Hüllkurve mit Haltezeit, damit Sprechpausen zwischen Wörtern nicht pumpen.
+#[derive(Debug, Clone)]
+pub struct Ducker {
+    envelope: f32,
+    envelope_release: f32,
+    hold: usize,
+    hold_samples: usize,
+    gain: f32,
+    attack: f32,
+    release: f32,
+}
+
+impl Ducker {
+    pub fn new(rate: u32) -> Self {
+        let coef = |ms: f32| (-1.0 / (ms / 1000.0 * rate as f32)).exp();
+        Self {
+            envelope: 0.0,
+            envelope_release: coef(60.0),
+            hold: 0,
+            hold_samples: (0.35 * rate as f32) as usize,
+            gain: 1.0,
+            attack: coef(40.0),
+            release: coef(450.0),
+        }
+    }
+
+    /// Liefert die Verstärkung (0–1) für die abgesenkten Kanäle.
+    pub fn next(&mut self, mic: f32, threshold: f32, reduction: f32, enabled: bool) -> f32 {
+        self.envelope = mic.abs().max(self.envelope * self.envelope_release);
+        if self.envelope > threshold {
+            self.hold = self.hold_samples;
+        } else {
+            self.hold = self.hold.saturating_sub(1);
+        }
+        let target = if enabled && self.hold > 0 {
+            reduction
+        } else {
+            1.0
+        };
+        let coef = if target < self.gain {
+            self.attack
+        } else {
+            self.release
+        };
+        self.gain = target + (self.gain - target) * coef;
+        self.gain
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ducker_lowers_while_speaking_and_recovers() {
+        let mut ducker = Ducker::new(48_000);
+        let reduction = db_to_gain(-12.0);
+        let threshold = db_to_gain(-40.0);
+        let mut gain = 1.0;
+        for _ in 0..24_000 {
+            gain = ducker.next(0.3, threshold, reduction, true);
+        }
+        assert!((gain - reduction).abs() < 0.01, "{gain}");
+        for _ in 0..144_000 {
+            gain = ducker.next(0.0, threshold, reduction, true);
+        }
+        assert!(gain > 0.99, "{gain}");
+    }
+
+    #[test]
+    fn ducker_off_keeps_unity() {
+        let mut ducker = Ducker::new(48_000);
+        let gain = (0..4800)
+            .map(|_| ducker.next(0.5, 0.01, 0.25, false))
+            .last()
+            .unwrap();
+        assert!((gain - 1.0).abs() < 1e-6);
+    }
 
     #[test]
     fn limiter_holds_ceiling() {

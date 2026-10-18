@@ -1,4 +1,4 @@
-import { Cable, Headphones, Mic, Music, ShieldCheck, Sparkles } from "lucide-react";
+import { Cable, Headphones, Mic, Music, RotateCcw, ShieldCheck, Sparkles } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { DeviceSetup } from "~/components/mixer/DeviceSetup";
@@ -9,7 +9,7 @@ import { cn } from "~/lib/utils";
 
 const CHANNELS: { id: ChannelId; name: string; icon: ReactNode; color: string; ready: boolean }[] = [
   { id: "mic", name: "Mikrofon", icon: <Mic />, color: "var(--ch-mic)", ready: true },
-  { id: "soundboard", name: "Soundboard", icon: <Sparkles />, color: "var(--ch-soundboard)", ready: false },
+  { id: "soundboard", name: "Soundboard", icon: <Sparkles />, color: "var(--ch-soundboard)", ready: true },
   { id: "music", name: "Musik", icon: <Music />, color: "var(--ch-music)", ready: false },
 ];
 
@@ -27,9 +27,20 @@ function Console() {
   const outputs = useStore((s) => s.outputs);
   const meters = useStore((s) => s.meters);
   const running = useStore((s) => s.info !== null);
+  const changed =
+    Object.values(channels).some((c) => c.gainDb !== 0) || Object.values(outputs).some((o) => o.gainDb !== 0);
 
   return (
-    <Card className="flex min-h-[27rem] flex-1 overflow-x-auto p-1.5">
+    <Card className="relative flex min-h-[27rem] flex-1 overflow-x-auto p-1.5">
+      <button
+        type="button"
+        title="Alle Fader auf 0 dB"
+        disabled={!changed}
+        onClick={() => actions.resetLevels()}
+        className="absolute top-2 right-2 z-10 flex h-7 cursor-default items-center gap-1.5 rounded-full bg-muted px-3 font-mono text-3xs font-semibold text-muted-foreground uppercase transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 [&_svg]:size-3"
+      >
+        <RotateCcw /> Alles auf 0 dB
+      </button>
       <section className="flex flex-col">
         <SectionLabel className="px-3 pt-2.5">Eingänge</SectionLabel>
         <div className="flex flex-1 divide-x divide-hairline">
@@ -40,7 +51,7 @@ function Console() {
                 key={id}
                 name={name}
                 kind="Kanal"
-                badge={ready ? undefined : "Phase 2"}
+                badge={ready ? undefined : "Phase 3"}
                 icon={icon}
                 color={color}
                 gainDb={params.gainDb}
@@ -224,6 +235,69 @@ function BufferCard() {
   );
 }
 
+const AMOUNTS = [6, 12, 18, 24];
+const SENSITIVITY: { db: number; label: string }[] = [
+  { db: -50, label: "Hoch" },
+  { db: -40, label: "Mittel" },
+  { db: -30, label: "Niedrig" },
+];
+
+function DuckingCard() {
+  const ducking = useStore((s) => s.ducking);
+  const duckingDb = useStore((s) => s.meters?.duckingDb ?? 0);
+  const active = ducking.enabled && duckingDb < -0.5;
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <SectionLabel>Ducking</SectionLabel>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Soundboard und Musik werden leiser, während du sprichst.
+          </p>
+        </div>
+        <Switch
+          label="Ducking"
+          checked={ducking.enabled}
+          onCheckedChange={(enabled) => actions.setDucking({ enabled })}
+        />
+      </div>
+
+      <div className={cn("mt-4 space-y-3 transition-opacity", !ducking.enabled && "pointer-events-none opacity-45")}>
+        <div className="space-y-1.5">
+          <div className="flex justify-between font-mono text-3xs text-muted-foreground uppercase">
+            <span>Absenkung</span>
+            <span className={cn("tabular-nums transition-colors", active && "text-[var(--ch-soundboard)]")}>
+              {active ? `jetzt ${duckingDb.toFixed(1)} dB` : "ruht"}
+            </span>
+          </div>
+          <Segmented
+            value={ducking.amountDb}
+            options={AMOUNTS}
+            onChange={(amountDb) => actions.setDucking({ amountDb })}
+            format={(db) => `−${db} dB`}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <div className="font-mono text-3xs text-muted-foreground uppercase">Empfindlichkeit</div>
+          <Segmented
+            value={ducking.thresholdDb}
+            options={SENSITIVITY.map((s) => s.db)}
+            onChange={(thresholdDb) => actions.setDucking({ thresholdDb })}
+            format={(db) => SENSITIVITY.find((s) => s.db === db)?.label ?? `${db} dB`}
+          />
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-[var(--meter-track)]">
+          <div
+            className="h-full rounded-full bg-[var(--ch-soundboard)] transition-[width] duration-100"
+            style={{ width: `${Math.min(100, (-duckingDb / Math.max(1, ducking.amountDb)) * 100)}%` }}
+          />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function MixerView() {
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto px-6 pt-3 pb-4">
@@ -232,6 +306,7 @@ export function MixerView() {
         <DeviceSetup />
         <div className="space-y-4">
           <LatencyCard />
+          <DuckingCard />
           <BufferCard />
         </div>
       </div>
