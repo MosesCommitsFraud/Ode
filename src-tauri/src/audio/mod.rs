@@ -5,6 +5,7 @@ pub mod deck;
 pub mod decode;
 pub mod devices;
 pub mod dsp;
+pub mod effects;
 pub mod engine;
 pub mod mixer;
 pub mod resample;

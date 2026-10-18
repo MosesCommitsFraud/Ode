@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use serde::{Deserialize, Serialize};
 
 use super::dsp::{AtomicF32, db_to_gain};
+use super::effects::{EffectsParams, EffectsShared};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -238,10 +239,14 @@ impl Ducking {
 pub struct Mixer {
     channels: [Channel; 3],
     pub ducking: Ducking,
+    /// Effektkette des Mikrofons.
+    pub effects: EffectsShared,
     pub out_a: Output,
     pub out_b: Output,
     pub input_callback_frames: AtomicU32,
     pub input_rate: AtomicU32,
+    /// Längste Rechenzeit eines Eingangsblocks in µs seit dem letzten Auslesen.
+    pub input_process_us: AtomicU32,
 }
 
 impl Default for Mixer {
@@ -257,6 +262,7 @@ impl Default for Mixer {
         Self {
             // Die eigene Stimme hört man standardmäßig nicht mit.
             channels: [channel(false), channel(true), channel(true)],
+            effects: EffectsShared::default(),
             ducking: Ducking::new(DuckingParams {
                 enabled: false,
                 amount_db: 12.0,
@@ -274,6 +280,7 @@ impl Default for Mixer {
             }),
             input_callback_frames: AtomicU32::new(0),
             input_rate: AtomicU32::new(0),
+            input_process_us: AtomicU32::new(0),
         }
     }
 }
@@ -286,6 +293,8 @@ pub struct MixerSettings {
     pub out_a: OutputParams,
     pub out_b: OutputParams,
     pub ducking: DuckingParams,
+    #[serde(default)]
+    pub effects: EffectsParams,
 }
 
 impl Mixer {
@@ -298,6 +307,7 @@ impl Mixer {
             out_a: self.out_a.params(),
             out_b: self.out_b.params(),
             ducking: self.ducking.params(),
+            effects: self.effects.params(),
         }
     }
 
@@ -308,6 +318,7 @@ impl Mixer {
         self.out_a.set(settings.out_a);
         self.out_b.set(settings.out_b);
         self.ducking.set(settings.ducking);
+        self.effects.set(settings.effects);
     }
 
     pub fn channel(&self, id: ChannelId) -> &Channel {

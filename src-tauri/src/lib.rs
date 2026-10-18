@@ -12,6 +12,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use audio::ENGINE_RATE;
 use audio::devices::{self, DeviceList};
+use audio::effects::EffectsParams;
 use audio::engine::{Engine, EngineConfig, EngineInfo};
 use audio::mixer::{
     ChannelId, ChannelParams, DuckingParams, Mixer, MixerSettings, Output, OutputId, OutputParams,
@@ -83,6 +84,16 @@ struct Meters {
     playing: Vec<PlayingSound>,
     /// Aktuelle Absenkung durch Ducking in dB (0 = keine).
     ducking_db: f32,
+    effects: EffectMeters,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct EffectMeters {
+    gate_open: bool,
+    voice: f32,
+    compressor_db: f32,
+    limiter_db: f32,
 }
 
 fn frames_to_ms(frames: u32, rate: u32) -> f32 {
@@ -137,6 +148,12 @@ fn snapshot(engine: &Engine) -> Meters {
         latency_ms,
         errors: engine.errors.lock().clone(),
         playing: engine.playing.lock().clone(),
+        effects: EffectMeters {
+            gate_open: mixer.effects.gate_open.load(Ordering::Relaxed),
+            voice: mixer.effects.voice.load(),
+            compressor_db: mixer.effects.compressor_reduction_db.load(),
+            limiter_db: mixer.effects.limiter_reduction_db.load(),
+        },
         ducking_db: if running {
             mixer.ducking.reduction_db.load()
         } else {
@@ -225,6 +242,12 @@ fn set_ducking(engine: State<Engine>, dirty: State<MixerDirty>, params: DuckingP
     dirty.0.store(true, Ordering::Relaxed);
 }
 
+#[tauri::command]
+fn set_effects(engine: State<Engine>, dirty: State<MixerDirty>, params: EffectsParams) {
+    engine.mixer.effects.set(params);
+    dirty.0.store(true, Ordering::Relaxed);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -257,6 +280,7 @@ pub fn run() {
             set_channel,
             set_output,
             set_ducking,
+            set_effects,
             soundboard::library_list,
             soundboard::library_import,
             soundboard::library_update,

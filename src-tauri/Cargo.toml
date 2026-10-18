@@ -31,6 +31,7 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 symphonia = { version = "0.6", features = ["all"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
+nnnoiseless = { version = "0.5.2", default-features = false }
 
 
 # Audio-Bibliotheken auch im Debug-Build optimieren, sonst dekodiert symphonia

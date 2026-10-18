@@ -66,6 +66,18 @@ fn main() -> anyhow::Result<()> {
     .ok_or_else(|| anyhow::anyhow!("kein virtuelles Kabel"))?;
 
     let engine = Engine::spawn();
+    if std::env::var("ODE_EFFECTS").is_ok() {
+        // Alle Effekte an, um die Rechenlast zu messen.
+        let mut fx = engine.mixer.effects.params();
+        fx.gate.enabled = true;
+        fx.denoise.enabled = true;
+        fx.eq.enabled = true;
+        fx.eq.mid_db = 3.0;
+        fx.compressor.enabled = true;
+        fx.limiter.enabled = true;
+        engine.mixer.effects.set(fx);
+        println!("Effekte: alle an");
+    }
     if fallback.is_some() {
         // Kein echtes Kabel: Ausgang stumm, damit nichts hörbar wird.
         let mut params = engine.mixer.out_b.params();
@@ -97,7 +109,8 @@ Ausgang B: {}",
         let out_ms = out.callback_frames.load(Ordering::Relaxed) as f32 * 1000.0
             / out.device_rate.load(Ordering::Relaxed).max(1) as f32;
         println!(
-            "mic {:>6.1} dB | B {:>6.1} dB | Latenz {:>5.1} ms (ein {:.1} + puffer {:.1} + aus {:.1}) | underruns {} overruns {}",
+            "Rechenzeit Eingang max {:>4} µs | mic {:>6.1} dB | B {:>6.1} dB | Latenz {:>5.1} ms (ein {:.1} + puffer {:.1} + aus {:.1}) | underruns {} overruns {}",
+            mixer.input_process_us.swap(0, Ordering::Relaxed),
             20.0 * mixer.channel(ChannelId::Mic).meter.take().max(1e-6).log10(),
             20.0 * out.meter.take().max(1e-6).log10(),
             input_ms + buffered_ms + out_ms,

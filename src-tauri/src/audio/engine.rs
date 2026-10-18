@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use super::deck::{Deck, DeckCommand, DeckStatus};
 use super::dsp::{Ducker, Limiter, SmoothedGain, peak};
+use super::effects::EffectChain;
 use super::mixer::{ChannelId, Mixer, OutputId};
 use super::resample::{PullResampler, PushResampler};
 use super::sampler::{PlayingSound, Sampler, SamplerCommand};
@@ -368,6 +369,7 @@ struct InputProcessor {
     channels: usize,
     mono: Vec<f32>,
     engine: Vec<f32>,
+    effects: EffectChain,
     gain: SmoothedGain,
 }
 
@@ -377,6 +379,7 @@ impl InputProcessor {
         T: Sample,
         f32: FromSample<T>,
     {
+        let started = std::time::Instant::now();
         let frames = data.len() / self.channels;
         self.mixer
             .input_callback_frames
@@ -399,7 +402,8 @@ impl InputProcessor {
             self.resampler.process(&self.mono, |s| engine.push(s));
         }
 
-        // Hier folgt später die Effektkette (Gate, RNNoise, EQ, Kompressor).
+        // Effektkette vor dem Kanal-Fader.
+        self.effects.process(&mut self.engine, &self.mixer.effects);
         let mic = self.mixer.channel(ChannelId::Mic);
         self.gain.apply(&mut self.engine, mic.gain());
         mic.meter.fetch_max(peak(&self.engine));
@@ -413,6 +417,9 @@ impl InputProcessor {
                     .fetch_add(1, Ordering::Relaxed);
             }
         }
+        self.mixer
+            .input_process_us
+            .fetch_max(started.elapsed().as_micros() as u32, Ordering::Relaxed);
     }
 }
 
@@ -437,6 +444,7 @@ fn build_input(
         channels: supported.channels() as usize,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),
         engine: Vec::with_capacity(MAX_CALLBACK_FRAMES * 2),
+        effects: EffectChain::new(),
         gain: SmoothedGain::new(0.0),
     };
 
