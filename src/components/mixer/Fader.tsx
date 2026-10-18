@@ -1,16 +1,16 @@
 import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 
-const MIN_DB = -60;
-const MAX_DB = 12;
+export const MIN_DB = -60;
+export const MAX_DB = 12;
 
 /** Fader-Kurve: oben feiner aufgelöst, wie bei Hardware-Pulten. */
-function dbToPosition(db: number) {
+export function dbToPosition(db: number) {
   if (db <= MIN_DB) return 0;
   return Math.pow((db - MIN_DB) / (MAX_DB - MIN_DB), 2.2);
 }
 
-function positionToDb(pos: number) {
+export function positionToDb(pos: number) {
   if (pos <= 0.001) return MIN_DB;
   const db = MIN_DB + Math.pow(pos, 1 / 2.2) * (MAX_DB - MIN_DB);
   return Math.round(db * 2) / 2;

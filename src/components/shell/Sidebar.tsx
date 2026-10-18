@@ -1,8 +1,8 @@
 import { Download, LayoutGrid, Moon, Music, Plus, Settings, SlidersHorizontal, Star, Sun, Wand2 } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { music, useMusic } from "~/lib/music";
-import { useStore } from "~/lib/store";
-import { cn, gainToDb } from "~/lib/utils";
+import { cn } from "~/lib/utils";
+import { OutputVolume } from "./OutputVolume";
 
 export type View = "soundboard" | "music" | "mixer" | "effects" | "downloads" | "settings";
 
@@ -184,39 +184,6 @@ function Playlists({ view, onView }: { view: View; onView: (view: View) => void 
   );
 }
 
-/** Kleine Live-Anzeige: Mikrofonpegel als Balkenreihe und die aktuelle Latenz. */
-function LiveCard() {
-  const meters = useStore((s) => s.meters);
-  const info = useStore((s) => s.info);
-  const history = useRef<number[]>(Array(18).fill(0));
-
-  const peak = meters?.channels.find((c) => c.id === "mic")?.peak ?? 0;
-  const level = info ? (gainToDb(peak, -48) + 48) / 48 : 0;
-  history.current = [...history.current.slice(1), level];
-
-  return (
-    <div className="rounded-xl bg-sidebar-accent p-3">
-      <div className="flex items-center justify-between">
-        <span className={cn("text-2xs font-semibold", info ? "text-primary" : "text-muted-foreground")}>
-          {info ? "Live" : "Engine aus"}
-        </span>
-        <span className="font-mono text-3xs text-muted-foreground tabular-nums">
-          {info && meters ? `${meters.latencyMs.toFixed(0)} ms` : "—"}
-        </span>
-      </div>
-      <div className="mt-2.5 flex h-7 items-end gap-[3px]">
-        {history.current.map((v, i) => (
-          <span
-            key={i}
-            className="flex-1 rounded-[2px] bg-primary transition-[height] duration-75"
-            style={{ height: `${Math.max(8, v * 100)}%`, opacity: info ? 0.35 + (i / 18) * 0.65 : 0.15 }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }) {
   return (
     <div className="relative grid grid-cols-2 rounded-lg bg-sidebar-accent p-0.5">
@@ -279,7 +246,7 @@ export function Sidebar({
       </nav>
 
       <div className="space-y-2 p-2">
-        <LiveCard />
+        <OutputVolume />
         <div className="flex items-center gap-1.5">
           <div className="min-w-0 flex-1">
             <NavItem
