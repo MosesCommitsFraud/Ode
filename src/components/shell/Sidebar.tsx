@@ -1,4 +1,4 @@
-import { Download, LayoutGrid, Moon, Music, Plus, Settings, SlidersHorizontal, Star, Sun, Wand2 } from "lucide-react";
+import { ArrowDownToLine, AudioWaveform, Disc3, Moon, Plus, Settings2, SlidersVertical, Star, Sun, Waves } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { music, useMusic } from "~/lib/music";
 import { cn } from "~/lib/utils";
@@ -7,14 +7,18 @@ import { OutputVolume } from "./OutputVolume";
 export type View = "soundboard" | "music" | "mixer" | "effects" | "downloads" | "settings";
 
 export const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
-  { id: "soundboard", label: "Soundboard", icon: <LayoutGrid /> },
-  { id: "music", label: "Musik", icon: <Music /> },
-  { id: "mixer", label: "Mischpult", icon: <SlidersHorizontal /> },
-  { id: "effects", label: "Effekte", icon: <Wand2 /> },
-  { id: "downloads", label: "Downloads", icon: <Download /> },
+  { id: "soundboard", label: "Soundboard", icon: <AudioWaveform /> },
+  { id: "music", label: "Musik", icon: <Disc3 /> },
+  { id: "mixer", label: "Mischpult", icon: <SlidersVertical /> },
+  { id: "effects", label: "Effekte", icon: <Waves /> },
+  { id: "downloads", label: "Downloads", icon: <ArrowDownToLine /> },
 ];
 
-export const SETTINGS = { id: "settings" as const, label: "Einstellungen", icon: <Settings /> };
+export const SETTINGS = {
+  id: "settings" as const,
+  label: "Einstellungen",
+  icon: <Settings2 />,
+};
 
 /** Wortmarke: ein Ring, der wie eine Schallwelle aufgeht. */
 function Logo() {
@@ -53,22 +57,13 @@ function NavItem({
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "group relative flex h-10 w-full cursor-default items-center gap-3 rounded-xl px-1.5 text-left text-sm font-medium transition-all duration-200",
+        "flex h-10 w-full cursor-default items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold transition-colors duration-150 [&_svg]:size-[18px] [&_svg]:shrink-0",
         active
-          ? "bg-panel-raised text-foreground shadow-[0_1px_0_var(--hairline),0_6px_16px_-10px_oklch(0%_0_0/45%)]"
-          : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+          ? "bg-panel-raised text-foreground shadow-[0_1px_0_var(--hairline),0_6px_16px_-10px_oklch(0%_0_0/45%)] [&_svg]:text-primary"
+          : "text-foreground/70 hover:bg-sidebar-accent hover:text-foreground",
       )}
     >
-      <span
-        className={cn(
-          "flex size-7 items-center justify-center rounded-lg transition-all duration-200 [&_svg]:size-4",
-          active
-            ? "bg-primary text-primary-foreground"
-            : "text-muted-foreground group-hover:text-foreground",
-        )}
-      >
-        {icon}
-      </span>
+      {icon}
       <span className="flex-1 truncate">{label}</span>
     </button>
   );

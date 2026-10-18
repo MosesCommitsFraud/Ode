@@ -1,4 +1,4 @@
-import { Cable, Headphones, LayoutGrid, Mic, Music, RotateCcw, ShieldCheck } from "lucide-react";
+import { AudioWaveform, Cable, Disc3, Headphones, Mic, RotateCcw, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
@@ -8,8 +8,8 @@ import { cn } from "~/lib/utils";
 
 const CHANNELS: { id: ChannelId; name: string; icon: ReactNode; color: string; ready: boolean }[] = [
   { id: "mic", name: "Mikrofon", icon: <Mic />, color: "var(--ch-mic)", ready: true },
-  { id: "soundboard", name: "Soundboard", icon: <LayoutGrid />, color: "var(--ch-soundboard)", ready: true },
-  { id: "music", name: "Musik", icon: <Music />, color: "var(--ch-music)", ready: true },
+  { id: "soundboard", name: "Soundboard", icon: <AudioWaveform />, color: "var(--ch-soundboard)", ready: true },
+  { id: "music", name: "Musik", icon: <Disc3 />, color: "var(--ch-music)", ready: true },
 ];
 
 const OUTPUTS: { id: OutputId; name: string; icon: ReactNode }[] = [
