@@ -1,0 +1,221 @@
+import { useSyncExternalStore } from "react";
+import {
+  engine,
+  isTauri,
+  type ChannelId,
+  type ChannelParams,
+  type DeviceList,
+  type EngineConfig,
+  type EngineInfo,
+  type Meters,
+  type OutputId,
+  type OutputParams,
+} from "./engine";
+
+export interface State {
+  devices: DeviceList;
+  config: EngineConfig;
+  info: EngineInfo | null;
+  channels: Record<ChannelId, ChannelParams>;
+  outputs: Record<OutputId, OutputParams>;
+  meters: Meters | null;
+  starting: boolean;
+  error: string | null;
+}
+
+const CONFIG_KEY = "ode.engine-config";
+
+function loadConfig(): EngineConfig {
+  const fallback: EngineConfig = { inputId: "", monitorId: null, cableId: null, bufferMs: 10 };
+  try {
+    const stored = localStorage.getItem(CONFIG_KEY);
+    return stored ? { ...fallback, ...JSON.parse(stored) } : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+const defaultChannel = (routeA: boolean): ChannelParams => ({
+  gainDb: 0,
+  muted: false,
+  routeA,
+  routeB: true,
+});
+
+let state: State = {
+  devices: { inputs: [], outputs: [] },
+  config: loadConfig(),
+  info: null,
+  channels: { mic: defaultChannel(false), soundboard: defaultChannel(true), music: defaultChannel(true) },
+  outputs: {
+    a: { gainDb: 0, muted: false, limiter: false },
+    b: { gainDb: 0, muted: false, limiter: true },
+  },
+  meters: null,
+  starting: false,
+  error: null,
+};
+
+const listeners = new Set<() => void>();
+
+function set(patch: Partial<State>) {
+  state = { ...state, ...patch };
+  listeners.forEach((l) => l());
+}
+
+export function getState() {
+  return state;
+}
+
+export function useStore<T>(selector: (s: State) => T): T {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => selector(state),
+  );
+}
+
+function errorMessage(e: unknown) {
+  return typeof e === "string" ? e : e instanceof Error ? e.message : String(e);
+}
+
+/** Wählt sinnvolle Geräte, wenn noch nichts gespeichert ist. */
+function withDefaults(config: EngineConfig, devices: DeviceList): EngineConfig {
+  const has = (list: DeviceList["inputs"], id: string | null) => !!id && list.some((d) => d.id === id);
+  const physicalInput = devices.inputs.find((d) => d.isDefault && !d.isVirtualCable) ??
+    devices.inputs.find((d) => !d.isVirtualCable);
+  const cable = devices.outputs.find((d) => d.isVirtualCable);
+  const monitor = devices.outputs.find((d) => d.isDefault && !d.isVirtualCable) ??
+    devices.outputs.find((d) => !d.isVirtualCable);
+  return {
+    ...config,
+    inputId: has(devices.inputs, config.inputId) ? config.inputId : (physicalInput?.id ?? ""),
+    cableId: has(devices.outputs, config.cableId) ? config.cableId : (cable?.id ?? null),
+    monitorId: has(devices.outputs, config.monitorId) ? config.monitorId : (monitor?.id ?? null),
+  };
+}
+
+export const actions = {
+  async init() {
+    if (!isTauri) {
+      startDemo();
+      return;
+    }
+    await engine.onMeters((meters) => set({ meters }));
+    const [mixer, info] = await Promise.all([engine.getMixer(), engine.info()]);
+    set({
+      info,
+      channels: Object.fromEntries(mixer.channels) as State["channels"],
+      outputs: { a: mixer.outA, b: mixer.outB },
+    });
+    await actions.refreshDevices();
+  },
+
+  async refreshDevices() {
+    if (!isTauri) return;
+    try {
+      const devices = await engine.listDevices();
+      set({ devices, config: withDefaults(state.config, devices) });
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    }
+  },
+
+  setConfig(patch: Partial<EngineConfig>) {
+    const config = { ...state.config, ...patch };
+    try {
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    } catch {
+      // Speicher nicht verfügbar – Auswahl gilt dann nur für diese Sitzung.
+    }
+    set({ config });
+    if (state.info) void actions.start();
+  },
+
+  async start() {
+    if (!isTauri) return;
+    if (!state.config.inputId) {
+      set({ error: "Kein Mikrofon ausgewählt." });
+      return;
+    }
+    set({ starting: true, error: null });
+    try {
+      const info = await engine.start(state.config);
+      set({ info, starting: false });
+    } catch (e) {
+      set({ info: null, starting: false, error: errorMessage(e) });
+    }
+  },
+
+  async stop() {
+    if (!isTauri) return;
+    await engine.stop();
+    set({ info: null });
+  },
+
+  setChannel(id: ChannelId, patch: Partial<ChannelParams>) {
+    const params = { ...state.channels[id], ...patch };
+    set({ channels: { ...state.channels, [id]: params } });
+    if (isTauri) void engine.setChannel(id, params);
+  },
+
+  setOutput(id: OutputId, patch: Partial<OutputParams>) {
+    const params = { ...state.outputs[id], ...patch };
+    set({ outputs: { ...state.outputs, [id]: params } });
+    if (isTauri) void engine.setOutput(id, params);
+  },
+};
+
+/** Vorschau im Browser ohne Tauri: Beispielgeräte und simulierte Pegel. */
+function startDemo() {
+  const devices: DeviceList = {
+    inputs: [
+      { id: "demo:mic", name: "Mikrofon (Shure MV7)", isDefault: true, isVirtualCable: false },
+      { id: "demo:cable-in", name: "CABLE Output (VB-Audio Virtual Cable)", isDefault: false, isVirtualCable: true },
+    ],
+    outputs: [
+      { id: "demo:hp", name: "Kopfhörer (Realtek Audio)", isDefault: true, isVirtualCable: false },
+      { id: "demo:cable", name: "CABLE Input (VB-Audio Virtual Cable)", isDefault: false, isVirtualCable: true },
+    ],
+  };
+  const stream = (deviceName: string) => ({ deviceName, sampleRate: 48000, channels: 2, sampleFormat: "f32" });
+  set({
+    devices,
+    config: withDefaults(state.config, devices),
+    info: {
+      input: stream(devices.inputs[0].name),
+      monitor: stream(devices.outputs[0].name),
+      cable: stream(devices.outputs[1].name),
+    },
+  });
+  let t = 0;
+  setInterval(() => {
+    t += 0.033;
+    const voice = Math.max(0, Math.sin(t * 2.1) * 0.5 + Math.sin(t * 7.3) * 0.25) * 0.8;
+    const output = (peak: number) => ({
+      peak,
+      gainReductionDb: peak > 0.89 ? -0.6 : 0,
+      bufferedMs: 9.6 + Math.sin(t) * 0.4,
+      callbackMs: 10,
+      underruns: 0,
+      overruns: 0,
+    });
+    set({
+      meters: {
+        running: true,
+        channels: [
+          { id: "mic", peak: voice },
+          { id: "soundboard", peak: 0 },
+          { id: "music", peak: 0 },
+        ],
+        outA: output(0),
+        outB: output(voice),
+        inputCallbackMs: 10,
+        latencyMs: 29.6 + Math.sin(t) * 0.4,
+        errors: [],
+      },
+    });
+  }, 33);
+}

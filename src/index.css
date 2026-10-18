@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+/* Optik nach T3 Code (apps/web/src/index.css): ruhige Zink-Grautöne,
+   ein kräftiges Blau als Akzent, kompakte Abstände, dünne Rahmen. */
+
+@custom-variant dark (&:is(.dark, .dark *));
+
+@theme {
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono:
+    ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+}
+
+:root {
+  --radius: 0.625rem;
+  --control-radius: 0.5rem;
+  --topbar-height: 52px;
+  --content-max-width: 46rem;
+  --sidebar-width: 15.5rem;
+  --glass-blur: 12px;
+
+  --background: oklch(99.2% 0 0);
+  --foreground: var(--color-zinc-800);
+  --card: white;
+  --card-foreground: var(--color-zinc-800);
+  --popover: white;
+  --primary: oklch(0.488 0.217 264);
+  --primary-foreground: white;
+  --secondary: var(--color-zinc-100);
+  --muted: var(--color-zinc-100);
+  --muted-foreground: var(--color-zinc-500);
+  --accent: var(--color-zinc-100);
+  --accent-foreground: var(--color-zinc-900);
+  --border: var(--color-zinc-200);
+  --input: var(--color-zinc-300);
+  --ring: oklch(0.488 0.217 264 / 45%);
+  --sidebar: var(--color-zinc-50);
+  --sidebar-accent: var(--color-zinc-200);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-700);
+  --warning: var(--color-amber-500);
+  --warning-foreground: var(--color-amber-700);
+  --error: var(--color-red-500);
+  --error-foreground: var(--color-red-700);
+  --meter-track: var(--color-zinc-200);
+  --shadow-dock: 0 12px 28px -18px rgb(0 0 0 / 40%);
+  --scrollbar-thumb: rgb(217 217 217);
+}
+
+.dark {
+  --glass-blur: 16px;
+
+  --background: var(--color-neutral-950);
+  --foreground: var(--color-neutral-100);
+  --card: color-mix(in srgb, var(--background), white 3%);
+  --card-foreground: var(--color-neutral-100);
+  --popover: color-mix(in srgb, var(--background), white 4%);
+  --primary: oklch(0.571 0.21 264);
+  --primary-foreground: white;
+  --secondary: rgb(255 255 255 / 6%);
+  --muted: rgb(255 255 255 / 5%);
+  --muted-foreground: color-mix(in srgb, var(--color-neutral-500), white 20%);
+  --accent: rgb(255 255 255 / 6%);
+  --accent-foreground: var(--color-neutral-100);
+  --border: rgb(255 255 255 / 6%);
+  --input: rgb(255 255 255 / 8%);
+  --ring: oklch(0.571 0.21 264 / 50%);
+  --sidebar: var(--card);
+  --sidebar-accent: rgb(255 255 255 / 7%);
+  --success-foreground: var(--color-emerald-400);
+  --warning-foreground: var(--color-amber-400);
+  --error-foreground: var(--color-red-400);
+  --meter-track: rgb(255 255 255 / 7%);
+  --shadow-dock: 0 14px 32px -18px rgb(0 0 0 / 75%);
+  --scrollbar-thumb: rgb(255 255 255 / 8%);
+}
+
+@theme inline {
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: calc(1 / 0.6875);
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: calc(0.875 / 0.625);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-control: var(--control-radius);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-meter-track: var(--meter-track);
+
+  --shadow-dock: var(--shadow-dock);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
