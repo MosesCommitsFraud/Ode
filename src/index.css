@@ -17,7 +17,7 @@
 :root {
   --radius: 0.875rem;
   --control-radius: 0.625rem;
-  --topbar-height: 52px;
+  --topbar-height: 64px;
   --sidebar-width: 15rem;
 
   --canvas: oklch(95.6% 0.006 75);
