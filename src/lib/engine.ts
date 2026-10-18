@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type ChannelId = "mic" | "soundboard" | "music";
+export type ChannelId = "mic" | "soundboard" | "music" | "live";
 export type OutputId = "a" | "b";
 
 export interface DeviceInfo {

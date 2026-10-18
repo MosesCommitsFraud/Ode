@@ -13,10 +13,17 @@ pub enum ChannelId {
     Mic,
     Soundboard,
     Music,
+    /// Ton eines anderen Programms (Live-Quelle).
+    Live,
 }
 
 impl ChannelId {
-    pub const ALL: [ChannelId; 3] = [ChannelId::Mic, ChannelId::Soundboard, ChannelId::Music];
+    pub const ALL: [ChannelId; 4] = [
+        ChannelId::Mic,
+        ChannelId::Soundboard,
+        ChannelId::Music,
+        ChannelId::Live,
+    ];
 
     fn index(self) -> usize {
         self as usize
@@ -237,7 +244,7 @@ impl Ducking {
 
 #[derive(Debug)]
 pub struct Mixer {
-    channels: [Channel; 3],
+    channels: [Channel; 4],
     pub ducking: Ducking,
     /// Effektkette des Mikrofons.
     pub effects: EffectsShared,
@@ -263,7 +270,7 @@ impl Default for Mixer {
         };
         Self {
             // Die eigene Stimme hört man standardmäßig nicht mit.
-            channels: [channel(false), channel(true), channel(true)],
+            channels: [channel(false), channel(true), channel(true), channel(true)],
             effects: EffectsShared::default(),
             player_volume: AtomicF32::new(DEFAULT_PLAYER_VOLUME),
             ducking: Ducking::new(DuckingParams {

@@ -516,6 +516,7 @@ struct OutputProcessor {
     mic_send: f32,
     soundboard_send: f32,
     music_send: f32,
+    live_send: f32,
     /// Geglättete Player-Lautstärke.
     player: f32,
     ducker: Ducker,
@@ -566,6 +567,10 @@ impl OutputProcessor {
         let music = self.mixer.channel(ChannelId::Music);
         let music_fader = music.gain();
         let music_target = music_fader * music.send(self.output);
+        let live_channel = self.mixer.channel(ChannelId::Live);
+        let live_fader = live_channel.gain();
+        let live_target = live_fader * live_channel.send(self.output);
+        let mut live_peak = 0.0f32;
         let player_target = player_gain(self.mixer.player_volume.load());
         let mut music_peak = 0.0f32;
         let ducking = &self.mixer.ducking;
@@ -593,6 +598,7 @@ impl OutputProcessor {
         let mic_send = &mut self.mic_send;
         let soundboard_send = &mut self.soundboard_send;
         let music_send = &mut self.music_send;
+        let live_send = &mut self.live_send;
         let player = &mut self.player;
         let mut next = || {
             let mic = consumer.try_pop().unwrap_or_else(|| {
@@ -602,6 +608,7 @@ impl OutputProcessor {
             *mic_send += (mic_target - *mic_send) * SMOOTHING;
             *soundboard_send += (soundboard_target - *soundboard_send) * SMOOTHING;
             *music_send += (music_target - *music_send) * SMOOTHING;
+            *live_send += (live_target - *live_send) * SMOOTHING;
             *player += (player_target - *player) * SMOOTHING;
             // Ducking hört auf das Mikrofon nach dem Fader, vor dem Routing.
             let duck = ducker.next(mic, duck_threshold, duck_reduction, duck_on);
@@ -612,21 +619,22 @@ impl OutputProcessor {
                 soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
                 sum += sound * *soundboard_send;
             }
-            let mut song = 0.0;
             if !deck.is_idle() {
-                song += deck.next_sample();
+                let song = deck.next_sample() * *player * duck;
+                music_peak = music_peak.max((song * music_fader).abs());
+                sum += song * *music_send;
             }
+            // Live-Quelle: eigener Kanal mit Fader, Routing und Ducking.
             if *live_primed {
                 match live.try_pop() {
-                    Some(s) => song += s,
+                    Some(s) => {
+                        let s = s * duck;
+                        live_peak = live_peak.max((s * live_fader).abs());
+                        sum += s * *live_send;
+                    }
                     // Quelle beendet oder Lücke: neu vorlaufen lassen.
                     None => *live_primed = false,
                 }
-            }
-            if song != 0.0 {
-                let song = song * *player * duck;
-                music_peak = music_peak.max((song * music_fader).abs());
-                sum += song * *music_send;
             }
             sum
         };
@@ -640,6 +648,7 @@ impl OutputProcessor {
         }
         soundboard.meter.fetch_max(soundboard_peak);
         music.meter.fetch_max(music_peak);
+        live_channel.meter.fetch_max(live_peak);
         self.sampler.report();
         self.deck.report();
         if self.output == OutputId::B || !self.mixer.out_b.is_active() {
@@ -703,6 +712,7 @@ fn build_output(
         mic_send: 0.0,
         soundboard_send: 0.0,
         music_send: 0.0,
+        live_send: 0.0,
         player: 0.0,
         ducker: Ducker::new(ENGINE_RATE),
         primed: false,

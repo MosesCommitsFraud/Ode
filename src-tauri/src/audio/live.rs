@@ -1,5 +1,5 @@
 //! Live-Quellen: den Ton eines einzelnen Programms (Spotify, Browser, …)
-//! mitschneiden und auf den Musik-Kanal legen. Technisch über Windows'
+//! mitschneiden und auf den eigenen Live-Kanal im Mischpult legen. Technisch über Windows'
 //! Prozess-Loopback (ab Windows 10 2004): Ode bekommt nur den Ton dieses
 //! Programms samt seiner Unterprozesse, unabhängig vom Ausgabegerät.
 

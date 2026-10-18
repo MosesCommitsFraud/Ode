@@ -50,7 +50,12 @@ let state: State = {
   devices: { inputs: [], outputs: [] },
   config: loadConfig(),
   info: null,
-  channels: { mic: defaultChannel(false), soundboard: defaultChannel(true), music: defaultChannel(true) },
+  channels: {
+    mic: defaultChannel(false),
+    soundboard: defaultChannel(true),
+    music: defaultChannel(true),
+    live: defaultChannel(true),
+  },
   outputs: {
     a: { gainDb: 0, muted: false, limiter: false },
     b: { gainDb: 0, muted: false, limiter: true },
@@ -273,6 +278,7 @@ function startDemo() {
           { id: "mic", peak: voice },
           { id: "soundboard", peak: 0 },
           { id: "music", peak: 0 },
+          { id: "live", peak: 0 },
         ],
         outA: output(0),
         outB: output(voice),
