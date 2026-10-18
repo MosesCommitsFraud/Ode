@@ -15,6 +15,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { SetupWizard } from "~/components/setup/SetupWizard";
 import { Button } from "~/components/ui/button";
 import { downloads } from "~/lib/downloads";
 import { formatTime, music, useMusic, type Repeat as RepeatMode } from "~/lib/music";
@@ -246,6 +247,8 @@ export function MusicBar() {
           />
         </div>
       </div>
+      {/* Einrichtungsassistent beim ersten Start (Portal, liegt nur hier, weil die Leiste immer da ist). */}
+      <SetupWizard />
     </div>
   );
 }
