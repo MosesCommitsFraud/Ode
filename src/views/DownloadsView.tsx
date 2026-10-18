@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ArrowDown, ChevronLeft, ChevronRight, Download, Link2, Loader2, X } from "lucide-react";
+import { ArrowDown, AudioWaveform, ChevronLeft, ChevronRight, Disc3, Download, Layers, Link2, Loader2, X } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type WheelEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, EmptyState, Kbd } from "~/components/ui/misc";
@@ -71,32 +71,47 @@ function ToolsSetup() {
   );
 }
 
-function TargetChip({
-  on,
-  color,
-  onClick,
-  children,
-}: {
-  on: boolean;
-  color: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+const TARGET_OPTIONS: { value: Target; label: string; icon: ReactNode; color: string }[] = [
+  { value: "soundboard", label: "Sound", icon: <AudioWaveform />, color: "var(--ch-soundboard)" },
+  { value: "music", label: "Musik", icon: <Disc3 />, color: "var(--ch-music)" },
+  { value: "both", label: "Beides", icon: <Layers />, color: "var(--primary)" },
+];
+
+/** Ziel als kleiner Umschalter mit gleitender Markierung in der Farbe des Ziels. */
+function TargetPicker({ value, onChange }: { value: Target; onChange: (t: Target) => void }) {
+  const index = Math.max(0, TARGET_OPTIONS.findIndex((o) => o.value === value));
+  const current = TARGET_OPTIONS[index];
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      style={{ "--chip": color } as CSSProperties}
-      className={cn(
-        "h-8 cursor-default rounded-full px-3.5 text-xs font-semibold transition-colors",
-        on
-          ? "bg-[color-mix(in_oklch,var(--chip)_18%,transparent)] text-[var(--chip)]"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground",
-      )}
+    <div
+      role="radiogroup"
+      aria-label="Ziel"
+      style={{ "--pick": current.color } as CSSProperties}
+      className="well relative grid h-10 shrink-0 grid-cols-3 rounded-xl p-1"
     >
-      {children}
-    </button>
+      <span
+        className="absolute inset-y-1 left-1 w-[calc((100%-0.5rem)/3)] rounded-lg bg-panel-raised shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)] transition-transform duration-300 ease-drawer"
+        style={{ transform: `translateX(${index * 100}%)` }}
+      />
+      {TARGET_OPTIONS.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              "relative flex cursor-default items-center justify-center gap-1.5 px-3 text-xs font-semibold transition-colors [&_svg]:size-3.5",
+              on ? "text-foreground [&_svg]:text-[var(--pick)]" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {o.icon}
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -104,14 +119,12 @@ function TargetChip({
 function AddForm() {
   const input = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState("");
-  const [toSounds, setToSounds] = useState(true);
-  const [toMusic, setToMusic] = useState(false);
+  const [target, setTarget] = useState<Target>("soundboard");
   const [hint, setHint] = useState<string | null>(null);
   const error = useDownloads((s) => s.error);
 
   useEffect(() => input.current?.focus(), []);
 
-  const target: Target = toSounds && toMusic ? "both" : toMusic ? "music" : "soundboard";
   const valid = isLink(url);
 
   const submit = async () => {
@@ -132,12 +145,6 @@ function AddForm() {
       setHint("Zwischenablage nicht lesbar – Strg V geht auch.");
     }
     input.current?.focus();
-  };
-
-  // Mindestens ein Ziel bleibt immer an.
-  const flip = (which: "sounds" | "music") => {
-    if (which === "sounds") setToSounds((on) => (on && !toMusic ? on : !on));
-    else setToMusic((on) => (on && !toSounds ? on : !on));
   };
 
   return (
@@ -177,13 +184,8 @@ function AddForm() {
             Einfügen <Kbd>Strg V</Kbd>
           </button>
         )}
-        <span className="mx-1 h-6 w-px bg-border" />
-        <TargetChip on={toSounds} color="var(--ch-soundboard)" onClick={() => flip("sounds")}>
-          Soundboard
-        </TargetChip>
-        <TargetChip on={toMusic} color="var(--ch-music)" onClick={() => flip("music")}>
-          Musik
-        </TargetChip>
+        <span className="mx-1.5 h-6 w-px bg-border" />
+        <TargetPicker value={target} onChange={setTarget} />
         <button
           type="button"
           title="Laden"
