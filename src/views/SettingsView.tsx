@@ -1,4 +1,5 @@
 import { DeviceSetup } from "~/components/mixer/DeviceSetup";
+import { GeneralSettings } from "~/components/setup/GeneralSettings";
 import { Badge, Card, Segmented } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
 
@@ -92,7 +93,10 @@ function BufferCard() {
 export function SettingsView() {
   return (
     <div className="grid h-full grid-cols-[minmax(0,1fr)_20rem] items-start gap-4 overflow-hidden px-6 pt-3 pb-4">
-      <DeviceSetup />
+      <div className="space-y-4">
+        <DeviceSetup />
+        <GeneralSettings />
+      </div>
       <div className="space-y-4">
         <LatencyCard />
         <BufferCard />

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Button } from "~/components/ui/button";
-import { Card, SectionLabel, Switch } from "~/components/ui/misc";
+import { Card, Switch } from "~/components/ui/misc";
 import { setup, useSetup } from "~/lib/setup";
 import { CableCredit } from "./SetupWizard";
 
@@ -26,7 +26,7 @@ export function GeneralSettings() {
 
   return (
     <Card className="p-5">
-      <SectionLabel>Allgemein</SectionLabel>
+      <h2 className="font-display text-lg font-semibold tracking-tight">Allgemein</h2>
       <div className="mt-2">
         <Row label="Beim Schließen im Tray weiterlaufen">
           <Switch
