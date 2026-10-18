@@ -225,9 +225,11 @@ export function MusicBar() {
           <Cover track={track} loading={state.loading} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{track?.title ?? "Nichts in der Wiedergabe"}</div>
-            <div className={cn("truncate text-2xs", state.error ? "text-error-foreground" : "text-muted-foreground")}>
-              {state.error ?? (state.loading ? "Lädt …" : (track?.artist ?? (hasTrack ? "Unbekannt" : "—")))}
-            </div>
+            {(hasTrack || state.error) && (
+              <div className={cn("truncate text-2xs", state.error ? "text-error-foreground" : "text-muted-foreground")}>
+                {state.error ?? (state.loading ? "Lädt …" : (track?.artist ?? "Unbekannt"))}
+              </div>
+            )}
           </div>
         </div>
 

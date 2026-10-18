@@ -1,13 +1,14 @@
-import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { ChevronLeft, ChevronRight, ClipboardPaste, Download, Loader2, X } from "lucide-react";
 import { useEffect, useRef, useState, type WheelEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, EmptyState, Segmented } from "~/components/ui/misc";
-import { Select } from "~/components/ui/select";
 import { ACTIVE, downloads, useDownloads, type Job, type Target } from "~/lib/downloads";
-import { music, useMusic } from "~/lib/music";
+import { isTauri } from "~/lib/engine";
+import { music } from "~/lib/music";
 import { cn } from "~/lib/utils";
 
-const ROW_HEIGHT = 56;
+const ROW_HEIGHT = 60;
 
 const STATUS: Record<Job["status"], string> = {
   queued: "Wartet",
@@ -20,8 +21,22 @@ const STATUS: Record<Job["status"], string> = {
   cancelled: "Abgebrochen",
 };
 
-const TARGETS: Target[] = ["soundboard", "music"];
-const TARGET_LABEL: Record<Target, string> = { soundboard: "Soundboard", music: "Musik" };
+/* „Beides“, Cover und nachträgliches Umstellen kommen mit dem nächsten Stand
+   der Download-Bibliothek; bis dahin sind die Felder optional. */
+type Choice = Target | "both";
+type JobExtra = Job & { cover?: string | null };
+const api = downloads as typeof downloads & {
+  setTarget?: (id: number, target: Choice) => Promise<void>;
+};
+const addJob = downloads.add as (url: string, target: Choice, playlistId?: number | null) => Promise<void>;
+const SUPPORTS_BOTH = typeof api.setTarget === "function";
+
+const CHOICES: Choice[] = ["soundboard", "music", "both"];
+const CHOICE_LABEL: Record<Choice, string> = { soundboard: "Soundboard", music: "Musik", both: "Beides" };
+
+function isLink(text: string) {
+  return /^https?:\/\/\S+$/i.test(text.trim());
+}
 
 function useRowCount() {
   const ref = useRef<HTMLDivElement>(null);
@@ -68,45 +83,111 @@ function ToolsSetup() {
 
 function AddForm() {
   const [url, setUrl] = useState("");
-  const [target, setTarget] = useState<Target>("soundboard");
-  const [playlist, setPlaylist] = useState("");
-  const playlists = useMusic((s) => s.playlists);
+  const [target, setTarget] = useState<Choice>("soundboard");
+  const [pasteError, setPasteError] = useState<string | null>(null);
   const error = useDownloads((s) => s.error);
 
-  const submit = async () => {
-    if (!url.trim()) return;
-    await downloads.add(url.trim(), target, target === "music" && playlist ? Number(playlist) : null);
+  const submit = async (link = url) => {
+    const clean = link.trim();
+    if (!clean) return;
+    if (target === "both" && !SUPPORTS_BOTH) {
+      await addJob(clean, "soundboard", null);
+      await addJob(clean, "music", null);
+    } else {
+      await addJob(clean, target, null);
+    }
     setUrl("");
+  };
+
+  const paste = async () => {
+    setPasteError(null);
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      if (!isLink(text)) {
+        setPasteError("In der Zwischenablage ist kein Link.");
+        return;
+      }
+      setUrl(text);
+    } catch {
+      setPasteError("Zwischenablage nicht lesbar.");
+    }
   };
 
   return (
     <Card className="p-4">
       <div className="flex items-center gap-3">
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && void submit()}
-          placeholder="Link einfügen – YouTube, SoundCloud, …"
-          className="well h-11 min-w-0 flex-1 rounded-xl px-4 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-        />
-        <div className="w-60 shrink-0">
-          <Segmented value={target} options={TARGETS} onChange={setTarget} format={(t) => TARGET_LABEL[t]} />
-        </div>
-        {target === "music" && (
-          <Select
-            className="w-48 shrink-0"
-            value={playlist}
-            onChange={setPlaylist}
-            placeholder="Keine Playlist"
-            options={playlists.map((p) => ({ value: String(p.id), label: p.name }))}
+        <div className="well flex h-11 min-w-0 flex-1 items-center rounded-xl pr-1.5 pl-4 focus-within:ring-2 focus-within:ring-ring">
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
+            placeholder="Link – YouTube, SoundCloud, …"
+            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
-        )}
+          <Button variant="outline" size="sm" onClick={() => void paste()}>
+            <ClipboardPaste /> Einfügen
+          </Button>
+        </div>
+        <div className="w-64 shrink-0">
+          <Segmented value={target} options={CHOICES} onChange={setTarget} format={(t) => CHOICE_LABEL[t]} />
+        </div>
         <Button disabled={!url.trim()} onClick={() => void submit()}>
-          Laden
+          <Download /> Laden
         </Button>
       </div>
-      {error && <p className="mt-2 px-1 text-sm text-error-foreground">{error}</p>}
+      {(pasteError || error) && <p className="mt-2 px-1 text-sm text-error-foreground">{pasteError ?? error}</p>}
     </Card>
+  );
+}
+
+/** Ziel einer fertigen Datei umschalten: Soundboard, Musik oder beides. */
+function TargetToggle({ job }: { job: Job }) {
+  const editable = job.status === "done" && typeof api.setTarget === "function";
+  const current = job.target as Choice;
+  const has = (t: Target) => current === t || current === "both";
+  const toggle = (t: Target) => {
+    const other: Target = t === "soundboard" ? "music" : "soundboard";
+    const next: Choice = has(t) ? (has(other) ? other : current) : has(other) ? "both" : t;
+    if (next !== current) void api.setTarget?.(job.id, next);
+  };
+
+  return (
+    <div className="flex gap-1">
+      {(["soundboard", "music"] as const).map((t) => (
+        <button
+          key={t}
+          type="button"
+          disabled={!editable}
+          title={editable ? (has(t) ? `Aus ${CHOICE_LABEL[t]} entfernen` : `Zu ${CHOICE_LABEL[t]} hinzufügen`) : undefined}
+          onClick={() => toggle(t)}
+          className={cn(
+            "h-6 cursor-default rounded-full px-2.5 font-mono text-3xs font-semibold uppercase transition-colors",
+            has(t)
+              ? t === "music"
+                ? "bg-[color-mix(in_oklch,var(--ch-music)_16%,transparent)] text-[var(--ch-music)]"
+                : "bg-[color-mix(in_oklch,var(--ch-soundboard)_16%,transparent)] text-[var(--ch-soundboard)]"
+              : "text-muted-foreground/60",
+            editable && !has(t) && "hover:bg-accent hover:text-foreground",
+          )}
+        >
+          {CHOICE_LABEL[t]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Thumb({ job }: { job: JobExtra }) {
+  const [failed, setFailed] = useState(false);
+  const src = job.cover && isTauri ? convertFileSrc(job.cover) : null;
+  return (
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground shadow-[0_0_0_1px_var(--hairline)] [&_svg]:size-4">
+      {src && !failed ? (
+        <img src={src} alt="" className="size-full object-cover" onError={() => setFailed(true)} draggable={false} />
+      ) : (
+        <Download />
+      )}
+    </div>
   );
 }
 
@@ -117,14 +198,15 @@ function JobRow({ job }: { job: Job }) {
     : STATUS[job.status];
 
   return (
-    <div className="grid h-full grid-cols-[1fr_7rem_9rem_2rem] items-center gap-4 rounded-xl px-3 hover:bg-accent">
+    <div className="grid h-full grid-cols-[2.5rem_1fr_auto_9rem_2rem] items-center gap-4 rounded-xl px-3 hover:bg-accent">
+      <Thumb job={job} />
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{job.title ?? job.url}</div>
         <div className={cn("truncate text-2xs", job.error ? "text-error-foreground" : "text-muted-foreground")}>
           {job.error ?? (job.artist ? `${job.artist} · ${job.url}` : job.title ? job.url : "")}
         </div>
       </div>
-      <span className="font-mono text-3xs text-muted-foreground uppercase">{TARGET_LABEL[job.target]}</span>
+      <TargetToggle job={job} />
       <div className="space-y-1">
         <div
           className={cn(
