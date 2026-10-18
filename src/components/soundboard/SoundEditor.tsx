@@ -168,7 +168,6 @@ export function SoundEditor({
         className="relative flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-popover shadow-[var(--shadow-pop)]"
       >
         <div className="flex items-center gap-3 px-6 pt-5 pb-4">
-          <span className="size-3 rounded-full" style={{ background: color, boxShadow: `0 0 10px ${color}` }} />
           <input
             value={draft.name}
             onChange={(e) => patch({ name: e.target.value })}
@@ -246,7 +245,7 @@ export function SoundEditor({
                     title={name}
                     onClick={() => patch({ color: name })}
                     className={cn(
-                      "size-6 cursor-default rounded-full transition-transform hover:scale-110",
+                      "h-6 w-7 cursor-default rounded-lg transition-transform hover:scale-110",
                       draft.color === name && "ring-2 ring-foreground ring-offset-2 ring-offset-popover",
                     )}
                     style={{ background: value }}

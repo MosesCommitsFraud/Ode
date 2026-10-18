@@ -48,7 +48,7 @@ export function SoundTile({
       }}
       style={{ "--tile": color } as CSSProperties}
       className={cn(
-        "group panel relative flex h-32 cursor-default flex-col overflow-hidden rounded-2xl p-3 text-left outline-none transition-all duration-150 select-none",
+        "group panel relative flex h-full cursor-default flex-col overflow-hidden rounded-2xl p-3 text-left outline-none transition-all duration-150 select-none",
         "hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring active:translate-y-0 active:scale-[0.98]",
         playing &&
           "shadow-[0_0_0_1.5px_var(--tile),0_10px_30px_-10px_var(--tile)]",
@@ -61,10 +61,6 @@ export function SoundTile({
       />
 
       <div className="relative flex items-start gap-2">
-        <span
-          className="mt-1 size-2.5 shrink-0 rounded-full"
-          style={{ background: color, boxShadow: playing ? `0 0 10px ${color}` : undefined }}
-        />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm leading-tight font-semibold">{sound.name}</div>
           <div className="mt-0.5 truncate font-mono text-3xs text-muted-foreground tabular-nums">

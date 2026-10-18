@@ -89,7 +89,7 @@ function Handle({ at, color }: { at: number; color: string }) {
       style={{ left: `${at * 100}%`, background: color, boxShadow: `0 0 8px ${color}` }}
     >
       <span
-        className="absolute top-0 left-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-panel"
+        className="absolute top-1/2 left-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm ring-2 ring-panel"
         style={{ background: color }}
       />
     </span>

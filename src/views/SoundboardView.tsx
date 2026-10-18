@@ -1,5 +1,5 @@
-import { LayoutGrid, Loader2, Play, Plus, Search, Square, Star, Upload, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, LayoutGrid, Loader2, Play, Plus, Search, Square, Star, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { SoundEditor } from "~/components/soundboard/SoundEditor";
 import { SoundTile } from "~/components/soundboard/SoundTile";
 import { Button } from "~/components/ui/button";
@@ -11,6 +11,31 @@ import { cn } from "~/lib/utils";
 
 const ALL = "__all";
 const FAVORITES = "__favorites";
+
+/** Kachelmaße für die Seitenaufteilung; die Seite scrollt nie. */
+const TILE_MIN_WIDTH = 176;
+const TILE_HEIGHT = 116;
+const GAP = 12;
+
+/** Wie viele Kacheln passen in den Bereich? */
+function useGridSize() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ cols: 4, rows: 3 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize({
+        cols: Math.max(1, Math.floor((width + GAP) / (TILE_MIN_WIDTH + GAP))),
+        rows: Math.max(1, Math.floor((height + GAP) / (TILE_HEIGHT + GAP))),
+      });
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, ...size };
+}
 
 /** Dateien aus dem Explorer aufs Fenster ziehen. */
 function useFileDrop(onDrop: (paths: string[]) => void) {
@@ -72,7 +97,9 @@ export function SoundboardView() {
   const [filter, setFilter] = useState(ALL);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
+  const [page, setPage] = useState(0);
   const dragOver = useFileDrop(library.importFiles);
+  const grid = useGridSize();
 
   useEffect(() => {
     if (!loaded) void library.load();
@@ -91,6 +118,19 @@ export function SoundboardView() {
     return !q || s.name.toLowerCase().includes(q) || s.category?.toLowerCase().includes(q);
   });
   const editingSound = sounds.find((s) => s.id === editing);
+
+  const pageSize = grid.cols * grid.rows;
+  const pages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const current = Math.min(page, pages - 1);
+  const shown = visible.slice(current * pageSize, (current + 1) * pageSize);
+  const turn = (delta: number) => setPage(Math.min(pages - 1, Math.max(0, current + delta)));
+
+  // Neue Auswahl beginnt auf der ersten Seite.
+  useEffect(() => setPage(0), [filter, query]);
+
+  const onWheel = (e: WheelEvent) => {
+    if (pages > 1 && Math.abs(e.deltaY) > 20) turn(e.deltaY > 0 ? 1 : -1);
+  };
 
   return (
     <div className="relative flex h-full flex-col">
@@ -153,7 +193,7 @@ export function SoundboardView() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+      <div ref={grid.ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden px-6">
         {sounds.length === 0 && loaded ? (
           <EmptyState icon={<LayoutGrid />} title="Noch keine Sounds">
             Zieh Audiodateien (MP3, WAV, OGG, FLAC …) hierher oder klick auf „Sounds hinzufügen“. Klick
@@ -162,8 +202,15 @@ export function SoundboardView() {
         ) : visible.length === 0 && loaded ? (
           <p className="pt-16 text-center text-sm text-muted-foreground">Keine Sounds für diese Auswahl.</p>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
-            {visible.map((sound) => (
+          <div
+            className="grid"
+            style={{
+              gap: GAP,
+              gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,
+              gridAutoRows: TILE_HEIGHT,
+            }}
+          >
+            {shown.map((sound) => (
               <SoundTile
                 key={sound.id}
                 sound={sound}
@@ -172,6 +219,22 @@ export function SoundboardView() {
               />
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="flex h-12 shrink-0 items-center justify-center gap-3 px-6">
+        {pages > 1 && (
+          <>
+            <Button variant="ghost" size="icon-sm" title="Vorherige Seite" disabled={current === 0} onClick={() => turn(-1)}>
+              <ChevronLeft />
+            </Button>
+            <span className="font-mono text-2xs text-muted-foreground tabular-nums">
+              Seite {current + 1} / {pages}
+            </span>
+            <Button variant="ghost" size="icon-sm" title="Nächste Seite" disabled={current === pages - 1} onClick={() => turn(1)}>
+              <ChevronRight />
+            </Button>
+          </>
         )}
       </div>
 
