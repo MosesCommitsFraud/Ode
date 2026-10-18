@@ -33,6 +33,11 @@ tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 
 
+# Audio-Bibliotheken auch im Debug-Build optimieren, sonst dekodiert symphonia
+# ganze Titel spürbar langsam.
+[profile.dev.package."*"]
+opt-level = 2
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1

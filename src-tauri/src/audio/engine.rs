@@ -18,6 +18,7 @@ use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 use serde::{Deserialize, Serialize};
 
+use super::deck::{Deck, DeckCommand, DeckStatus};
 use super::dsp::{Ducker, Limiter, SmoothedGain, peak};
 use super::mixer::{ChannelId, Mixer, OutputId};
 use super::resample::{PullResampler, PushResampler};
@@ -69,6 +70,7 @@ struct Running {
     _streams: Vec<Stream>,
     info: EngineInfo,
     samplers: Vec<Sender<SamplerCommand>>,
+    decks: Vec<Sender<DeckCommand>>,
 }
 
 pub struct Engine {
@@ -79,6 +81,9 @@ pub struct Engine {
     samplers: Arc<Mutex<Vec<Sender<SamplerCommand>>>>,
     /// Laufende Sounds für die Oberfläche.
     pub playing: Arc<Mutex<Vec<PlayingSound>>>,
+    decks: Arc<Mutex<Vec<Sender<DeckCommand>>>>,
+    /// Stand des Musik-Decks.
+    pub deck_status: Arc<Mutex<DeckStatus>>,
 }
 
 impl Engine {
@@ -89,6 +94,8 @@ impl Engine {
         let info = Arc::new(Mutex::new(None));
         let samplers = Arc::new(Mutex::new(Vec::new()));
         let playing = Arc::new(Mutex::new(Vec::new()));
+        let decks = Arc::new(Mutex::new(Vec::new()));
+        let deck_status = Arc::new(Mutex::new(DeckStatus::default()));
 
         let shared = Shared {
             mixer: mixer.clone(),
@@ -96,6 +103,8 @@ impl Engine {
             info: info.clone(),
             samplers: samplers.clone(),
             playing: playing.clone(),
+            decks: decks.clone(),
+            deck_status: deck_status.clone(),
         };
         thread::Builder::new()
             .name("ode-engine".into())
@@ -109,7 +118,21 @@ impl Engine {
             info,
             samplers,
             playing,
+            decks,
+            deck_status,
         }
+    }
+
+    /// Schickt einen Befehl an die Musik-Decks aller Ausgänge.
+    pub fn deck(&self, command: DeckCommand) -> Result<(), String> {
+        let decks = self.decks.lock();
+        if decks.is_empty() {
+            return Err("Engine ist nicht gestartet".into());
+        }
+        for deck in decks.iter() {
+            let _ = deck.send(command.clone());
+        }
+        Ok(())
     }
 
     /// Schickt einen Befehl an die Sampler aller Ausgänge.
@@ -152,6 +175,8 @@ struct Shared {
     info: Arc<Mutex<Option<EngineInfo>>>,
     samplers: Arc<Mutex<Vec<Sender<SamplerCommand>>>>,
     playing: Arc<Mutex<Vec<PlayingSound>>>,
+    decks: Arc<Mutex<Vec<Sender<DeckCommand>>>>,
+    deck_status: Arc<Mutex<DeckStatus>>,
 }
 
 impl Shared {
@@ -159,6 +184,8 @@ impl Shared {
         *self.info.lock() = None;
         self.samplers.lock().clear();
         self.playing.lock().clear();
+        self.decks.lock().clear();
+        *self.deck_status.lock() = DeckStatus::default();
     }
 }
 
@@ -178,6 +205,7 @@ fn run(commands: Receiver<Command>, shared: Shared) {
                         let engine_info = state.info.clone();
                         *shared.info.lock() = Some(engine_info.clone());
                         *shared.samplers.lock() = state.samplers.clone();
+                        *shared.decks.lock() = state.decks.clone();
                         running = Some(state);
                         Ok(engine_info)
                     }
@@ -208,6 +236,7 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
     let mut producers = Vec::new();
     let mut streams = Vec::new();
     let mut samplers = Vec::new();
+    let mut decks = Vec::new();
     let mut monitor = None;
     let mut cable = None;
 
@@ -222,16 +251,19 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
         let reports = output == OutputId::B || config.cable_id.is_none();
         let (sampler_tx, sampler_rx) = unbounded();
         let sampler = Sampler::new(sampler_rx, reports.then(|| shared.playing.clone()));
+        let (deck_tx, deck_rx) = unbounded();
+        let deck = Deck::new(deck_rx, reports.then(|| shared.deck_status.clone()));
         let (stream, stream_info) = build_output(
             &device,
             mixer.clone(),
             errors.clone(),
             output,
             consumer,
-            sampler,
+            (sampler, deck),
             target_frames,
         )?;
         samplers.push(sampler_tx);
+        decks.push(deck_tx);
         producers.push((output, producer));
         streams.push(stream);
         match output {
@@ -258,6 +290,7 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
             cable,
         },
         samplers,
+        decks,
     })
 }
 
@@ -449,12 +482,14 @@ struct OutputProcessor {
     output: OutputId,
     consumer: HeapCons<f32>,
     sampler: Sampler,
+    deck: Deck,
     resampler: PullResampler,
     channels: usize,
     target_frames: usize,
     /// Weich nachgeführte Kanal-Pegel für dieses Ziel (pro Sample).
     mic_send: f32,
     soundboard_send: f32,
+    music_send: f32,
     ducker: Ducker,
     /// Erst ausgeben, wenn der Puffer einmal den Zielwert erreicht hat.
     primed: bool,
@@ -492,6 +527,7 @@ impl OutputProcessor {
             .store(self.consumer.occupied_len() as u32, Ordering::Relaxed);
 
         self.sampler.poll();
+        self.deck.poll();
 
         // Kanäle in Engine-Rate mischen; Routing und Fader gleiten weich.
         let mic_target = self.mixer.channel(ChannelId::Mic).send(self.output);
@@ -499,6 +535,10 @@ impl OutputProcessor {
         let soundboard_fader = soundboard.gain();
         let soundboard_target = soundboard_fader * soundboard.send(self.output);
         let mut soundboard_peak = 0.0f32;
+        let music = self.mixer.channel(ChannelId::Music);
+        let music_fader = music.gain();
+        let music_target = music_fader * music.send(self.output);
+        let mut music_peak = 0.0f32;
         let ducking = &self.mixer.ducking;
         let (duck_on, duck_threshold, duck_reduction) =
             (ducking.enabled(), ducking.threshold(), ducking.reduction());
@@ -509,8 +549,10 @@ impl OutputProcessor {
         let mut starved = false;
         let consumer = &mut self.consumer;
         let sampler = &mut self.sampler;
+        let deck = &mut self.deck;
         let mic_send = &mut self.mic_send;
         let soundboard_send = &mut self.soundboard_send;
+        let music_send = &mut self.music_send;
         let mut next = || {
             let mic = consumer.try_pop().unwrap_or_else(|| {
                 starved = true;
@@ -518,6 +560,7 @@ impl OutputProcessor {
             });
             *mic_send += (mic_target - *mic_send) * SMOOTHING;
             *soundboard_send += (soundboard_target - *soundboard_send) * SMOOTHING;
+            *music_send += (music_target - *music_send) * SMOOTHING;
             // Ducking hört auf das Mikrofon nach dem Fader, vor dem Routing.
             let duck = ducker.next(mic, duck_threshold, duck_reduction, duck_on);
             duck_min = duck_min.min(duck);
@@ -526,6 +569,11 @@ impl OutputProcessor {
                 let sound = sampler.next_sample() * duck;
                 soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
                 sum += sound * *soundboard_send;
+            }
+            if !deck.is_idle() {
+                let song = deck.next_sample() * duck;
+                music_peak = music_peak.max((song * music_fader).abs());
+                sum += song * *music_send;
             }
             sum
         };
@@ -538,7 +586,9 @@ impl OutputProcessor {
             out.underruns.fetch_add(1, Ordering::Relaxed);
         }
         soundboard.meter.fetch_max(soundboard_peak);
+        music.meter.fetch_max(music_peak);
         self.sampler.report();
+        self.deck.report();
         if self.output == OutputId::B || !self.mixer.out_b.is_active() {
             let db = if duck_min < 1.0 {
                 20.0 * duck_min.max(1e-6).log10()
@@ -572,7 +622,7 @@ fn build_output(
     errors: Arc<Mutex<Vec<String>>>,
     output: OutputId,
     consumer: HeapCons<f32>,
-    sampler: Sampler,
+    (sampler, deck): (Sampler, Deck),
     target_frames: usize,
 ) -> anyhow::Result<(Stream, StreamInfo)> {
     let supported = pick_config(
@@ -591,11 +641,13 @@ fn build_output(
         output,
         consumer,
         sampler,
+        deck,
         resampler: PullResampler::new(ENGINE_RATE, rate),
         channels: supported.channels() as usize,
         target_frames,
         mic_send: 0.0,
         soundboard_send: 0.0,
+        music_send: 0.0,
         ducker: Ducker::new(ENGINE_RATE),
         primed: false,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),

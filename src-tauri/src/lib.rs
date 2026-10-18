@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod library;
+pub mod music;
 mod soundboard;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,6 +18,7 @@ use audio::mixer::{
 };
 use audio::sampler::PlayingSound;
 use library::Library;
+use music::{MusicLibrary, Player};
 
 const MIXER_KEY: &str = "mixer";
 
@@ -147,10 +149,17 @@ fn spawn_meter_loop(app: AppHandle) {
     thread::Builder::new()
         .name("ode-meters".into())
         .spawn(move || {
+            let mut tick = 0u32;
             loop {
                 thread::sleep(Duration::from_millis(33));
                 let meters = snapshot(&app.state::<Engine>());
                 let _ = app.emit("engine://meters", meters);
+                // Player-Stand reicht mit etwa 10 Hz.
+                tick = tick.wrapping_add(1);
+                if tick.is_multiple_of(3) {
+                    let player = app.state::<Player>().snapshot(&app);
+                    let _ = app.emit("player://state", player);
+                }
             }
         })
         .expect("Pegel-Thread konnte nicht starten");
@@ -162,8 +171,15 @@ fn list_devices() -> Result<DeviceList, String> {
 }
 
 #[tauri::command]
-fn start_engine(engine: State<Engine>, config: EngineConfig) -> Result<EngineInfo, String> {
-    engine.start(config)
+fn start_engine(
+    app: AppHandle,
+    engine: State<Engine>,
+    config: EngineConfig,
+) -> Result<EngineInfo, String> {
+    let info = engine.start(config)?;
+    // Neue Streams haben leere Decks: laufenden Titel wieder laden.
+    app.state::<Player>().resync(&app);
+    Ok(info)
 }
 
 #[tauri::command]
@@ -218,9 +234,12 @@ pub fn run() {
         .manage(Engine::spawn())
         .manage(soundboard::Hotkeys::default())
         .manage(MixerDirty::default())
+        .manage(Player::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             app.manage(Library::open(&data_dir)?);
+            app.manage(MusicLibrary::open(&data_dir)?);
+            Player::spawn_monitor(app.handle().clone());
             load_mixer(app.handle());
             spawn_mixer_saver(app.handle().clone());
             soundboard::sync_hotkeys(app.handle());
@@ -246,6 +265,20 @@ pub fn run() {
             soundboard::sound_play,
             soundboard::sound_stop,
             soundboard::sound_stop_all,
+            music::music_state,
+            music::music_import,
+            music::music_delete_track,
+            music::playlist_create,
+            music::playlist_rename,
+            music::playlist_delete,
+            music::playlist_set_tracks,
+            music::player_play,
+            music::player_toggle,
+            music::player_next,
+            music::player_previous,
+            music::player_seek,
+            music::player_set_shuffle,
+            music::player_set_repeat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

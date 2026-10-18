@@ -1,6 +1,7 @@
 //! Audio-Engine: Alle Quellen laufen hier zusammen. Die Oberfläche steuert
 //! die Engine nur über Befehle; Audio selbst läuft nie durch die Oberfläche.
 
+pub mod deck;
 pub mod decode;
 pub mod devices;
 pub mod dsp;
