@@ -1,78 +1,107 @@
 @import "tailwindcss";
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/jetbrains-mono";
 
-/* Optik nach T3 Code (apps/web/src/index.css): ruhige Zink-Grautöne,
-   ein kräftiges Blau als Akzent, kompakte Abstände, dünne Rahmen. */
+/* Ode: dunkle Arbeitsfläche wie ein Studiopult, schwebende Paneele,
+   ein glühendes Orange als Signalfarbe. Jeder Kanal trägt eine eigene
+   Farbe, damit man Fader und Pegel auf einen Blick zuordnet. */
 
 @custom-variant dark (&:is(.dark, .dark *));
 
 @theme {
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-mono:
-    ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+  --font-display: "Bricolage Grotesque Variable", "Segoe UI Variable Display", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
 :root {
-  --radius: 0.625rem;
-  --control-radius: 0.5rem;
-  --topbar-height: 52px;
-  --content-max-width: 46rem;
-  --sidebar-width: 15.5rem;
-  --glass-blur: 12px;
+  --radius: 0.875rem;
+  --control-radius: 0.625rem;
+  --topbar-height: 64px;
+  --sidebar-width: 15rem;
 
-  --background: oklch(99.2% 0 0);
-  --foreground: var(--color-zinc-800);
-  --card: white;
-  --card-foreground: var(--color-zinc-800);
+  --canvas: oklch(95.6% 0.006 75);
+  --background: var(--canvas);
+  --foreground: oklch(22% 0.01 60);
+  --panel: oklch(99.4% 0.003 75);
+  --panel-raised: white;
+  --card: var(--panel);
+  --card-foreground: var(--foreground);
   --popover: white;
-  --primary: oklch(0.488 0.217 264);
+  --primary: oklch(0.64 0.2 42);
   --primary-foreground: white;
-  --secondary: var(--color-zinc-100);
-  --muted: var(--color-zinc-100);
-  --muted-foreground: var(--color-zinc-500);
-  --accent: var(--color-zinc-100);
-  --accent-foreground: var(--color-zinc-900);
-  --border: var(--color-zinc-200);
-  --input: var(--color-zinc-300);
-  --ring: oklch(0.488 0.217 264 / 45%);
-  --sidebar: var(--color-zinc-50);
-  --sidebar-accent: var(--color-zinc-200);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-700);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-700);
-  --error: var(--color-red-500);
-  --error-foreground: var(--color-red-700);
-  --meter-track: var(--color-zinc-200);
-  --shadow-dock: 0 12px 28px -18px rgb(0 0 0 / 40%);
-  --scrollbar-thumb: rgb(217 217 217);
+  --primary-glow: oklch(0.7 0.19 45 / 35%);
+  --secondary: oklch(92.5% 0.007 70);
+  --muted: oklch(93% 0.006 70);
+  --muted-foreground: oklch(52% 0.012 60);
+  --accent: oklch(92% 0.008 70);
+  --accent-foreground: var(--foreground);
+  --border: oklch(88% 0.008 70);
+  --hairline: oklch(0% 0 0 / 7%);
+  --input: oklch(85% 0.01 70);
+  --ring: oklch(0.64 0.2 42 / 45%);
+  --sidebar: oklch(98.5% 0.004 75 / 80%);
+  --sidebar-accent: oklch(0% 0 0 / 5%);
+  --success: oklch(0.68 0.17 150);
+  --success-foreground: oklch(0.5 0.14 150);
+  --warning: oklch(0.78 0.16 75);
+  --warning-foreground: oklch(0.55 0.13 65);
+  --error: oklch(0.62 0.22 25);
+  --error-foreground: oklch(0.52 0.2 25);
+  --meter-track: oklch(0% 0 0 / 7%);
+  --led-off: oklch(0% 0 0 / 8%);
+  --well: oklch(94% 0.006 70);
+  --well-shadow: oklch(30% 0.02 60 / 10%);
+
+  --ch-mic: var(--primary);
+  --ch-soundboard: oklch(0.6 0.2 295);
+  --ch-music: oklch(0.66 0.13 200);
+  --ch-out: oklch(32% 0.01 60);
+
+  --shadow-dock: 0 1px 0 oklch(100% 0 0 / 70%) inset, 0 18px 40px -22px oklch(30% 0.03 60 / 45%);
+  --shadow-panel: 0 1px 2px oklch(30% 0.02 60 / 8%), 0 8px 24px -16px oklch(30% 0.03 60 / 25%);
+  --shadow-pop: 0 20px 48px -12px oklch(25% 0.03 60 / 30%), 0 2px 6px oklch(25% 0.03 60 / 10%);
+  --scrollbar-thumb: oklch(0% 0 0 / 14%);
 }
 
 .dark {
-  --glass-blur: 16px;
+  --canvas: oklch(14.5% 0.006 60);
+  --foreground: oklch(95% 0.006 75);
+  --panel: oklch(18.5% 0.007 60);
+  --panel-raised: oklch(22% 0.008 60);
+  --popover: oklch(21% 0.008 60);
+  --primary: oklch(0.72 0.19 46);
+  --primary-foreground: oklch(16% 0.02 50);
+  --primary-glow: oklch(0.72 0.19 46 / 45%);
+  --secondary: oklch(100% 0 0 / 6%);
+  --muted: oklch(100% 0 0 / 5%);
+  --muted-foreground: oklch(66% 0.01 70);
+  --accent: oklch(100% 0 0 / 7%);
+  --border: oklch(100% 0 0 / 8%);
+  --hairline: oklch(100% 0 0 / 6%);
+  --input: oklch(100% 0 0 / 12%);
+  --ring: oklch(0.72 0.19 46 / 50%);
+  --sidebar: oklch(18% 0.007 60 / 75%);
+  --sidebar-accent: oklch(100% 0 0 / 6%);
+  --success: oklch(0.74 0.17 150);
+  --success-foreground: oklch(0.8 0.15 150);
+  --warning: oklch(0.82 0.15 80);
+  --warning-foreground: oklch(0.85 0.13 80);
+  --error: oklch(0.66 0.21 25);
+  --error-foreground: oklch(0.75 0.17 25);
+  --meter-track: oklch(100% 0 0 / 6%);
+  --led-off: oklch(100% 0 0 / 6%);
+  --well: oklch(12% 0.005 60);
+  --well-shadow: oklch(0% 0 0 / 35%);
 
-  --background: var(--color-neutral-950);
-  --foreground: var(--color-neutral-100);
-  --card: color-mix(in srgb, var(--background), white 3%);
-  --card-foreground: var(--color-neutral-100);
-  --popover: color-mix(in srgb, var(--background), white 4%);
-  --primary: oklch(0.571 0.21 264);
-  --primary-foreground: white;
-  --secondary: rgb(255 255 255 / 6%);
-  --muted: rgb(255 255 255 / 5%);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500), white 20%);
-  --accent: rgb(255 255 255 / 6%);
-  --accent-foreground: var(--color-neutral-100);
-  --border: rgb(255 255 255 / 6%);
-  --input: rgb(255 255 255 / 8%);
-  --ring: oklch(0.571 0.21 264 / 50%);
-  --sidebar: var(--card);
-  --sidebar-accent: rgb(255 255 255 / 7%);
-  --success-foreground: var(--color-emerald-400);
-  --warning-foreground: var(--color-amber-400);
-  --error-foreground: var(--color-red-400);
-  --meter-track: rgb(255 255 255 / 7%);
-  --shadow-dock: 0 14px 32px -18px rgb(0 0 0 / 75%);
-  --scrollbar-thumb: rgb(255 255 255 / 8%);
+  --ch-soundboard: oklch(0.7 0.18 295);
+  --ch-music: oklch(0.78 0.12 195);
+  --ch-out: oklch(92% 0.01 75);
+
+  --shadow-dock: 0 1px 0 oklch(100% 0 0 / 6%) inset, 0 18px 40px -18px oklch(0% 0 0 / 80%);
+  --shadow-panel: 0 1px 0 oklch(100% 0 0 / 4%) inset, 0 12px 32px -20px oklch(0% 0 0 / 70%);
+  --shadow-pop: 0 1px 0 oklch(100% 0 0 / 6%) inset, 0 24px 56px -12px oklch(0% 0 0 / 75%);
+  --scrollbar-thumb: oklch(100% 0 0 / 10%);
 }
 
 @theme inline {
@@ -81,14 +110,18 @@
   --text-3xs: 0.625rem;
   --text-3xs--line-height: calc(0.875 / 0.625);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
   --radius-control: var(--control-radius);
 
+  --color-canvas: var(--canvas);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -100,6 +133,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-border: var(--border);
+  --color-hairline: var(--hairline);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
@@ -111,8 +145,11 @@
   --color-error: var(--error);
   --color-error-foreground: var(--error-foreground);
   --color-meter-track: var(--meter-track);
+  --color-well: var(--well);
 
   --shadow-dock: var(--shadow-dock);
+  --shadow-panel: var(--shadow-panel);
+  --shadow-pop: var(--shadow-pop);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -128,7 +165,7 @@
   }
 
   body {
-    background: var(--background);
+    background: var(--canvas);
     color: var(--foreground);
     font-family: var(--font-sans);
     font-size: 0.875rem;
@@ -154,5 +191,50 @@
 
   ::-webkit-scrollbar-track {
     background: transparent;
+  }
+}
+
+@layer components {
+  /* Schwebendes Paneel, wie der Player unten. */
+  .panel {
+    border: 1px solid var(--hairline);
+    background: var(--panel);
+    box-shadow: var(--shadow-panel);
+  }
+
+  /* Vertiefte Fläche für Fader-Schienen und Auswahlgruppen. */
+  .well {
+    background: var(--well);
+    box-shadow:
+      inset 0 1px 2px var(--well-shadow),
+      inset 0 0 0 1px var(--hairline);
+  }
+
+  /* Leichtes Korn auf der Arbeitsfläche, damit sie nicht wie eine Fläche aus dem Baukasten wirkt. */
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  .dark .grain::before {
+    opacity: 0.06;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+@keyframes flow {
+  to {
+    background-position: 0 -16px;
   }
 }

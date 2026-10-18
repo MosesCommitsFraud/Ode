@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent, type PointerEvent } from "react";
+import { useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 
 const MIN_DB = -60;
@@ -16,19 +16,25 @@ function positionToDb(pos: number) {
   return Math.round(db * 2) / 2;
 }
 
-const TICKS = [12, 6, 0, -6, -12, -24, -40];
+const SCALE = [12, 6, 0, -6, -12, -24, -40];
 
+/**
+ * Senkrechter Fader mit aufgedruckter dB-Skala. Die Füllung leuchtet in der
+ * Kanalfarbe (`--ch`); `meter` sitzt direkt neben der Schiene.
+ */
 export function Fader({
   value,
   onChange,
   disabled,
   label,
+  meter,
   className,
 }: {
   value: number;
   onChange: (db: number) => void;
   disabled?: boolean;
   label: string;
+  meter?: ReactNode;
   className?: string;
 }) {
   const track = useRef<HTMLDivElement>(null);
@@ -61,16 +67,21 @@ export function Fader({
   };
 
   return (
-    <div className={cn("relative flex h-full w-9 justify-center", className)}>
-      <div className="pointer-events-none absolute inset-y-2 right-0 w-2">
-        {TICKS.map((db) => (
-          <div
+    <div className={cn("flex h-full items-stretch gap-1.5 py-3", className)}>
+      {/* Skala */}
+      <div className="relative w-5 font-mono text-[9px] text-muted-foreground/70 tabular-nums">
+        {SCALE.map((db) => (
+          <span
             key={db}
-            className={cn("absolute right-0 h-px bg-border", db === 0 ? "w-2 bg-muted-foreground/50" : "w-1")}
+            className={cn("absolute right-0 translate-y-1/2 leading-none", db === 0 && "font-semibold text-foreground")}
             style={{ bottom: `${dbToPosition(db) * 100}%` }}
-          />
+          >
+            {db > 0 ? `+${db}` : db === 0 ? "0" : `${Math.abs(db)}`}
+          </span>
         ))}
+        <span className="absolute right-0 bottom-0 translate-y-1/2 leading-none">∞</span>
       </div>
+
       <div
         ref={track}
         role="slider"
@@ -85,23 +96,41 @@ export function Fader({
         onPointerMove={onPointerMove}
         onDoubleClick={() => !disabled && onChange(0)}
         onKeyDown={onKeyDown}
-        className={cn(
-          "group relative my-2 w-6 touch-none rounded-control outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          disabled && "opacity-50",
-        )}
+        className="group relative w-9 touch-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-meter-track" />
+        {/* Rillen links und rechts der Schiene */}
+        {SCALE.map((db) => (
+          <span
+            key={db}
+            className={cn(
+              "absolute left-1/2 h-px -translate-x-1/2 bg-muted-foreground/25",
+              db === 0 ? "w-9 bg-muted-foreground/50" : "w-6",
+            )}
+            style={{ bottom: `${dbToPosition(db) * 100}%` }}
+          />
+        ))}
+        <div className="well absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 rounded-full" />
         <div
-          className="absolute bottom-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-primary"
-          style={{ height: `${pos * 100}%` }}
+          className="absolute bottom-0 left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-[var(--ch)] shadow-[0_0_10px_var(--ch)]"
+          style={{ height: `${pos * 100}%`, opacity: disabled ? 0.35 : 1 }}
         />
+        {/* Kappe */}
         <div
-          className="absolute left-1/2 h-3 w-6 -translate-x-1/2 translate-y-1/2 rounded-[4px] border border-input bg-card shadow-sm group-active:border-primary"
+          className={cn(
+            "absolute left-1/2 h-[26px] w-9 -translate-x-1/2 translate-y-1/2 rounded-[7px] transition-transform duration-100",
+            "bg-[linear-gradient(to_bottom,oklch(98%_0.003_75),oklch(86%_0.006_75))] dark:bg-[linear-gradient(to_bottom,oklch(40%_0.006_60),oklch(26%_0.006_60))]",
+            "shadow-[0_1px_0_oklch(100%_0_0/35%)_inset,0_6px_14px_-4px_oklch(0%_0_0/55%),0_0_0_1px_oklch(0%_0_0/18%)]",
+            !disabled && "group-hover:scale-105 group-active:scale-95",
+          )}
           style={{ bottom: `${pos * 100}%` }}
         >
-          <div className="absolute inset-x-1.5 top-1/2 h-px bg-muted-foreground/60" />
+          <span className="absolute inset-x-1 top-[5px] h-px bg-black/10 dark:bg-white/8" />
+          <span className="absolute inset-x-1.5 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-[var(--ch)]" />
+          <span className="absolute inset-x-1 bottom-[5px] h-px bg-black/10 dark:bg-white/8" />
         </div>
       </div>
+
+      {meter}
     </div>
   );
 }

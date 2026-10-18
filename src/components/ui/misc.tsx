@@ -1,12 +1,11 @@
 import type { ComponentProps, ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
 import { cn } from "~/lib/utils";
 
 export function Kbd({ className, ...props }: ComponentProps<"kbd">) {
   return (
     <kbd
       className={cn(
-        "inline-flex h-5 min-w-5 items-center justify-center rounded border border-border bg-muted px-1 font-mono text-3xs text-muted-foreground",
+        "inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-muted px-1.5 font-mono text-3xs text-muted-foreground",
         className,
       )}
       {...props}
@@ -22,12 +21,12 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex h-5 items-center gap-1 rounded-md px-1.5 text-2xs font-medium",
+        "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 font-mono text-3xs font-medium",
         tone === "default" && "bg-muted text-muted-foreground",
-        tone === "success" && "bg-success/12 text-success-foreground",
-        tone === "warning" && "bg-warning/12 text-warning-foreground",
-        tone === "error" && "bg-error/12 text-error-foreground",
-        tone === "primary" && "bg-primary/12 text-primary",
+        tone === "success" && "bg-success/14 text-success-foreground",
+        tone === "warning" && "bg-warning/14 text-warning-foreground",
+        tone === "error" && "bg-error/14 text-error-foreground",
+        tone === "primary" && "bg-primary/14 text-primary",
         className,
       )}
       {...props}
@@ -36,9 +35,13 @@ export function Badge({
 }
 
 export function Card({ className, ...props }: ComponentProps<"div">) {
+  return <div className={cn("panel rounded-2xl text-card-foreground", className)} {...props} />;
+}
+
+export function SectionLabel({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
-      className={cn("rounded-lg border border-border bg-card text-card-foreground", className)}
+      className={cn("font-mono text-3xs tracking-[0.16em] text-muted-foreground uppercase", className)}
       {...props}
     />
   );
@@ -64,57 +67,52 @@ export function Switch({
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "relative inline-flex h-[18px] w-8 shrink-0 cursor-default items-center rounded-full border border-transparent transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-        checked ? "bg-primary" : "bg-input",
+        "relative inline-flex h-5 w-9 shrink-0 cursor-default items-center rounded-full transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+        checked ? "bg-primary shadow-[0_0_12px_-2px_var(--primary-glow)]" : "well",
       )}
     >
       <span
         className={cn(
-          "block size-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-drawer",
-          checked ? "translate-x-[15px]" : "translate-x-px",
+          "block size-4 rounded-full bg-white shadow-[0_1px_3px_oklch(0%_0_0/35%)] transition-transform duration-300 ease-drawer",
+          checked ? "translate-x-[18px]" : "translate-x-0.5",
         )}
       />
     </button>
   );
 }
 
-export interface SelectOption {
-  value: string;
-  label: string;
-  hint?: string;
-}
-
-export function Select({
+/** Auswahl mit gleitender Markierung, z. B. für die Puffergröße. */
+export function Segmented<T extends string | number>({
   value,
   onChange,
   options,
-  placeholder,
-  disabled,
-  className,
+  format = String,
 }: {
-  value: string;
-  onChange: (value: string) => void;
-  options: SelectOption[];
-  placeholder?: string;
-  disabled?: boolean;
-  className?: string;
+  value: T;
+  onChange: (value: T) => void;
+  options: T[];
+  format?: (value: T) => ReactNode;
 }) {
+  const index = Math.max(0, options.indexOf(value));
   return (
-    <div className={cn("relative", className)}>
-      <select
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 w-full cursor-default appearance-none truncate rounded-control border border-input bg-card pr-8 pl-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-      >
-        {placeholder !== undefined && <option value="">{placeholder}</option>}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.hint ? `${o.label} · ${o.hint}` : o.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+    <div className="well relative grid rounded-xl p-1" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
+      <span
+        className="absolute inset-y-1 left-1 rounded-lg bg-panel-raised shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)] transition-transform duration-300 ease-drawer"
+        style={{ width: `calc((100% - 0.5rem) / ${options.length})`, transform: `translateX(${index * 100}%)` }}
+      />
+      {options.map((o) => (
+        <button
+          key={o}
+          type="button"
+          onClick={() => onChange(o)}
+          className={cn(
+            "relative h-8 cursor-default font-mono text-xs tabular-nums transition-colors",
+            o === value ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {format(o)}
+        </button>
+      ))}
     </div>
   );
 }
@@ -129,12 +127,15 @@ export function EmptyState({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-      <div className="flex size-10 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground [&_svg]:size-5">
-        {icon}
+    <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
+      <div className="relative">
+        <div className="absolute inset-0 scale-150 rounded-full bg-primary/20 blur-2xl" />
+        <div className="relative flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.8_0.17_70)] to-primary text-primary-foreground shadow-[0_10px_30px_-8px_var(--primary-glow)] [&_svg]:size-7">
+          {icon}
+        </div>
       </div>
-      <div className="space-y-1">
-        <p className="font-medium">{title}</p>
+      <div className="space-y-1.5">
+        <p className="font-display text-xl font-semibold tracking-tight">{title}</p>
         {children && <p className="max-w-sm text-sm text-muted-foreground">{children}</p>}
       </div>
     </div>

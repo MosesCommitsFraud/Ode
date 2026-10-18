@@ -10,9 +10,13 @@ function dbToFraction(db: number) {
   return Math.min(1, Math.max(0, (db - FLOOR) / -FLOOR));
 }
 
+/** Teilt den Balken in LED-Segmente. */
+const SEGMENTS_V = "repeating-linear-gradient(to top, #000 0 3px, transparent 3px 5px)";
+const SEGMENTS_H = "repeating-linear-gradient(to right, #000 0 3px, transparent 3px 5px)";
+
 /**
- * Pegelanzeige in dBFS: grün bis −12 dB, gelb bis −3 dB, darüber rot.
- * Fällt weich ab und hält die Spitze kurz.
+ * Pegelanzeige in dBFS als LED-Kette: Kanalfarbe bis −12 dB, gelb bis −3 dB, darüber rot.
+ * Fällt weich ab und hält die Spitze kurz. Die Kanalfarbe kommt aus `--ch`.
  */
 export function Meter({
   peak,
@@ -37,32 +41,28 @@ export function Meter({
   const level = dbToFraction(display.current);
   const held = dbToFraction(hold.current.db);
   const vertical = orientation === "vertical";
-  const gradient = vertical
-    ? "bg-[linear-gradient(to_top,var(--success)_0%,var(--success)_80%,var(--warning)_80%,var(--warning)_95%,var(--error)_95%)]"
-    : "bg-[linear-gradient(to_right,var(--success)_0%,var(--success)_80%,var(--warning)_80%,var(--warning)_95%,var(--error)_95%)]";
+  const dir = vertical ? "to top" : "to right";
+  const mask = vertical ? SEGMENTS_V : SEGMENTS_H;
 
   return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-[3px] bg-meter-track",
-        vertical ? "w-1.5" : "h-1.5",
-        className,
-      )}
-    >
+    <div className={cn("relative", vertical ? "w-2" : "h-2", className)}>
       <div
-        className={cn("absolute inset-0", gradient)}
+        className="absolute inset-0 bg-[var(--led-off)]"
+        style={{ maskImage: mask, WebkitMaskImage: mask }}
+      />
+      <div
+        className="absolute inset-0"
         style={{
-          clipPath: vertical
-            ? `inset(${(1 - level) * 100}% 0 0 0)`
-            : `inset(0 ${(1 - level) * 100}% 0 0)`,
+          maskImage: mask,
+          WebkitMaskImage: mask,
+          background: `linear-gradient(${dir}, var(--ch, var(--success)) 0%, var(--ch, var(--success)) 80%, var(--warning) 80%, var(--warning) 95%, var(--error) 95%)`,
+          clipPath: vertical ? `inset(${(1 - level) * 100}% 0 0 0)` : `inset(0 ${(1 - level) * 100}% 0 0)`,
+          filter: level > 0.02 ? "drop-shadow(0 0 3px var(--ch, var(--success)))" : undefined,
         }}
       />
-      {held > 0.01 && (
+      {held > 0.02 && (
         <div
-          className={cn(
-            "absolute bg-foreground/60",
-            vertical ? "inset-x-0 h-px" : "inset-y-0 w-px",
-          )}
+          className={cn("absolute rounded-full bg-foreground", vertical ? "inset-x-0 h-0.5" : "inset-y-0 w-0.5")}
           style={vertical ? { bottom: `${held * 100}%` } : { left: `${held * 100}%` }}
         />
       )}
