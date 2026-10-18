@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod downloader;
 pub mod library;
 pub mod music;
 mod soundboard;
@@ -18,6 +19,7 @@ use audio::mixer::{
     ChannelId, ChannelParams, DuckingParams, Mixer, MixerSettings, Output, OutputId, OutputParams,
 };
 use audio::sampler::PlayingSound;
+use downloader::{Downloads, Tools};
 use library::Library;
 use music::{MusicLibrary, Player};
 
@@ -262,6 +264,9 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             app.manage(Library::open(&data_dir)?);
             app.manage(MusicLibrary::open(&data_dir)?);
+            app.manage(Tools::new(&data_dir)?);
+            app.manage(Downloads::new(&data_dir)?);
+            downloader::start(app.handle());
             Player::spawn_monitor(app.handle().clone());
             load_mixer(app.handle());
             spawn_mixer_saver(app.handle().clone());
@@ -303,6 +308,12 @@ pub fn run() {
             music::player_seek,
             music::player_set_shuffle,
             music::player_set_repeat,
+            downloader::tools_status,
+            downloader::tools_install,
+            downloader::downloads_list,
+            downloader::download_add,
+            downloader::download_cancel,
+            downloader::downloads_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
