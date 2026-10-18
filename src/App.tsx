@@ -4,7 +4,8 @@ import { Sidebar, VIEWS, type View } from "~/components/shell/Sidebar";
 import { TopBar } from "~/components/shell/TopBar";
 import { actions } from "~/lib/store";
 import { MixerView } from "~/views/MixerView";
-import { DownloadsView, EffectsView, MusicView, SoundboardView } from "~/views/Placeholders";
+import { DownloadsView, EffectsView, MusicView } from "~/views/Placeholders";
+import { SoundboardView } from "~/views/SoundboardView";
 
 const SUBTITLES: Record<View, string> = {
   soundboard: "Sounds auf Knopfdruck ins Mikrofon",

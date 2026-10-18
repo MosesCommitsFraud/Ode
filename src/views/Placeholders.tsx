@@ -1,14 +1,5 @@
-import { Download, LayoutGrid, Music, Wand2 } from "lucide-react";
+import { Download, Music, Wand2 } from "lucide-react";
 import { EmptyState } from "~/components/ui/misc";
-
-export function SoundboardView() {
-  return (
-    <EmptyState icon={<LayoutGrid />} title="Noch keine Sounds">
-      Kacheln mit Hotkeys, Kategorien und Trimmen kommen in Phase 2. Bis dahin: Mikrofon im
-      Mischpult einrichten und die Latenz prüfen.
-    </EmptyState>
-  );
-}
 
 export function MusicView() {
   return (

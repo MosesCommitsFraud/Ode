@@ -113,6 +113,11 @@ export const actions = {
       outputs: { a: mixer.outA, b: mixer.outB },
     });
     await actions.refreshDevices();
+    // Ohne laufende Engine bleibt das Soundboard stumm – also gleich starten.
+    const { config } = state;
+    if (!state.info && config.inputId && (config.cableId || config.monitorId)) {
+      await actions.start();
+    }
   },
 
   async refreshDevices() {
@@ -170,6 +175,25 @@ export const actions = {
   },
 };
 
+/** Im Demo-Modus gestartete Sounds: ID → Startzeit in Sekunden. */
+export const demoStarts = new Map<number, number>();
+
+function demoPlaying(t: number) {
+  const playing: { id: number; progress: number }[] = [];
+  for (const [id, start] of demoStarts) {
+    const progress = (t - start) / 2.5;
+    if (progress >= 1) demoStarts.delete(id);
+    else playing.push({ id, progress });
+  }
+  return playing;
+}
+
+export function demoNow() {
+  return demoClock;
+}
+
+let demoClock = 0;
+
 /** Vorschau im Browser ohne Tauri: Beispielgeräte und simulierte Pegel. */
 function startDemo() {
   const devices: DeviceList = {
@@ -195,6 +219,7 @@ function startDemo() {
   let t = 0;
   setInterval(() => {
     t += 0.033;
+    demoClock = t;
     const voice = Math.max(0, Math.sin(t * 2.1) * 0.5 + Math.sin(t * 7.3) * 0.25) * 0.8;
     const output = (peak: number) => ({
       peak,
@@ -217,6 +242,7 @@ function startDemo() {
         inputCallbackMs: 10,
         latencyMs: 29.6 + Math.sin(t) * 0.4,
         errors: [],
+        playing: demoPlaying(t),
       },
     });
   }, 33);

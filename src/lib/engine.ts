@@ -72,6 +72,8 @@ export interface Meters {
   inputCallbackMs: number;
   latencyMs: number;
   errors: string[];
+  /** Laufende Soundboard-Sounds mit Fortschritt 0–1. */
+  playing: { id: number; progress: number }[];
 }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
