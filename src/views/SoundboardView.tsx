@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, LayoutGrid, Loader2, Play, Plus, Search, Square, Star, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutGrid, Loader2, Play, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { SoundEditor } from "~/components/soundboard/SoundEditor";
 import { SoundTile } from "~/components/soundboard/SoundTile";
@@ -136,7 +136,6 @@ export function SoundboardView() {
     <div className="relative flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-4">
         <div className="well flex h-9 w-56 items-center gap-2 rounded-full px-3.5">
-          <Search className="size-3.5 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -154,7 +153,7 @@ export function SoundboardView() {
             Alle <span className="font-mono opacity-60">{sounds.length}</span>
           </Chip>
           <Chip active={filter === FAVORITES} onClick={() => setFilter(FAVORITES)}>
-            <Star /> Favoriten
+            Favoriten
           </Chip>
           {categories.map((c) => (
             <Chip key={c} active={filter === c} onClick={() => setFilter(c)}>
@@ -163,10 +162,10 @@ export function SoundboardView() {
           ))}
         </div>
         <Button variant="outline" size="sm" disabled={!playing?.length} onClick={() => library.stopAll()}>
-          <Square /> Alle stoppen
+          Alle stoppen
         </Button>
         <Button size="sm" onClick={() => library.pickFiles()}>
-          {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
+          {importing > 0 && <Loader2 className="animate-spin" />}
           {importing > 0 ? `Lade ${importing} …` : "Sounds hinzufügen"}
         </Button>
       </div>
@@ -195,10 +194,7 @@ export function SoundboardView() {
 
       <div ref={grid.ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden px-6">
         {sounds.length === 0 && loaded ? (
-          <EmptyState icon={<LayoutGrid />} title="Noch keine Sounds">
-            Zieh Audiodateien (MP3, WAV, OGG, FLAC …) hierher oder klick auf „Sounds hinzufügen“. Klick
-            auf eine Kachel spielt sie ab, Rechtsklick öffnet die Einstellungen.
-          </EmptyState>
+          <EmptyState icon={<LayoutGrid />} title="Noch keine Sounds" />
         ) : visible.length === 0 && loaded ? (
           <p className="pt-16 text-center text-sm text-muted-foreground">Keine Sounds für diese Auswahl.</p>
         ) : (
@@ -240,7 +236,6 @@ export function SoundboardView() {
 
       {dragOver && (
         <div className="pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-primary bg-primary/10 backdrop-blur-sm">
-          <Upload className="size-8 text-primary" />
           <p className="font-display text-lg font-semibold">Loslassen zum Hinzufügen</p>
         </div>
       )}

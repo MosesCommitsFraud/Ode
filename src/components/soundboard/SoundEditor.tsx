@@ -1,4 +1,4 @@
-import { Keyboard, Play, Trash2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
@@ -14,11 +14,6 @@ const MODE_LABELS: Record<PlayMode, string> = {
   restart: "Neustart",
   overlap: "Überlagern",
   toggle: "Stopp",
-};
-const MODE_HINTS: Record<PlayMode, string> = {
-  restart: "Erneutes Drücken startet den Sound von vorn.",
-  overlap: "Erneutes Drücken spielt ihn zusätzlich, mehrere laufen gleichzeitig.",
-  toggle: "Erneutes Drücken stoppt den laufenden Sound.",
 };
 
 function Field({ label, aside, children }: { label: string; aside?: ReactNode; children: ReactNode }) {
@@ -93,7 +88,6 @@ function HotkeyRecorder({ value, onChange }: { value: string | null; onChange: (
           recording && "shadow-[0_0_0_2px_var(--primary)]",
         )}
       >
-        <Keyboard className="size-4 text-muted-foreground" />
         {recording ? (
           <span className="text-primary">Tastenkombination drücken … (Esc bricht ab)</span>
         ) : value ? (
@@ -228,7 +222,6 @@ export function SoundEditor({
 
           <Field label="Erneut drücken">
             <Segmented value={draft.playMode} onChange={(playMode) => patch({ playMode })} options={MODES} format={(m) => MODE_LABELS[m]} />
-            <p className="text-xs text-muted-foreground">{MODE_HINTS[draft.playMode]}</p>
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
@@ -276,7 +269,7 @@ export function SoundEditor({
               onClose();
             }}
           >
-            <Trash2 /> {confirmDelete ? "Wirklich löschen?" : "Löschen"}
+            {confirmDelete ? "Wirklich löschen?" : "Löschen"}
           </Button>
           <div className="flex-1" />
           <Button
@@ -287,7 +280,7 @@ export function SoundEditor({
               void library.play(sound.id);
             }}
           >
-            <Play /> Anhören
+            Anhören
           </Button>
           <Button size="sm" onClick={() => void close()}>
             Fertig

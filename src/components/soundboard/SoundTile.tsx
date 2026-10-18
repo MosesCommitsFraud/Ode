@@ -101,7 +101,7 @@ export function SoundTile({
             ))}
           </div>
         ) : (
-          <span className="font-mono text-3xs text-muted-foreground/60">kein Hotkey</span>
+          <span />
         )}
         {playing && (
           <button

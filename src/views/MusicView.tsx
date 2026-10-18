@@ -6,10 +6,7 @@ import {
   Music,
   Pause,
   Play,
-  Plus,
-  Shuffle,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
@@ -160,7 +157,7 @@ function TrackRow({
       </button>
       <div className="min-w-0">
         <div className={cn("truncate text-sm font-medium", current && "text-[var(--ch-music)]")}>{track.title}</div>
-        <div className="truncate text-2xs text-muted-foreground">{track.artist ?? "Unbekannt"}</div>
+        {track.artist && <div className="truncate text-2xs text-muted-foreground">{track.artist}</div>}
       </div>
       <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <Button
@@ -273,7 +270,7 @@ export function MusicView() {
             disabled={list.length === 0}
             onClick={() => (listPlaying ? music.toggle() : music.play(ids, 0))}
           >
-            {listPlaying ? <Pause /> : <Play />} {listPlaying ? "Pause" : "Abspielen"}
+            {listPlaying ? "Pause" : "Abspielen"}
           </Button>
           <Button
             variant="outline"
@@ -285,10 +282,10 @@ export function MusicView() {
               await music.play(ids, Math.floor(Math.random() * ids.length));
             }}
           >
-            <Shuffle /> Zufällig
+            Zufällig
           </Button>
           <Button variant="outline" size="sm" onClick={() => music.pickFiles()}>
-            {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
+            {importing > 0 && <Loader2 className="animate-spin" />}
             {importing > 0 ? `Lade ${importing} …` : "Musik hinzufügen"}
           </Button>
           {playlist && (
@@ -318,11 +315,7 @@ export function MusicView() {
 
         <div ref={ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden">
           {loaded && list.length === 0 ? (
-            <EmptyState icon={<Music />} title={playlist ? "Playlist ist leer" : "Noch keine Musik"}>
-              {playlist
-                ? "Zieh Dateien hierher oder füge Titel aus „Alle Titel“ über das Listen-Symbol hinzu."
-                : "Zieh Audiodateien hierher oder klick auf „Musik hinzufügen“. Doppelklick spielt einen Titel."}
-            </EmptyState>
+            <EmptyState icon={<Music />} title={playlist ? "Playlist ist leer" : "Noch keine Musik"} />
           ) : (
             <div className="grid" style={{ gridAutoRows: ROW_HEIGHT }}>
               {shown.map((track, i) => (
@@ -359,7 +352,6 @@ export function MusicView() {
 
       {dragOver && (
         <div className="pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-[var(--ch-music)] bg-[color-mix(in_oklch,var(--ch-music)_10%,transparent)] backdrop-blur-sm">
-          <Upload className="size-8 text-[var(--ch-music)]" />
           <p className="font-display text-lg font-semibold">
             {playlist ? `Loslassen fügt zu „${playlist.name}“ hinzu` : "Loslassen zum Hinzufügen"}
           </p>
