@@ -16,8 +16,8 @@ const FAVORITES = "__favorites";
 const TILE_MIN_WIDTH = 176;
 const TILE_HEIGHT = 116;
 const GAP = 12;
-const ROW_HEIGHT = 52;
-const ROW_GAP = 4;
+const ROW_HEIGHT = 40;
+const ROW_GAP = 2;
 
 type Layout = "grid" | "list";
 const LAYOUT_KEY = "ode.soundboard.layout";

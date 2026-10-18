@@ -1,4 +1,4 @@
-import { ArrowsClockwise, Broadcast, Stop } from "@phosphor-icons/react";
+import { ArrowsClockwise } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { Meter } from "~/components/mixer/Meter";
@@ -39,11 +39,11 @@ function SourceRow({ source, active }: { source: AppSource; active: boolean }) {
       </span>
       {active ? (
         <Button variant="outline" size="sm" onClick={() => void live.stop()}>
-          <Stop weight="fill" /> Beenden
+          Beenden
         </Button>
       ) : (
         <Button variant="outline" size="sm" onClick={() => void live.start(source)}>
-          <Broadcast /> Live schalten
+          Live schalten
         </Button>
       )}
     </div>
@@ -61,7 +61,7 @@ function ActiveSource({ source }: { source: AppSource }) {
         <Meter peak={muted ? 0 : peak} orientation="horizontal" className="mt-3 h-2.5" />
       </div>
       <Button onClick={() => void live.stop()}>
-        <Stop weight="fill" /> Beenden
+        Beenden
       </Button>
     </Card>
   );
@@ -112,7 +112,6 @@ export function LiveView() {
       <Card className="flex min-h-0 p-1.5">
         <ChannelStrip
           name="Live"
-          icon={<Broadcast />}
           color="var(--ch-live)"
           gainDb={channel.gainDb}
           muted={channel.muted}

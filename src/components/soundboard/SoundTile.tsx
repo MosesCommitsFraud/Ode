@@ -151,7 +151,7 @@ export function SoundRow({ sound, progress, onEdit }: ItemProps) {
       {...playableProps(sound, onEdit)}
       style={{ "--tile": color } as CSSProperties}
       className={cn(
-        "group grid h-full cursor-default grid-cols-[2.25rem_minmax(0,1fr)_minmax(6rem,14rem)_3.5rem_8rem_4.25rem] items-center gap-4 rounded-xl px-2 outline-none transition-colors select-none",
+        "group grid h-full cursor-default grid-cols-[1.75rem_minmax(0,1fr)_minmax(6rem,12rem)_3rem_7rem_4rem] items-center gap-3 rounded-lg px-1.5 outline-none transition-colors select-none",
         "hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         playing && "bg-[color-mix(in_oklch,var(--tile)_10%,transparent)]",
       )}
@@ -161,7 +161,7 @@ export function SoundRow({ sound, progress, onEdit }: ItemProps) {
         title={playing ? "Stoppen" : "Abspielen"}
         onClick={stop(() => void (playing ? library.stop(sound.id) : library.play(sound.id)))}
         className={cn(
-          "flex size-9 cursor-default items-center justify-center rounded-xl transition-colors [&_svg]:size-4",
+          "flex size-7 cursor-default items-center justify-center rounded-lg transition-colors [&_svg]:size-3.5",
           playing
             ? "bg-[var(--tile)] text-black/80"
             : "bg-[color-mix(in_oklch,var(--tile)_16%,transparent)] text-[var(--tile)] group-hover:bg-[var(--tile)] group-hover:text-black/80",
@@ -170,14 +170,12 @@ export function SoundRow({ sound, progress, onEdit }: ItemProps) {
         {playing ? <Stop weight="fill" /> : <Play weight="fill" />}
       </button>
 
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-semibold" title={sound.name}>
-            {sound.name}
-          </span>
-          {sound.favorite && <Star weight="fill" className="size-3 shrink-0 text-[var(--tile)]" />}
-        </div>
-        {sound.category && <div className="truncate text-2xs text-muted-foreground">{sound.category}</div>}
+      <div className="flex min-w-0 items-baseline gap-2">
+        <span className="truncate text-sm font-semibold" title={sound.name}>
+          {sound.name}
+        </span>
+        {sound.favorite && <Star weight="fill" className="size-3 shrink-0 self-center text-[var(--tile)]" />}
+        {sound.category && <span className="shrink-0 truncate text-2xs text-muted-foreground">{sound.category}</span>}
       </div>
 
       <Waveform
@@ -185,7 +183,7 @@ export function SoundRow({ sound, progress, onEdit }: ItemProps) {
         color={color}
         progress={progress}
         trim={undefined}
-        className="h-7"
+        className="h-5"
       />
 
       <span className="text-right font-mono text-2xs text-muted-foreground tabular-nums">

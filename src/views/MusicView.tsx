@@ -20,7 +20,7 @@ import { isTauri } from "~/lib/engine";
 import { formatTime, music, tracksOf, useMusic, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
 
-const ROW_HEIGHT = 56;
+const ROW_HEIGHT = 44;
 
 /** Wie viele Zeilen passen in den Bereich? Die Seite selbst scrollt nie. */
 function useRowCount() {
@@ -142,7 +142,7 @@ function TrackRow({
       onDoubleClick={onPlay}
       onMouseLeave={() => setConfirm(false)}
       className={cn(
-        "group grid h-full grid-cols-[1.75rem_2.5rem_minmax(0,1fr)_auto_3rem] items-center gap-3 rounded-xl px-2 transition-colors",
+        "group grid h-full grid-cols-[1.5rem_2rem_minmax(0,1fr)_auto_3rem] items-center gap-3 rounded-lg px-1.5 transition-colors",
         current ? "bg-[color-mix(in_oklch,var(--ch-music)_9%,transparent)]" : "hover:bg-accent",
       )}
     >
@@ -158,7 +158,7 @@ function TrackRow({
         type="button"
         title={current && playing ? "Pause" : "Abspielen"}
         onClick={() => (current ? music.toggle() : onPlay())}
-        className="relative flex size-10 cursor-default items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground shadow-[0_0_0_1px_var(--hairline)] [&_svg]:size-4"
+        className="relative flex size-8 cursor-default items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground shadow-[0_0_0_1px_var(--hairline)] [&_svg]:size-4"
       >
         {cover ? (
           <img src={cover} alt="" draggable={false} onError={() => setCoverFailed(true)} className="size-full object-cover" />
@@ -175,10 +175,10 @@ function TrackRow({
         </span>
       </button>
       <div className="min-w-0">
-        <div className={cn("truncate text-sm font-semibold", current && "text-[var(--ch-music)]")} title={track.title}>
+        <div className={cn("truncate text-[13px] leading-tight font-semibold", current && "text-[var(--ch-music)]")} title={track.title}>
           {track.title}
         </div>
-        {track.artist && <div className="truncate text-2xs text-muted-foreground">{track.artist}</div>}
+        {track.artist && <div className="truncate text-2xs leading-tight text-muted-foreground">{track.artist}</div>}
       </div>
       <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <Button

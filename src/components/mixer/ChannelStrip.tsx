@@ -1,12 +1,15 @@
+import { ArrowCounterClockwise } from "@phosphor-icons/react";
 import type { CSSProperties, ReactNode } from "react";
-import { Headphones, MicrophoneStage as Mic2, ArrowCounterClockwise as RotateCcw, SpeakerSlash as VolumeX } from "@phosphor-icons/react";
 import { cn, formatDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
 
-/** Taster wie auf einem Pult. */
-function PadButton({
-  active,
+/**
+ * Schalter im Kanalzug. An: gefüllt in der Kanalfarbe (`--ch`), bei
+ * `tone="error"` rot. Aus: ruhig auf der vertieften Fläche.
+ */
+export function StripToggle({
+  on,
   onClick,
   title,
   children,
@@ -14,7 +17,7 @@ function PadButton({
   disabled,
   className,
 }: {
-  active: boolean;
+  on: boolean;
   onClick: () => void;
   title: string;
   children: ReactNode;
@@ -22,20 +25,20 @@ function PadButton({
   disabled?: boolean;
   className?: string;
 }) {
-  const color = tone === "error" ? "var(--error)" : "var(--ch)";
   return (
     <button
       type="button"
       title={title}
-      aria-pressed={active}
+      aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
-      style={{ "--pad": color } as CSSProperties}
       className={cn(
-        "relative flex h-8 flex-1 cursor-default items-center justify-center gap-1.5 rounded-xl font-mono text-2xs font-semibold transition-all duration-150 disabled:opacity-40 [&_svg]:size-3.5",
-        active
-          ? "bg-[color-mix(in_oklch,var(--pad)_18%,transparent)] text-[var(--pad)] shadow-[0_0_0_1px_color-mix(in_oklch,var(--pad)_40%,transparent)_inset]"
-          : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground active:scale-95",
+        "flex h-8 min-w-0 flex-1 cursor-default items-center justify-center rounded-lg text-xs font-semibold transition-colors duration-150 disabled:opacity-40",
+        on
+          ? tone === "error"
+            ? "bg-error text-white"
+            : "bg-[var(--ch)] text-[oklch(18%_0.02_50)]"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
         className,
       )}
     >
@@ -44,9 +47,13 @@ function PadButton({
   );
 }
 
+/** Mehrere Schalter in einer gemeinsamen Mulde. */
+export function ToggleGroup({ children }: { children: ReactNode }) {
+  return <div className="well flex gap-1 rounded-xl p-1">{children}</div>;
+}
+
 export interface StripProps {
   name: string;
-  icon: ReactNode;
   color: string;
   gainDb: number;
   muted: boolean;
@@ -59,7 +66,8 @@ export interface StripProps {
     onA: (on: boolean) => void;
     onB: (on: boolean) => void;
   };
-  footer?: ReactNode;
+  /** Weitere Schalter, z. B. der Limiter der Ausgänge. */
+  extra?: ReactNode;
   disabled?: boolean;
   /** Stellt Lautstärke, Mute, Routing und Limiter auf den Auslieferungszustand. */
   onReset: () => void;
@@ -68,7 +76,6 @@ export interface StripProps {
 
 export function ChannelStrip({
   name,
-  icon,
   color,
   gainDb,
   muted,
@@ -76,7 +83,7 @@ export function ChannelStrip({
   onGain,
   onMute,
   routing,
-  footer,
+  extra,
   disabled,
   onReset,
   isDefault,
@@ -86,44 +93,39 @@ export function ChannelStrip({
   return (
     <div
       style={{ "--ch": color } as CSSProperties}
-      className={cn("flex w-[calc((100vw-21rem)/6)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-2.5 py-3.5", disabled && "opacity-55")}
+      className={cn(
+        "flex w-[calc((100vw-21rem)/6)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-2.5 pt-2.5 pb-3",
+        disabled && "opacity-55",
+      )}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--ch)_16%,transparent)] text-[var(--ch)] [&_svg]:size-4"
-        >
-          {icon}
-        </span>
+      <div className="flex h-8 items-center gap-1.5">
+        <span className="h-4 w-1 shrink-0 rounded-full bg-[var(--ch)]" />
         <div className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={name}>
           {name}
         </div>
-        {!isDefault && (
-          <button
-            type="button"
-            title="Auf Standard zurücksetzen"
-            onClick={onReset}
-            className="flex size-8 shrink-0 cursor-default items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-4"
-          >
-            <RotateCcw />
-          </button>
-        )}
+        <button
+          type="button"
+          title="Auf Standard zurücksetzen"
+          disabled={isDefault}
+          onClick={onReset}
+          className="flex size-7 shrink-0 cursor-default items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-25 disabled:hover:bg-transparent [&_svg]:size-3.5"
+        >
+          <ArrowCounterClockwise />
+        </button>
       </div>
 
       <button
         type="button"
-        title={gainDb === 0 ? "Grundlautstärke 0 dB" : "Auf 0 dB zurücksetzen"}
+        title={gainDb === 0 ? "Grundlautstärke 0 dB" : "Doppelklick auf den Fader oder hier: 0 dB"}
         disabled={disabled || gainDb === 0}
         onClick={() => onGain(0)}
         className={cn(
-          "well group/db relative mt-3 cursor-default rounded-lg py-1.5 text-center font-mono text-sm font-medium tabular-nums transition-colors",
+          "well mt-2 cursor-default rounded-lg py-1.5 text-center font-mono text-sm font-medium tabular-nums transition-colors",
           muted ? "text-error-foreground" : gainDb > 0 ? "text-[var(--ch)]" : "text-foreground",
         )}
       >
         {muted ? "MUTE" : formatDb(gainDb)}
         {!muted && <span className="ml-1 text-3xs text-muted-foreground">dB</span>}
-        {gainDb !== 0 && !disabled && (
-          <RotateCcw className="absolute top-1/2 right-2 size-3 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover/db:opacity-100" />
-        )}
       </button>
 
       <div className="flex min-h-0 flex-1 justify-center">
@@ -136,39 +138,39 @@ export function ChannelStrip({
         />
       </div>
 
-      <div className="space-y-1.5">
-        {routing && (
-          <div className="flex gap-1.5">
-            <PadButton
-              title="Auf Kopfhörer (A)"
-              active={routing.a}
-              onClick={() => routing.onA(!routing.a)}
-              disabled={disabled}
-            >
-              <Headphones />A
-            </PadButton>
-            <PadButton
-              title="Auf virtuelles Mikrofon (B)"
-              active={routing.b}
-              onClick={() => routing.onB(!routing.b)}
-              disabled={disabled}
-            >
-              <Mic2 />B
-            </PadButton>
-          </div>
-        )}
-        <PadButton
-          title={muted ? "Stummschaltung aufheben" : "Stummschalten"}
-          active={muted}
-          tone="error"
-          onClick={() => onMute(!muted)}
-          disabled={disabled}
-          className="w-full"
-        >
-          <VolumeX />
-          {muted ? "STUMM" : "MUTE"}
-        </PadButton>
-        {footer}
+      <div>
+        <ToggleGroup>
+          {routing && (
+            <>
+              <StripToggle
+                title="Auf Kopfhörer (A)"
+                on={routing.a}
+                onClick={() => routing.onA(!routing.a)}
+                disabled={disabled}
+              >
+                A
+              </StripToggle>
+              <StripToggle
+                title="Ins virtuelle Mikrofon (B)"
+                on={routing.b}
+                onClick={() => routing.onB(!routing.b)}
+                disabled={disabled}
+              >
+                B
+              </StripToggle>
+            </>
+          )}
+          <StripToggle
+            title={muted ? "Stummschaltung aufheben" : "Stummschalten"}
+            on={muted}
+            tone="error"
+            onClick={() => onMute(!muted)}
+            disabled={disabled}
+          >
+            M
+          </StripToggle>
+          {extra}
+        </ToggleGroup>
       </div>
     </div>
   );
