@@ -232,9 +232,3 @@
     transform: translateY(-4px) scale(0.98);
   }
 }
-
-@keyframes flow {
-  to {
-    background-position: 0 -16px;
-  }
-}

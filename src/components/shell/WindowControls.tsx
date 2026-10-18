@@ -32,7 +32,7 @@ function ControlButton({
       title={title}
       onClick={onClick}
       className={cn(
-        "flex h-7 w-9 cursor-default items-center justify-center rounded-control text-muted-foreground transition-colors [&_svg]:size-3.5",
+        "flex size-7 cursor-default items-center justify-center rounded-full text-muted-foreground transition-colors [&_svg]:size-3.5",
         danger ? "hover:bg-error hover:text-white" : "hover:bg-accent hover:text-foreground",
       )}
     >
@@ -56,7 +56,7 @@ export function WindowControls() {
   if (!appWindow) return null;
 
   return (
-    <div className="-mr-1.5 flex items-center gap-0.5">
+    <div className="panel flex h-9 items-center gap-0.5 rounded-full px-1">
       <ControlButton title="Minimieren" onClick={() => void appWindow.minimize()}>
         <Minus />
       </ControlButton>
@@ -64,7 +64,7 @@ export function WindowControls() {
         title={maximized ? "Verkleinern" : "Maximieren"}
         onClick={() => void appWindow.toggleMaximize()}
       >
-        {maximized ? <Copy className="-scale-x-100" /> : <Square className="!size-3" />}
+        {maximized ? <Copy className="-scale-x-100 !size-3" /> : <Square className="!size-3" />}
       </ControlButton>
       <ControlButton title="Schließen" danger onClick={() => void appWindow.close()}>
         <X />

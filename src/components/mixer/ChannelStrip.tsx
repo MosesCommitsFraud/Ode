@@ -4,7 +4,7 @@ import { cn, formatDb, gainToDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
 
-/** Taster mit LED, wie auf einem Pult. */
+/** Taster wie auf einem Pult. */
 function PadButton({
   active,
   onClick,
@@ -39,12 +39,6 @@ function PadButton({
         className,
       )}
     >
-      <span
-        className={cn(
-          "absolute top-1.5 right-1.5 size-1 rounded-full transition-all",
-          active ? "bg-[var(--pad)] shadow-[0_0_6px_var(--pad)]" : "bg-muted-foreground/30",
-        )}
-      />
       {children}
     </button>
   );
@@ -93,7 +87,7 @@ export function ChannelStrip({
   return (
     <div
       style={{ "--ch": color } as CSSProperties}
-      className={cn("flex w-[9.25rem] shrink-0 flex-col px-3 py-3.5", disabled && "opacity-55")}
+      className={cn("flex w-[calc((100vw-21rem)/5)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-3 py-3.5", disabled && "opacity-55")}
     >
       <div className="flex items-center gap-2.5">
         <span

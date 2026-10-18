@@ -46,17 +46,15 @@ function Node({
         <span
           className={cn(
             "absolute top-10 bottom-[-0.75rem] left-[1.25rem] w-0.5 -translate-x-1/2 rounded-full",
-            live
-              ? "animate-[flow_0.6s_linear_infinite] bg-[repeating-linear-gradient(to_bottom,var(--ch)_0_8px,transparent_8px_16px)] opacity-70"
-              : "bg-border",
+            live ? "bg-[var(--ch)] opacity-50" : "bg-border",
           )}
         />
       )}
       <span
         className={cn(
-          "relative z-10 flex size-10 items-center justify-center rounded-full border-2 transition-all [&_svg]:size-4",
+          "relative z-10 flex size-10 items-center justify-center rounded-full border-2 [&_svg]:size-4",
           live
-            ? "border-[var(--ch)] bg-[color-mix(in_oklch,var(--ch)_16%,var(--panel))] text-[var(--ch)] shadow-[0_0_16px_-4px_var(--ch)]"
+            ? "border-[var(--ch)] bg-[color-mix(in_oklch,var(--ch)_12%,var(--panel))] text-[var(--ch)]"
             : "border-border bg-panel text-muted-foreground",
         )}
       >

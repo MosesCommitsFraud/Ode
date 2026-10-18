@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { MusicBar } from "~/components/shell/MusicBar";
-import { Sidebar, VIEWS, type View } from "~/components/shell/Sidebar";
+import { SETTINGS, Sidebar, VIEWS, type View } from "~/components/shell/Sidebar";
 import { TopBar } from "~/components/shell/TopBar";
 import { actions } from "~/lib/store";
 import { MixerView } from "~/views/MixerView";
+import { SettingsView } from "~/views/SettingsView";
 import { DownloadsView, EffectsView, MusicView } from "~/views/Placeholders";
 import { SoundboardView } from "~/views/SoundboardView";
 
@@ -13,7 +14,10 @@ const SUBTITLES: Record<View, string> = {
   mixer: "Pegel, Wege und Geräte",
   effects: "Die Kette für deine Stimme",
   downloads: "Links rein, Sounds raus",
+  settings: "Geräte, Latenz und Puffer",
 };
+
+const ALL_VIEWS = [...VIEWS, SETTINGS];
 
 const THEME_KEY = "ode.theme";
 const VIEW_KEY = "ode.view";
@@ -55,7 +59,7 @@ export default function App() {
   const { dark, toggle } = useTheme();
   const [view, setView] = useState<View>(() => {
     const stored = readStorage(VIEW_KEY);
-    return VIEWS.some((v) => v.id === stored) ? (stored as View) : "mixer";
+    return ALL_VIEWS.some((v) => v.id === stored) ? (stored as View) : "mixer";
   });
 
   useEffect(() => {
@@ -67,7 +71,7 @@ export default function App() {
     writeStorage(VIEW_KEY, next);
   };
 
-  const title = VIEWS.find((v) => v.id === view)?.label ?? "";
+  const title = ALL_VIEWS.find((v) => v.id === view)?.label ?? "";
   const subtitle = SUBTITLES[view];
 
   return (
@@ -75,12 +79,13 @@ export default function App() {
       <Sidebar view={view} onView={changeView} dark={dark} onToggleTheme={toggle} />
       <main className="flex min-w-0 flex-1 flex-col">
         <TopBar title={title} subtitle={subtitle} />
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {view === "soundboard" && <SoundboardView />}
           {view === "music" && <MusicView />}
           {view === "mixer" && <MixerView />}
           {view === "effects" && <EffectsView />}
           {view === "downloads" && <DownloadsView />}
+          {view === "settings" && <SettingsView />}
         </div>
         <MusicBar />
       </main>

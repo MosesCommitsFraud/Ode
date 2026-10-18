@@ -1,9 +1,9 @@
-import { Download, LayoutGrid, Moon, Music, Plus, SlidersHorizontal, Sun, Wand2 } from "lucide-react";
+import { Download, LayoutGrid, Moon, Music, Plus, Settings, SlidersHorizontal, Star, Sun, Wand2 } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import { useStore } from "~/lib/store";
 import { cn, gainToDb } from "~/lib/utils";
 
-export type View = "soundboard" | "music" | "mixer" | "effects" | "downloads";
+export type View = "soundboard" | "music" | "mixer" | "effects" | "downloads" | "settings";
 
 export const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
   { id: "soundboard", label: "Soundboard", icon: <LayoutGrid /> },
@@ -12,6 +12,8 @@ export const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
   { id: "effects", label: "Effekte", icon: <Wand2 /> },
   { id: "downloads", label: "Downloads", icon: <Download /> },
 ];
+
+export const SETTINGS = { id: "settings" as const, label: "Einstellungen", icon: <Settings /> };
 
 /** Wortmarke: ein Ring, der wie eine Schallwelle aufgeht. */
 function Logo() {
@@ -120,8 +122,7 @@ function LiveCard() {
   return (
     <div className="rounded-xl bg-sidebar-accent p-3">
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-2xs font-medium">
-          <span className={cn("size-1.5 rounded-full", info ? "bg-primary shadow-[0_0_8px_var(--primary)]" : "bg-muted-foreground/40")} />
+        <span className={cn("text-2xs font-semibold", info ? "text-primary" : "text-muted-foreground")}>
           {info ? "Live" : "Engine aus"}
         </span>
         <span className="font-mono text-3xs text-muted-foreground tabular-nums">
@@ -184,7 +185,7 @@ export function Sidebar({
 }) {
   return (
     <aside className="panel m-2 mr-0 flex w-[var(--sidebar-width)] shrink-0 flex-col rounded-2xl bg-sidebar backdrop-blur-xl">
-      <div className="px-4 pt-4 pb-5">
+      <div data-tauri-drag-region className="px-4 pt-4 pb-5">
         <Logo />
       </div>
 
@@ -196,7 +197,7 @@ export function Sidebar({
         </div>
 
         <Section title="Kategorien">
-          <ListItem swatch={<span className="size-2 rounded-full bg-primary" />} label="Favoriten" count={0} />
+          <ListItem swatch={<Star className="size-3.5 text-primary" />} label="Favoriten" count={0} />
         </Section>
 
         <Section title="Playlists">
@@ -212,9 +213,16 @@ export function Sidebar({
 
       <div className="space-y-2 p-2">
         <LiveCard />
-        <div className="flex items-center justify-between gap-2 px-1">
-          <span className="font-mono text-3xs text-muted-foreground/70">v0.1.0</span>
-          <div className="w-[4.5rem]">
+        <div className="flex items-center gap-1.5">
+          <div className="min-w-0 flex-1">
+            <NavItem
+              icon={SETTINGS.icon}
+              label={SETTINGS.label}
+              active={view === SETTINGS.id}
+              onClick={() => onView(SETTINGS.id)}
+            />
+          </div>
+          <div className="w-[4.5rem] shrink-0">
             <ThemeToggle dark={dark} onToggle={onToggleTheme} />
           </div>
         </div>
