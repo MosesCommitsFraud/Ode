@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use super::deck::{Deck, DeckCommand, DeckStatus};
 use super::dsp::{Ducker, Limiter, SmoothedGain, peak};
 use super::effects::EffectChain;
-use super::mixer::{ChannelId, Mixer, OutputId};
+use super::mixer::{ChannelId, Mixer, OutputId, player_gain};
 use super::resample::{PullResampler, PushResampler};
 use super::sampler::{PlayingSound, Sampler, SamplerCommand};
 use super::{BLOCK_FRAMES, ENGINE_RATE, devices};
@@ -498,6 +498,8 @@ struct OutputProcessor {
     mic_send: f32,
     soundboard_send: f32,
     music_send: f32,
+    /// Geglättete Player-Lautstärke.
+    player: f32,
     ducker: Ducker,
     /// Erst ausgeben, wenn der Puffer einmal den Zielwert erreicht hat.
     primed: bool,
@@ -546,6 +548,7 @@ impl OutputProcessor {
         let music = self.mixer.channel(ChannelId::Music);
         let music_fader = music.gain();
         let music_target = music_fader * music.send(self.output);
+        let player_target = player_gain(self.mixer.player_volume.load());
         let mut music_peak = 0.0f32;
         let ducking = &self.mixer.ducking;
         let (duck_on, duck_threshold, duck_reduction) =
@@ -561,6 +564,7 @@ impl OutputProcessor {
         let mic_send = &mut self.mic_send;
         let soundboard_send = &mut self.soundboard_send;
         let music_send = &mut self.music_send;
+        let player = &mut self.player;
         let mut next = || {
             let mic = consumer.try_pop().unwrap_or_else(|| {
                 starved = true;
@@ -569,6 +573,7 @@ impl OutputProcessor {
             *mic_send += (mic_target - *mic_send) * SMOOTHING;
             *soundboard_send += (soundboard_target - *soundboard_send) * SMOOTHING;
             *music_send += (music_target - *music_send) * SMOOTHING;
+            *player += (player_target - *player) * SMOOTHING;
             // Ducking hört auf das Mikrofon nach dem Fader, vor dem Routing.
             let duck = ducker.next(mic, duck_threshold, duck_reduction, duck_on);
             duck_min = duck_min.min(duck);
@@ -579,7 +584,7 @@ impl OutputProcessor {
                 sum += sound * *soundboard_send;
             }
             if !deck.is_idle() {
-                let song = deck.next_sample() * duck;
+                let song = deck.next_sample() * *player * duck;
                 music_peak = music_peak.max((song * music_fader).abs());
                 sum += song * *music_send;
             }
@@ -656,6 +661,7 @@ fn build_output(
         mic_send: 0.0,
         soundboard_send: 0.0,
         music_send: 0.0,
+        player: 0.0,
         ducker: Ducker::new(ENGINE_RATE),
         primed: false,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),

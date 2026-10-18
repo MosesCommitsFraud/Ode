@@ -5,19 +5,22 @@ import { isTauri } from "./engine";
 import { library } from "./library";
 import { music } from "./music";
 
-export type Target = "soundboard" | "music";
+export type Target = "soundboard" | "music" | "both";
 export type JobStatus = "queued" | "info" | "downloading" | "converting" | "importing" | "done" | "failed" | "cancelled";
 
 export interface Job {
   id: number;
   url: string;
   target: Target;
-  playlistId: number | null;
   status: JobStatus;
   progress: number;
   title: string | null;
   artist: string | null;
   error: string | null;
+  /** Absoluter Pfad zum Cover; in der Oberfläche mit convertFileSrc laden. */
+  cover: string | null;
+  soundId: number | null;
+  trackId: number | null;
 }
 
 export interface ToolsStatus {
@@ -70,8 +73,8 @@ export const downloads = {
     await listen<Job[]>("downloads://jobs", (e) => set({ jobs: e.payload }));
     // Fertige Downloads landen in der Bibliothek: dort neu laden.
     await listen<Target>("library://changed", (e) => {
-      if (e.payload === "soundboard") void library.load();
-      else void music.reload();
+      if (e.payload !== "music") void library.load();
+      if (e.payload !== "soundboard") void music.reload();
     });
     const [tools, jobs] = await Promise.all([
       invoke<ToolsStatus>("tools_status"),
@@ -86,11 +89,22 @@ export const downloads = {
     await invoke("tools_install");
   },
 
-  async add(url: string, target: Target, playlistId: number | null) {
+  async add(url: string, target: Target) {
     set({ error: null });
     if (!isTauri) return demoAdd(url, target);
     try {
-      await invoke("download_add", { url, target, playlistId });
+      await invoke("download_add", { url, target });
+    } catch (e) {
+      set({ error: typeof e === "string" ? e : String(e) });
+    }
+  },
+
+  /** Ziel eines fertigen Downloads ändern (übernimmt bzw. entfernt in den Bibliotheken). */
+  async setTarget(id: number, target: Target) {
+    set({ error: null, jobs: state.jobs.map((j) => (j.id === id ? { ...j, target } : j)) });
+    if (!isTauri) return;
+    try {
+      await invoke("download_set_target", { id, target });
     } catch (e) {
       set({ error: typeof e === "string" ? e : String(e) });
     }
@@ -113,8 +127,8 @@ function startDemo() {
   set({
     tools: { ytDlp: "2026.08.19", ffmpeg: true, installing: false, step: null, progress: 0, error: null },
     jobs: [
-      { id: 1, url: "https://youtu.be/demo1", target: "music", playlistId: null, status: "done", progress: 1, title: "Nightdrive", artist: "Synthwave Club", error: null },
-      { id: 2, url: "https://youtu.be/demo2", target: "soundboard", playlistId: null, status: "failed", progress: 0, title: null, artist: null, error: "Video nicht verfügbar" },
+      { id: 1, url: "https://youtu.be/demo1", target: "music", status: "done", progress: 1, title: "Nightdrive", artist: "Synthwave Club", error: null, cover: null, soundId: null, trackId: 2 },
+      { id: 2, url: "https://youtu.be/demo2", target: "soundboard", status: "failed", progress: 0, title: null, artist: null, error: "Video nicht verfügbar", cover: null, soundId: null, trackId: null },
     ],
   });
 }
@@ -123,7 +137,7 @@ let demoId = 10;
 
 function demoAdd(url: string, target: Target) {
   const id = ++demoId;
-  const job: Job = { id, url, target, playlistId: null, status: "queued", progress: 0, title: null, artist: null, error: null };
+  const job: Job = { id, url, target, status: "queued", progress: 0, title: null, artist: null, error: null, cover: null, soundId: null, trackId: null };
   set({ jobs: [...state.jobs, job] });
   const steps: [JobStatus, number][] = [
     ["info", 600],

@@ -19,6 +19,7 @@ use crate::audio::ENGINE_RATE;
 use crate::audio::deck::DeckCommand;
 use crate::audio::decode::decode_file;
 use crate::audio::engine::Engine;
+use crate::covers::{self, ImportMeta};
 
 /// So viele dekodierte Titel bleiben im Speicher (aktueller, nächster, letzter).
 const CACHE_TRACKS: usize = 3;
@@ -31,6 +32,8 @@ pub struct Track {
     pub artist: Option<String>,
     pub file: String,
     pub duration_ms: u32,
+    /// Absoluter Pfad zum Cover-Bild.
+    pub cover: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -44,6 +47,7 @@ pub struct Playlist {
 pub struct MusicLibrary {
     db: Mutex<Connection>,
     music_dir: PathBuf,
+    covers_dir: PathBuf,
     cache: Mutex<VecDeque<(i64, Arc<[f32]>)>>,
 }
 
@@ -87,8 +91,10 @@ impl MusicLibrary {
                  position INTEGER NOT NULL
              );",
         )?;
+        covers::ensure_column(&db, "tracks", "cover", "TEXT")?;
         Ok(Self {
             db: Mutex::new(db),
+            covers_dir: data_dir.join("covers"),
             music_dir,
             cache: Mutex::new(VecDeque::new()),
         })
@@ -96,8 +102,9 @@ impl MusicLibrary {
 
     pub fn tracks(&self) -> anyhow::Result<Vec<Track>> {
         let db = self.db.lock();
-        let mut stmt =
-            db.prepare("SELECT id, title, artist, file, duration_ms FROM tracks ORDER BY id")?;
+        let mut stmt = db.prepare(
+            "SELECT id, title, artist, file, duration_ms, cover FROM tracks ORDER BY id",
+        )?;
         let tracks = stmt
             .query_map([], |r| {
                 Ok(Track {
@@ -106,6 +113,7 @@ impl MusicLibrary {
                     artist: r.get(2)?,
                     file: r.get(3)?,
                     duration_ms: r.get(4)?,
+                    cover: r.get(5)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -116,7 +124,7 @@ impl MusicLibrary {
         self.db
             .lock()
             .query_row(
-                "SELECT id, title, artist, file, duration_ms FROM tracks WHERE id = ?1",
+                "SELECT id, title, artist, file, duration_ms, cover FROM tracks WHERE id = ?1",
                 [id],
                 |r| {
                     Ok(Track {
@@ -125,6 +133,7 @@ impl MusicLibrary {
                         artist: r.get(2)?,
                         file: r.get(3)?,
                         duration_ms: r.get(4)?,
+                        cover: r.get(5)?,
                     })
                 },
             )
@@ -133,9 +142,16 @@ impl MusicLibrary {
     }
 
     pub fn import(&self, source: &Path) -> anyhow::Result<Track> {
+        self.import_with(source, &ImportMeta::default())
+    }
+
+    /// Import mit Titel, Künstler und Cover aus einem Download oder dem Soundboard.
+    pub fn import_with(&self, source: &Path, meta: &ImportMeta) -> anyhow::Result<Track> {
         let samples: Arc<[f32]> = decode_file(source)?.into();
         let duration_ms = (samples.len() as u64 * 1000 / ENGINE_RATE as u64) as u32;
-        let (title, artist) = title_and_artist(source);
+        let (file_title, file_artist) = title_and_artist(source);
+        let title = meta.name.clone().unwrap_or(file_title);
+        let artist = meta.artist.clone().or(file_artist);
         let ext = source
             .extension()
             .and_then(|e| e.to_str())
@@ -148,11 +164,13 @@ impl MusicLibrary {
                 .as_nanos()
         );
         fs::copy(source, self.music_dir.join(&file))?;
+        let cover = covers::store(&self.covers_dir, source, meta);
         let id = {
             let db = self.db.lock();
             db.execute(
-                "INSERT INTO tracks (title, artist, file, duration_ms) VALUES (?1, ?2, ?3, ?4)",
-                params![title, artist, file, duration_ms],
+                "INSERT INTO tracks (title, artist, file, duration_ms, cover)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![title, artist, file, duration_ms, cover],
             )?;
             db.last_insert_rowid()
         };
@@ -166,8 +184,14 @@ impl MusicLibrary {
             .lock()
             .execute("DELETE FROM tracks WHERE id = ?1", [id])?;
         self.cache.lock().retain(|(t, _)| *t != id);
-        let _ = fs::remove_file(self.music_dir.join(track.file));
+        let _ = fs::remove_file(self.music_dir.join(&track.file));
+        covers::remove(track.cover.as_deref());
         Ok(())
+    }
+
+    /// Pfad der Audiodatei in der Bibliothek.
+    pub fn file_path(&self, track: &Track) -> PathBuf {
+        self.music_dir.join(&track.file)
     }
 
     pub fn playlists(&self) -> anyhow::Result<Vec<Playlist>> {
@@ -299,6 +323,8 @@ pub struct PlayerSnapshot {
     pub queue_length: usize,
     pub queue_index: usize,
     pub error: Option<String>,
+    /// Eigene Lautstärke des Players, 0–1.
+    pub volume: f32,
 }
 
 /// Einfacher Zufall ohne zusätzliche Abhängigkeit.
@@ -550,6 +576,7 @@ impl Player {
             queue_length: state.queue.len(),
             queue_index: state.index,
             error: state.error.clone(),
+            volume: app.state::<Engine>().mixer.player_volume.load(),
         }
     }
 
@@ -616,13 +643,19 @@ pub struct TrackImport {
 #[tauri::command]
 pub async fn music_import(
     music: State<'_, MusicLibrary>,
+    tools: State<'_, crate::downloader::Tools>,
     paths: Vec<PathBuf>,
     playlist_id: Option<i64>,
 ) -> Result<TrackImport, String> {
     let mut tracks = Vec::new();
     let mut errors = Vec::new();
+    // Eingebettete Cover mit FFmpeg zuschneiden, falls schon installiert.
+    let meta = ImportMeta {
+        ffmpeg: Some(tools.ffmpeg()),
+        ..Default::default()
+    };
     for path in paths {
-        match music.import(&path) {
+        match music.import_with(&path, &meta) {
             Ok(track) => tracks.push(track),
             Err(e) => errors.push(format!(
                 "{}: {e}",

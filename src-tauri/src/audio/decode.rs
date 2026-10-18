@@ -87,6 +87,42 @@ pub fn decode_file(path: &Path) -> anyhow::Result<Vec<f32>> {
     Ok(mono)
 }
 
+/// Eingebettetes Bild (Album-Cover) einer Audiodatei: Bytes und MIME-Typ.
+pub fn embedded_cover(path: &Path) -> Option<(Vec<u8>, Option<String>)> {
+    let file = File::open(path).ok()?;
+    let source = MediaSourceStream::new(Box::new(file), Default::default());
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+    let mut format = symphonia::default::get_probe()
+        .probe(
+            &hint,
+            source,
+            FormatOptions::default(),
+            MetadataOptions::default(),
+        )
+        .ok()?;
+    let mut metadata = format.metadata();
+    let mut visuals = Vec::new();
+    if let Some(rev) = metadata.current() {
+        visuals.extend(rev.media.visuals.iter().cloned());
+    }
+    if let Some(rev) = metadata.skip_to_latest() {
+        visuals.extend(rev.media.visuals.iter().cloned());
+    }
+    let best = visuals
+        .iter()
+        .find(|v| {
+            matches!(
+                v.usage,
+                Some(symphonia::core::meta::StandardVisualKey::FrontCover)
+            )
+        })
+        .or_else(|| visuals.first())?;
+    Some((best.data.to_vec(), best.media_type.clone()))
+}
+
 /// Spitzenwerte für die Wellenform-Anzeige, 0–255 pro Abschnitt.
 pub fn waveform(samples: &[f32], bins: usize) -> Vec<u8> {
     if samples.is_empty() {

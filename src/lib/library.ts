@@ -23,6 +23,8 @@ export interface Sound {
   durationMs: number;
   /** Spitzenwerte 0–255. */
   waveform: number[];
+  /** Absoluter Pfad zum Cover; in der Oberfläche mit convertFileSrc laden. */
+  cover: string | null;
 }
 
 export type SoundPatch = Partial<
@@ -219,6 +221,7 @@ function demoSounds(): Sound[] {
     fadeInMs: 0,
     fadeOutMs: 0,
     durationMs: 1200 + i * 700,
+    cover: null,
     waveform: Array.from({ length: 160 }, (_, j) =>
       Math.round(255 * Math.abs(Math.sin(j * (0.11 + i * 0.03)) * Math.exp(-j / (40 + i * 15)))),
     ),

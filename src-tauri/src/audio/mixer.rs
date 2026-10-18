@@ -241,6 +241,8 @@ pub struct Mixer {
     pub ducking: Ducking,
     /// Effektkette des Mikrofons.
     pub effects: EffectsShared,
+    /// Eigene Lautstärke des Players (0–1), vor dem Musik-Fader.
+    pub player_volume: AtomicF32,
     pub out_a: Output,
     pub out_b: Output,
     pub input_callback_frames: AtomicU32,
@@ -263,6 +265,7 @@ impl Default for Mixer {
             // Die eigene Stimme hört man standardmäßig nicht mit.
             channels: [channel(false), channel(true), channel(true)],
             effects: EffectsShared::default(),
+            player_volume: AtomicF32::new(DEFAULT_PLAYER_VOLUME),
             ducking: Ducking::new(DuckingParams {
                 enabled: false,
                 amount_db: 12.0,
@@ -295,6 +298,20 @@ pub struct MixerSettings {
     pub ducking: DuckingParams,
     #[serde(default)]
     pub effects: EffectsParams,
+    #[serde(default = "default_player_volume")]
+    pub player_volume: f32,
+}
+
+const DEFAULT_PLAYER_VOLUME: f32 = 0.8;
+
+fn default_player_volume() -> f32 {
+    DEFAULT_PLAYER_VOLUME
+}
+
+/// Regler 0–1 → Verstärkung, quadratisch, damit die Mitte natürlich klingt.
+pub fn player_gain(volume: f32) -> f32 {
+    let v = volume.clamp(0.0, 1.0);
+    v * v
 }
 
 impl Mixer {
@@ -308,6 +325,7 @@ impl Mixer {
             out_b: self.out_b.params(),
             ducking: self.ducking.params(),
             effects: self.effects.params(),
+            player_volume: self.player_volume.load(),
         }
     }
 
@@ -319,6 +337,8 @@ impl Mixer {
         self.out_b.set(settings.out_b);
         self.ducking.set(settings.ducking);
         self.effects.set(settings.effects);
+        self.player_volume
+            .store(settings.player_volume.clamp(0.0, 1.0));
     }
 
     pub fn channel(&self, id: ChannelId) -> &Channel {

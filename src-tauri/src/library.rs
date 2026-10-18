@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::audio::ENGINE_RATE;
 use crate::audio::decode::{decode_file, waveform};
 use crate::audio::sampler::PlayMode;
+use crate::covers::{self, ImportMeta};
 
 const WAVEFORM_BINS: usize = 160;
 
@@ -39,6 +40,8 @@ pub struct Sound {
     pub fade_out_ms: u32,
     pub duration_ms: u32,
     pub waveform: Vec<u8>,
+    /// Absoluter Pfad zum Cover-Bild.
+    pub cover: Option<String>,
 }
 
 /// Änderbare Felder; was fehlt, bleibt unverändert.
@@ -76,6 +79,7 @@ mod double_option {
 pub struct Library {
     db: Mutex<Connection>,
     sounds_dir: PathBuf,
+    covers_dir: PathBuf,
     cache: Mutex<HashMap<i64, Arc<[f32]>>>,
 }
 
@@ -112,6 +116,7 @@ fn sound_from_row(row: &Row) -> rusqlite::Result<Sound> {
         fade_out_ms: row.get("fade_out_ms")?,
         duration_ms: row.get("duration_ms")?,
         waveform: row.get("waveform")?,
+        cover: row.get("cover")?,
     })
 }
 
@@ -159,8 +164,10 @@ impl Library {
                  value TEXT NOT NULL
              );",
         )?;
+        covers::ensure_column(&db, "sounds", "cover", "TEXT")?;
         Ok(Self {
             db: Mutex::new(db),
+            covers_dir: data_dir.join("covers"),
             sounds_dir,
             cache: Mutex::new(HashMap::new()),
         })
@@ -205,6 +212,11 @@ impl Library {
 
     /// Kopiert die Datei in die Bibliothek und legt den Sound an.
     pub fn import(&self, source: &Path) -> anyhow::Result<Sound> {
+        self.import_with(source, &ImportMeta::default())
+    }
+
+    /// Import mit Name und Cover aus einem Download oder einer anderen Bibliothek.
+    pub fn import_with(&self, source: &Path, meta: &ImportMeta) -> anyhow::Result<Sound> {
         let samples: Arc<[f32]> = decode_file(source)?.into();
         let duration_ms = (samples.len() as u64 * 1000 / ENGINE_RATE as u64) as u32;
         let peaks = waveform(&samples, WAVEFORM_BINS);
@@ -221,15 +233,17 @@ impl Library {
                 .as_nanos()
         );
         fs::copy(source, self.sounds_dir.join(&file))?;
+        let cover = covers::store(&self.covers_dir, source, meta);
+        let name = meta.name.clone().unwrap_or_else(|| display_name(source));
 
         let id = {
             let db = self.db.lock();
             let count: i64 = db.query_row("SELECT COUNT(*) FROM sounds", [], |r| r.get(0))?;
             let color = COLORS[count as usize % COLORS.len()];
             db.execute(
-                "INSERT INTO sounds (name, file, color, duration_ms, waveform)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![display_name(source), file, color, duration_ms, peaks],
+                "INSERT INTO sounds (name, file, color, duration_ms, waveform, cover)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![name, file, color, duration_ms, peaks, cover],
             )?;
             db.last_insert_rowid()
         };
@@ -302,8 +316,14 @@ impl Library {
             .lock()
             .execute("DELETE FROM sounds WHERE id = ?1", [id])?;
         self.cache.lock().remove(&id);
-        let _ = fs::remove_file(self.sounds_dir.join(sound.file));
+        let _ = fs::remove_file(self.sounds_dir.join(&sound.file));
+        covers::remove(sound.cover.as_deref());
         Ok(())
+    }
+
+    /// Pfad der Audiodatei in der Bibliothek.
+    pub fn file_path(&self, sound: &Sound) -> PathBuf {
+        self.sounds_dir.join(&sound.file)
     }
 
     /// Dekodierte Samples, bei Bedarf von der Platte geladen.

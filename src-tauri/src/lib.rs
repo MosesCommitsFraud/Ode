@@ -1,5 +1,6 @@
 pub mod audio;
 mod cable;
+pub mod covers;
 pub mod downloader;
 pub mod library;
 pub mod music;
@@ -252,6 +253,12 @@ fn set_effects(engine: State<Engine>, dirty: State<MixerDirty>, params: EffectsP
     dirty.0.store(true, Ordering::Relaxed);
 }
 
+#[tauri::command]
+fn set_player_volume(engine: State<Engine>, dirty: State<MixerDirty>, volume: f32) {
+    engine.mixer.player_volume.store(volume.clamp(0.0, 1.0));
+    dirty.0.store(true, Ordering::Relaxed);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -264,6 +271,7 @@ pub fn run() {
             Some(vec![shell::MINIMIZED_ARG]),
         ))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(soundboard::hotkey_plugin())
         .manage(Engine::spawn())
@@ -300,6 +308,7 @@ pub fn run() {
             set_output,
             set_ducking,
             set_effects,
+            set_player_volume,
             soundboard::library_list,
             soundboard::library_import,
             soundboard::library_update,
@@ -328,6 +337,7 @@ pub fn run() {
             downloader::download_add,
             downloader::download_cancel,
             downloader::downloads_clear,
+            downloader::download_set_target,
             shell::app_settings,
             shell::set_app_settings,
             shell::quit_app,

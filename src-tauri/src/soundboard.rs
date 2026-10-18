@@ -94,12 +94,18 @@ pub fn library_list(library: State<Library>) -> Result<Vec<Sound>, String> {
 #[tauri::command]
 pub async fn library_import(
     library: State<'_, Library>,
+    tools: State<'_, crate::downloader::Tools>,
     paths: Vec<PathBuf>,
 ) -> Result<ImportResult, String> {
     let mut sounds = Vec::new();
     let mut errors = Vec::new();
+    // Eingebettete Cover mit FFmpeg zuschneiden, falls schon installiert.
+    let meta = crate::covers::ImportMeta {
+        ffmpeg: Some(tools.ffmpeg()),
+        ..Default::default()
+    };
     for path in paths {
-        match library.import(&path) {
+        match library.import_with(&path, &meta) {
             Ok(sound) => sounds.push(sound),
             Err(e) => errors.push(format!(
                 "{}: {e}",

@@ -10,6 +10,8 @@ export interface Track {
   artist: string | null;
   file: string;
   durationMs: number;
+  /** Absoluter Pfad zum Cover; in der Oberfläche mit convertFileSrc laden. */
+  cover: string | null;
 }
 
 export interface Playlist {
@@ -31,6 +33,8 @@ export interface PlayerState {
   queueLength: number;
   queueIndex: number;
   error: string | null;
+  /** Eigene Lautstärke des Players, 0–1 (unabhängig vom Musik-Fader). */
+  volume: number;
 }
 
 /** `null` = alle Titel. */
@@ -57,6 +61,7 @@ const emptyPlayer: PlayerState = {
   queueLength: 0,
   queueIndex: 0,
   error: null,
+  volume: 0.8,
 };
 
 let state: MusicState = {
@@ -247,6 +252,13 @@ export const music = {
     if (isTauri) await invoke("player_set_shuffle", { shuffle });
   },
 
+  /** Player-Lautstärke 0–1; wird gespeichert. */
+  async setVolume(volume: number) {
+    const v = Math.min(1, Math.max(0, volume));
+    set({ player: { ...state.player, volume: v } });
+    if (isTauri) await invoke("set_player_volume", { volume: v });
+  },
+
   async setRepeat(repeat: Repeat) {
     set({ player: { ...state.player, repeat } });
     if (isTauri) await invoke("player_set_repeat", { repeat });
@@ -308,7 +320,7 @@ function startDemo() {
     ["Victory Lap", "8-Bit Orchester", 96_000],
   ];
   set({
-    tracks: songs.map(([title, artist, durationMs], i) => ({ id: i + 1, title, artist, file: "", durationMs })),
+    tracks: songs.map(([title, artist, durationMs], i) => ({ id: i + 1, title, artist, file: "", durationMs, cover: null })),
     playlists: [
       { id: 1, name: "Chill beim Zocken", trackIds: [1, 3, 5] },
       { id: 2, name: "Hype", trackIds: [2, 4, 6] },

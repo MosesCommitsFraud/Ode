@@ -16,6 +16,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::covers::{self, ImportMeta};
 use crate::library::Library;
 use crate::music::MusicLibrary;
 
@@ -254,9 +255,25 @@ impl Tools {
 pub enum Target {
     Soundboard,
     Music,
+    /// Soundboard und Musik gleichzeitig.
+    Both,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+impl Target {
+    pub fn soundboard(self) -> bool {
+        matches!(self, Target::Soundboard | Target::Both)
+    }
+
+    pub fn music(self) -> bool {
+        matches!(self, Target::Music | Target::Both)
+    }
+}
+
+/// Unter diesem Schlüssel liegen erledigte Aufträge, damit das Ziel auch nach
+/// einem Neustart noch umgeschaltet werden kann.
+const JOBS_KEY: &str = "downloads";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum JobStatus {
     Queued,
@@ -269,18 +286,22 @@ pub enum JobStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Job {
     pub id: u64,
     pub url: String,
     pub target: Target,
-    pub playlist_id: Option<i64>,
     pub status: JobStatus,
     pub progress: f32,
     pub title: Option<String>,
     pub artist: Option<String>,
     pub error: Option<String>,
+    /// Absoluter Pfad zum Cover (Kopie der Bibliothek).
+    pub cover: Option<String>,
+    /// Ergebnis im Soundboard bzw. in der Musik.
+    pub sound_id: Option<i64>,
+    pub track_id: Option<i64>,
 }
 
 pub struct Downloads {
@@ -388,18 +409,20 @@ impl Downloads {
             .any(|j| j.id == id && j.status == JobStatus::Cancelled)
     }
 
-    pub fn add(&self, url: String, target: Target, playlist_id: Option<i64>) -> u64 {
+    pub fn add(&self, url: String, target: Target) -> u64 {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         self.jobs.lock().push(Job {
             id,
             url,
             target,
-            playlist_id,
             status: JobStatus::Queued,
             progress: 0.0,
             title: None,
             artist: None,
             error: None,
+            cover: None,
+            sound_id: None,
+            track_id: None,
         });
         let _ = self.queue.send(id);
         self.emit();
@@ -421,6 +444,7 @@ impl Downloads {
     }
 
     pub fn clear_finished(&self) {
+        // Hinweis: gespeichert wird beim nächsten Auftrag oder Umschalten.
         self.jobs.lock().retain(|j| {
             !matches!(
                 j.status,
@@ -515,6 +539,7 @@ impl Downloads {
             "--newline",
             "--progress-template",
             "download:ODE %(progress._percent_str)s",
+            "--write-thumbnail",
             "-o",
         ])
         .arg(dir.join("source.%(ext)s"))
@@ -524,14 +549,25 @@ impl Downloads {
                 self.update(job.id, |j| j.progress = p);
             }
         })?;
-        let source = fs::read_dir(dir)?
+        let files: Vec<PathBuf> = fs::read_dir(dir)?
             .filter_map(Result::ok)
             .map(|e| e.path())
-            .find(|p| {
-                p.file_stem().is_some_and(|s| s == "source")
-                    && p.extension().is_some_and(|e| e != "part")
+            .filter(|p| p.file_stem().is_some_and(|s| s == "source"))
+            .collect();
+        let is_image = |p: &PathBuf| {
+            p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                matches!(e.to_lowercase().as_str(), "jpg" | "jpeg" | "png" | "webp")
             })
+        };
+        let source = files
+            .iter()
+            .find(|p| !is_image(p) && p.extension().is_some_and(|e| e != "part"))
+            .cloned()
             .ok_or_else(|| anyhow::anyhow!("Download lieferte keine Datei"))?;
+        // Vorschaubild quadratisch als Cover.
+        if let Some(thumbnail) = files.iter().find(|p| is_image(p)) {
+            let _ = covers::square(&tools.ffmpeg(), thumbnail, &dir.join("cover.jpg"));
+        }
         Ok((source, duration))
     }
 
@@ -583,11 +619,7 @@ impl Downloads {
                 j.and_then(|j| j.artist.clone()),
             )
         };
-        let name = match (job.target, &artist) {
-            (Target::Music, Some(artist)) => safe_name(&format!("{artist} - {title}")),
-            _ => safe_name(&title),
-        };
-        let output = dir.join(format!("{name}.flac"));
+        let output = dir.join(format!("{}.flac", safe_name(&title)));
         let mut cmd = command(&tools.ffmpeg());
         cmd.args(["-hide_banner", "-nostats", "-y", "-i"])
             .arg(&source)
@@ -621,27 +653,135 @@ impl Downloads {
             j.status = JobStatus::Importing;
             j.progress = 1.0;
         });
-        match job.target {
-            Target::Soundboard => {
-                library.import(&output)?;
-            }
-            Target::Music => {
-                let track = music.import(&output)?;
-                if let Some(playlist) = job.playlist_id {
-                    let mut ids = music
-                        .playlists()?
-                        .into_iter()
-                        .find(|p| p.id == playlist)
-                        .map(|p| p.track_ids)
-                        .unwrap_or_default();
-                    ids.push(track.id);
-                    music.set_playlist_tracks(playlist, &ids)?;
-                }
-            }
+        let cover = dir.join("cover.jpg");
+        let meta = ImportMeta {
+            name: Some(title.clone()),
+            artist: artist.clone(),
+            cover: cover.is_file().then_some(cover),
+            ffmpeg: Some(tools.ffmpeg()),
+        };
+        let mut sound_id = None;
+        let mut track_id = None;
+        let mut saved_cover = None;
+        if job.target.soundboard() {
+            let sound = library.import_with(&output, &meta)?;
+            saved_cover = sound.cover.clone();
+            sound_id = Some(sound.id);
         }
+        if job.target.music() {
+            let track = music.import_with(&output, &meta)?;
+            saved_cover = saved_cover.or(track.cover.clone());
+            track_id = Some(track.id);
+        }
+        self.update(id, |j| {
+            j.sound_id = sound_id;
+            j.track_id = track_id;
+            j.cover = saved_cover;
+        });
         let _ = fs::remove_dir_all(&dir);
         if let Some(notify) = self.notify_imported.lock().as_ref() {
             notify(job.target);
+        }
+        Ok(())
+    }
+
+    /// Erledigte Aufträge speichern.
+    fn save(&self, library: &Library) {
+        let done: Vec<Job> = self
+            .jobs()
+            .into_iter()
+            .filter(|j| j.status == JobStatus::Done)
+            .collect();
+        if let Ok(json) = serde_json::to_string(&done) {
+            let _ = library.set_setting(JOBS_KEY, &json);
+        }
+    }
+
+    /// Gespeicherte, erledigte Aufträge beim Start wieder laden.
+    pub fn restore(&self, library: &Library) {
+        let saved: Vec<Job> = library
+            .setting(JOBS_KEY)
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        let next = saved.iter().map(|j| j.id + 1).max().unwrap_or(1);
+        self.next_id.fetch_max(next, Ordering::Relaxed);
+        *self.jobs.lock() = saved;
+        self.emit();
+    }
+
+    /// Ziel eines fertigen Downloads ändern: in die andere Bibliothek
+    /// übernehmen bzw. dort entfernen.
+    pub fn set_target(
+        &self,
+        id: u64,
+        target: Target,
+        library: &Library,
+        music: &MusicLibrary,
+    ) -> anyhow::Result<()> {
+        let job = self
+            .jobs()
+            .into_iter()
+            .find(|j| j.id == id)
+            .ok_or_else(|| anyhow::anyhow!("Download nicht gefunden"))?;
+        anyhow::ensure!(
+            job.status == JobStatus::Done,
+            "Download ist noch nicht fertig"
+        );
+
+        // Quelle für eine neue Kopie: die vorhandene Datei in einer der Bibliotheken.
+        let sound = job.sound_id.and_then(|id| library.get(id).ok());
+        let track = job.track_id.and_then(|id| music.track(id).ok());
+        let source = sound
+            .as_ref()
+            .map(|s| library.file_path(s))
+            .or_else(|| track.as_ref().map(|t| music.file_path(t)))
+            .ok_or_else(|| anyhow::anyhow!("Datei ist nicht mehr in der Bibliothek"))?;
+        let meta = ImportMeta {
+            name: job.title.clone(),
+            artist: job.artist.clone(),
+            cover: job
+                .cover
+                .as_ref()
+                .map(PathBuf::from)
+                .filter(|p| p.is_file()),
+            ffmpeg: None,
+        };
+
+        let mut sound_id = sound.as_ref().map(|s| s.id);
+        let mut track_id = track.as_ref().map(|t| t.id);
+        if target.soundboard() && sound_id.is_none() {
+            sound_id = Some(library.import_with(&source, &meta)?.id);
+        }
+        if target.music() && track_id.is_none() {
+            track_id = Some(music.import_with(&source, &meta)?.id);
+        }
+        if !target.soundboard()
+            && let Some(id) = sound_id.take()
+        {
+            library.delete(id)?;
+        }
+        if !target.music()
+            && let Some(id) = track_id.take()
+        {
+            music.delete_track(id)?;
+        }
+        let cover = sound_id
+            .and_then(|id| library.get(id).ok())
+            .and_then(|s| s.cover)
+            .or_else(|| {
+                track_id
+                    .and_then(|id| music.track(id).ok())
+                    .and_then(|t| t.cover)
+            });
+        self.update(id, |j| {
+            j.target = target;
+            j.sound_id = sound_id;
+            j.track_id = track_id;
+            j.cover = cover;
+        });
+        self.save(library);
+        if let Some(notify) = self.notify_imported.lock().as_ref() {
+            notify(Target::Both);
         }
         Ok(())
     }
@@ -666,6 +806,7 @@ impl Downloads {
                     job.error = Some(e.to_string());
                 }
             });
+            self.save(library);
         }
     }
 }
@@ -684,6 +825,7 @@ pub fn start(app: &AppHandle) {
     app.state::<Downloads>().on_imported(move |target| {
         let _ = emitter.emit("library://changed", target);
     });
+    app.state::<Downloads>().restore(&app.state::<Library>());
     let app = app.clone();
     thread::Builder::new()
         .name("ode-downloads".into())
@@ -719,13 +861,24 @@ pub fn download_add(
     downloads: State<Downloads>,
     url: String,
     target: Target,
-    playlist_id: Option<i64>,
 ) -> Result<u64, String> {
     let url = url.trim().to_string();
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("Bitte einen vollständigen Link (https://…) einfügen".into());
     }
-    Ok(downloads.add(url, target, playlist_id))
+    Ok(downloads.add(url, target))
+}
+
+#[tauri::command]
+pub fn download_set_target(app: AppHandle, id: u64, target: Target) -> Result<(), String> {
+    app.state::<Downloads>()
+        .set_target(
+            id,
+            target,
+            &app.state::<Library>(),
+            &app.state::<MusicLibrary>(),
+        )
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

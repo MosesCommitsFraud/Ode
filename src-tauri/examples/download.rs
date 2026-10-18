@@ -2,7 +2,7 @@
 //! echten App-Datenordner (falls noch nicht da), lädt einen Link und
 //! importiert ihn in eine Temp-Bibliothek.
 //!
-//! cargo run --example download -- [Link] [soundboard|music]
+//! cargo run --example download -- [Link] [soundboard|music|both]
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -18,6 +18,7 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| "https://www.youtube.com/watch?v=jNQXAC9IVRw".into());
     let target = match args.next().as_deref() {
         Some("soundboard") => Target::Soundboard,
+        Some("both") => Target::Both,
         _ => Target::Music,
     };
 
@@ -90,41 +91,50 @@ fn main() -> anyhow::Result<()> {
         );
         std::thread::spawn(move || downloads.run_worker(&tools, &library, &music));
     }
-    downloads.add(url, target, None);
+    downloads.add(url, target);
     let job = done_rx.recv_timeout(Duration::from_secs(300))?;
     if let Some(error) = job.error {
         anyhow::bail!("Fehlgeschlagen: {error}");
     }
 
-    match target {
-        Target::Music => {
-            let track = music
-                .tracks()?
-                .into_iter()
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("kein Titel importiert"))?;
-            let samples = music.samples(track.id)?;
-            let rms = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
-            println!(
-                "Importiert als Musik: „{}“ von {:?}, {} ms, RMS {:.1} dBFS",
-                track.title,
-                track.artist,
-                track.duration_ms,
-                20.0 * rms.log10()
-            );
-        }
-        Target::Soundboard => {
-            let sound = library
-                .list()?
-                .into_iter()
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("kein Sound importiert"))?;
-            println!(
-                "Importiert als Sound: „{}“, {} ms",
-                sound.name, sound.duration_ms
-            );
-        }
+    println!(
+        "Ergebnis: Sound {:?}, Titel {:?}, Cover {:?}",
+        job.sound_id, job.track_id, job.cover
+    );
+    if let Some(track) = job.track_id.and_then(|id| music.track(id).ok()) {
+        println!(
+            "Musik: „{}“ von {:?}, {} ms",
+            track.title, track.artist, track.duration_ms
+        );
     }
+    if let Some(sound) = job.sound_id.and_then(|id| library.get(id).ok()) {
+        println!("Sound: „{}“, {} ms", sound.name, sound.duration_ms);
+    }
+    if let Some(cover) = &job.cover {
+        let size = std::fs::metadata(cover).map(|m| m.len()).unwrap_or(0);
+        println!("Cover-Datei: {size} Bytes");
+    }
+
+    // Ziel nachträglich umschalten: auf beides und wieder zurück.
+    let other = if target == Target::Both {
+        Target::Music
+    } else {
+        Target::Both
+    };
+    downloads.set_target(job.id, other, &library, &music)?;
+    let after = downloads
+        .jobs()
+        .into_iter()
+        .find(|j| j.id == job.id)
+        .expect("Auftrag");
+    println!(
+        "Umgeschaltet auf {:?}: Sound {:?}, Titel {:?}; Sounds in Bibliothek {}, Titel {}",
+        after.target,
+        after.sound_id,
+        after.track_id,
+        library.list()?.len(),
+        music.tracks()?.len()
+    );
     println!("OK in {:.1} s", started.elapsed().as_secs_f32());
     Ok(())
 }
