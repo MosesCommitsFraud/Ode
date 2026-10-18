@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, CaretUpDown as ChevronsUpDown } from "@phosphor-icons/react";
 import {
   useEffect,
   useId,

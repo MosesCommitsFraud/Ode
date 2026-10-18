@@ -1,7 +1,7 @@
-import { ChevronLeft, ChevronRight, Loader2, Play, X } from "lucide-react";
+import { CaretLeft as ChevronLeft, CaretRight as ChevronRight, CircleNotch as Loader2, Play, Rows, SquaresFour, X } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { SoundEditor } from "~/components/soundboard/SoundEditor";
-import { SoundTile } from "~/components/soundboard/SoundTile";
+import { SoundRow, SoundTile } from "~/components/soundboard/SoundTile";
 import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/misc";
 import { isTauri } from "~/lib/engine";
@@ -16,11 +16,24 @@ const FAVORITES = "__favorites";
 const TILE_MIN_WIDTH = 176;
 const TILE_HEIGHT = 116;
 const GAP = 12;
+const ROW_HEIGHT = 52;
+const ROW_GAP = 4;
+
+type Layout = "grid" | "list";
+const LAYOUT_KEY = "ode.soundboard.layout";
+
+function readLayout(): Layout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
+  }
+}
 
 /** Wie viele Kacheln passen in den Bereich? */
 function useGridSize() {
   const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ cols: 4, rows: 3 });
+  const [size, setSize] = useState({ cols: 4, rows: 3, listRows: 8 });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -29,6 +42,7 @@ function useGridSize() {
       setSize({
         cols: Math.max(1, Math.floor((width + GAP) / (TILE_MIN_WIDTH + GAP))),
         rows: Math.max(1, Math.floor((height + GAP) / (TILE_HEIGHT + GAP))),
+        listRows: Math.max(1, Math.floor((height + ROW_GAP) / (ROW_HEIGHT + ROW_GAP))),
       });
     });
     observer.observe(el);
@@ -100,6 +114,15 @@ export function SoundboardView() {
   const [page, setPage] = useState(0);
   const dragOver = useFileDrop(library.importFiles);
   const grid = useGridSize();
+  const [layout, setLayoutState] = useState<Layout>(readLayout);
+  const setLayout = (next: Layout) => {
+    setLayoutState(next);
+    try {
+      localStorage.setItem(LAYOUT_KEY, next);
+    } catch {
+      // Nur Komfort.
+    }
+  };
 
   useEffect(() => {
     if (!loaded) void library.load();
@@ -119,14 +142,14 @@ export function SoundboardView() {
   });
   const editingSound = sounds.find((s) => s.id === editing);
 
-  const pageSize = grid.cols * grid.rows;
+  const pageSize = layout === "list" ? grid.listRows : grid.cols * grid.rows;
   const pages = Math.max(1, Math.ceil(visible.length / pageSize));
   const current = Math.min(page, pages - 1);
   const shown = visible.slice(current * pageSize, (current + 1) * pageSize);
   const turn = (delta: number) => setPage(Math.min(pages - 1, Math.max(0, current + delta)));
 
   // Neue Auswahl beginnt auf der ersten Seite.
-  useEffect(() => setPage(0), [filter, query]);
+  useEffect(() => setPage(0), [filter, query, layout]);
 
   const onWheel = (e: WheelEvent) => {
     if (pages > 1 && Math.abs(e.deltaY) > 20) turn(e.deltaY > 0 ? 1 : -1);
@@ -159,6 +182,28 @@ export function SoundboardView() {
             <Chip key={c} active={filter === c} onClick={() => setFilter(c)}>
               {c}
             </Chip>
+          ))}
+        </div>
+        <div className="well flex h-8 rounded-full p-0.5">
+          {(
+            [
+              ["grid", "Kacheln", <SquaresFour key="g" />],
+              ["list", "Liste", <Rows key="l" />],
+            ] as const
+          ).map(([value, label, icon]) => (
+            <button
+              key={value}
+              type="button"
+              title={label}
+              aria-pressed={layout === value}
+              onClick={() => setLayout(value)}
+              className={cn(
+                "flex w-9 cursor-default items-center justify-center rounded-full transition-colors [&_svg]:size-4",
+                layout === value ? "bg-panel-raised text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {icon}
+            </button>
           ))}
         </div>
         <Button variant="outline" size="sm" disabled={!playing?.length} onClick={() => library.stopAll()}>
@@ -199,6 +244,17 @@ export function SoundboardView() {
           </EmptyState>
         ) : visible.length === 0 && loaded ? (
           <p className="pt-16 text-center text-sm text-muted-foreground">Keine Sounds für diese Auswahl.</p>
+        ) : layout === "list" ? (
+          <div className="grid" style={{ gap: ROW_GAP, gridAutoRows: ROW_HEIGHT }}>
+            {shown.map((sound) => (
+              <SoundRow
+                key={sound.id}
+                sound={sound}
+                progress={progress.get(sound.id)}
+                onEdit={() => setEditing(sound.id)}
+              />
+            ))}
+          </div>
         ) : (
           <div
             className="grid"

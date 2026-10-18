@@ -1,4 +1,13 @@
-import { AudioWaveform, Cable, Disc3, Headphones, Mic, RotateCcw, ShieldCheck } from "lucide-react";
+import {
+  ArrowCounterClockwise as RotateCcw,
+  Broadcast,
+  Headphones,
+  Microphone as Mic,
+  Plugs as Cable,
+  ShieldCheck,
+  VinylRecord as Disc3,
+  Waveform as AudioWaveform,
+} from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
@@ -10,6 +19,7 @@ const CHANNELS: { id: ChannelId; name: string; icon: ReactNode; color: string; r
   { id: "mic", name: "Mikrofon", icon: <Mic />, color: "var(--ch-mic)", ready: true },
   { id: "soundboard", name: "Soundboard", icon: <AudioWaveform />, color: "var(--ch-soundboard)", ready: true },
   { id: "music", name: "Musik", icon: <Disc3 />, color: "var(--ch-music)", ready: true },
+  { id: "live", name: "Live", icon: <Broadcast />, color: "var(--ch-live)", ready: true },
 ];
 
 const OUTPUTS: { id: OutputId; name: string; icon: ReactNode }[] = [
@@ -22,6 +32,7 @@ const CHANNEL_DEFAULTS: Record<ChannelId, ChannelParams> = {
   mic: { gainDb: 0, muted: false, routeA: false, routeB: true },
   soundboard: { gainDb: 0, muted: false, routeA: true, routeB: true },
   music: { gainDb: 0, muted: false, routeA: true, routeB: true },
+  live: { gainDb: 0, muted: false, routeA: true, routeB: true },
 };
 
 const OUTPUT_DEFAULTS: Record<OutputId, OutputParams> = {

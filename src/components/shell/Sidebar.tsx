@@ -1,23 +1,24 @@
-import { ArrowDownToLine, AudioWaveform, Disc3, Moon, Plus, Settings2, SlidersVertical, Star, Sun, Waves } from "lucide-react";
+import { Broadcast, DownloadSimple, GearSix, Moon, Plus, Sliders, Star, Sun, VinylRecord, Waveform, Waves } from "@phosphor-icons/react";
 import { useEffect, type ReactNode } from "react";
 import { music, useMusic } from "~/lib/music";
 import { cn } from "~/lib/utils";
 import { OutputVolume } from "./OutputVolume";
 
-export type View = "soundboard" | "music" | "mixer" | "effects" | "downloads" | "settings";
+export type View = "soundboard" | "music" | "live" | "mixer" | "effects" | "downloads" | "settings";
 
 export const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
-  { id: "soundboard", label: "Soundboard", icon: <AudioWaveform /> },
-  { id: "music", label: "Musik", icon: <Disc3 /> },
-  { id: "mixer", label: "Mischpult", icon: <SlidersVertical /> },
+  { id: "soundboard", label: "Soundboard", icon: <Waveform /> },
+  { id: "music", label: "Musik", icon: <VinylRecord /> },
+  { id: "live", label: "Live", icon: <Broadcast /> },
+  { id: "mixer", label: "Mischpult", icon: <Sliders /> },
   { id: "effects", label: "Effekte", icon: <Waves /> },
-  { id: "downloads", label: "Downloads", icon: <ArrowDownToLine /> },
+  { id: "downloads", label: "Downloads", icon: <DownloadSimple /> },
 ];
 
 export const SETTINGS = {
   id: "settings" as const,
   label: "Einstellungen",
-  icon: <Settings2 />,
+  icon: <GearSix />,
 };
 
 /** Wortmarke: nur der Name in der Überschriftenschrift. */
@@ -42,7 +43,7 @@ function NavItem({
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-10 w-full cursor-default items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold transition-colors duration-150 [&_svg]:size-[18px] [&_svg]:shrink-0",
+        "flex h-9 w-full cursor-default items-center gap-3 rounded-xl px-3 text-left text-[14px] font-semibold transition-colors duration-150 [&_svg]:size-[18px] [&_svg]:shrink-0",
         active
           ? "bg-panel-raised text-foreground shadow-[0_1px_0_var(--hairline),0_6px_16px_-10px_oklch(0%_0_0/45%)] [&_svg]:text-primary"
           : "text-foreground/70 hover:bg-sidebar-accent hover:text-foreground",
@@ -211,7 +212,7 @@ export function Sidebar({
         <Logo />
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-2 pb-3">
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">
         <div className="space-y-0.5">
           {VIEWS.map((v) => (
             <NavItem key={v.id} icon={v.icon} label={v.label} active={view === v.id} onClick={() => onView(v.id)} />

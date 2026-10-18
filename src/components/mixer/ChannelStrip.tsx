@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Headphones, Mic2, RotateCcw, VolumeX } from "lucide-react";
+import { Headphones, MicrophoneStage as Mic2, ArrowCounterClockwise as RotateCcw, SpeakerSlash as VolumeX } from "@phosphor-icons/react";
 import { cn, formatDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
@@ -32,7 +32,7 @@ function PadButton({
       onClick={onClick}
       style={{ "--pad": color } as CSSProperties}
       className={cn(
-        "relative flex h-8 flex-1 cursor-default items-center justify-center gap-1.5 rounded-lg font-mono text-2xs font-semibold transition-all duration-150 disabled:opacity-40 [&_svg]:size-3.5",
+        "relative flex h-8 flex-1 cursor-default items-center justify-center gap-1.5 rounded-xl font-mono text-2xs font-semibold transition-all duration-150 disabled:opacity-40 [&_svg]:size-3.5",
         active
           ? "bg-[color-mix(in_oklch,var(--pad)_18%,transparent)] text-[var(--pad)] shadow-[0_0_0_1px_color-mix(in_oklch,var(--pad)_40%,transparent)_inset]"
           : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground active:scale-95",
@@ -86,7 +86,7 @@ export function ChannelStrip({
   return (
     <div
       style={{ "--ch": color } as CSSProperties}
-      className={cn("relative flex w-[calc((100vw-21rem)/5)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-2.5 py-3.5", disabled && "opacity-55")}
+      className={cn("flex w-[calc((100vw-21rem)/6)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-2.5 py-3.5", disabled && "opacity-55")}
     >
       <div className="flex items-center gap-2">
         <span
@@ -102,7 +102,7 @@ export function ChannelStrip({
             type="button"
             title="Auf Standard zurücksetzen"
             onClick={onReset}
-            className="absolute top-1.5 right-1.5 flex size-6 cursor-default items-center justify-center rounded-md bg-panel text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-3.5"
+            className="flex size-8 shrink-0 cursor-default items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-4"
           >
             <RotateCcw />
           </button>

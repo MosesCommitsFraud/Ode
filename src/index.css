@@ -56,6 +56,7 @@
   --ch-mic: var(--primary);
   --ch-soundboard: oklch(0.6 0.2 295);
   --ch-music: oklch(0.66 0.13 200);
+  --ch-live: oklch(0.63 0.2 355);
   --ch-out: oklch(32% 0.01 60);
 
   --shadow-dock: 0 1px 0 oklch(100% 0 0 / 70%) inset, 0 18px 40px -22px oklch(30% 0.03 60 / 45%);
@@ -96,6 +97,7 @@
 
   --ch-soundboard: oklch(0.7 0.18 295);
   --ch-music: oklch(0.78 0.12 195);
+  --ch-live: oklch(0.72 0.17 355);
   --ch-out: oklch(92% 0.01 75);
 
   --shadow-dock: 0 1px 0 oklch(100% 0 0 / 6%) inset, 0 18px 40px -18px oklch(0% 0 0 / 80%);

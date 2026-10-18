@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ArrowDown, AudioWaveform, ChevronLeft, ChevronRight, Disc3, Download, Layers, Link2, Loader2, X } from "lucide-react";
+import { ArrowDown, Waveform as AudioWaveform, CaretLeft as ChevronLeft, CaretRight as ChevronRight, VinylRecord as Disc3, DownloadSimple as Download, Stack as Layers, LinkSimple as Link2, CircleNotch as Loader2, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type WheelEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, EmptyState, Kbd } from "~/components/ui/misc";

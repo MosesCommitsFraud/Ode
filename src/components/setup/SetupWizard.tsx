@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Check, Loader2 } from "lucide-react";
+import { Check, CircleNotch as Loader2 } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";

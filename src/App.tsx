@@ -3,6 +3,7 @@ import { MusicBar } from "~/components/shell/MusicBar";
 import { SETTINGS, Sidebar, VIEWS, type View } from "~/components/shell/Sidebar";
 import { TopBar } from "~/components/shell/TopBar";
 import { actions } from "~/lib/store";
+import { LiveView } from "~/views/LiveView";
 import { MixerView } from "~/views/MixerView";
 import { SettingsView } from "~/views/SettingsView";
 import { DownloadsView, EffectsView, MusicView } from "~/views/Placeholders";
@@ -72,6 +73,7 @@ export default function App() {
         <div className="min-h-0 flex-1 overflow-hidden">
           {view === "soundboard" && <SoundboardView />}
           {view === "music" && <MusicView />}
+          {view === "live" && <LiveView />}
           {view === "mixer" && <MixerView />}
           {view === "effects" && <EffectsView />}
           {view === "downloads" && <DownloadsView />}

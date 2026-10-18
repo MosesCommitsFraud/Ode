@@ -1,23 +1,26 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
-  ChevronLeft,
-  ChevronRight,
+  CaretLeft as ChevronLeft,
+  CaretRight as ChevronRight,
+  CircleNotch as Loader2,
   ListPlus,
-  Loader2,
   Pause,
   Play,
-  Trash2,
+  Plus,
+  Shuffle,
+  Trash as Trash2,
+  VinylRecord,
   X,
-} from "lucide-react";
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
-import { LiveSource } from "~/components/music/LiveSource";
 import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/misc";
 import { isTauri } from "~/lib/engine";
 import { formatTime, music, tracksOf, useMusic, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
 
-const ROW_HEIGHT = 48;
+const ROW_HEIGHT = 56;
 
 /** Wie viele Zeilen passen in den Bereich? Die Seite selbst scrollt nie. */
 function useRowCount() {
@@ -131,32 +134,50 @@ function TrackRow({
   const selected = useMusic((s) => s.selectedPlaylist);
   const playlist = useMusic((s) => s.playlists.find((p) => p.id === s.selectedPlaylist));
 
+  const [coverFailed, setCoverFailed] = useState(false);
+  const cover = track.cover && isTauri && !coverFailed ? convertFileSrc(track.cover) : null;
+
   return (
     <div
       onDoubleClick={onPlay}
       onMouseLeave={() => setConfirm(false)}
       className={cn(
-        "group grid h-full grid-cols-[2.5rem_1fr_auto_auto] items-center gap-3 rounded-xl px-2 transition-colors",
-        current ? "bg-[color-mix(in_oklch,var(--ch-music)_12%,transparent)]" : "hover:bg-accent",
+        "group grid h-full grid-cols-[1.75rem_2.5rem_minmax(0,1fr)_auto_3rem] items-center gap-3 rounded-xl px-2 transition-colors",
+        current ? "bg-[color-mix(in_oklch,var(--ch-music)_9%,transparent)]" : "hover:bg-accent",
       )}
     >
+      <span
+        className={cn(
+          "text-right font-mono text-2xs tabular-nums",
+          current ? "text-[var(--ch-music)]" : "text-muted-foreground",
+        )}
+      >
+        {number}
+      </span>
       <button
         type="button"
         title={current && playing ? "Pause" : "Abspielen"}
         onClick={() => (current ? music.toggle() : onPlay())}
-        className="flex size-8 cursor-default items-center justify-center rounded-lg font-mono text-2xs text-muted-foreground tabular-nums [&_svg]:size-3.5"
+        className="relative flex size-10 cursor-default items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground shadow-[0_0_0_1px_var(--hairline)] [&_svg]:size-4"
       >
-        {current && playing ? (
-          <Pause className="text-[var(--ch-music)]" />
+        {cover ? (
+          <img src={cover} alt="" draggable={false} onError={() => setCoverFailed(true)} className="size-full object-cover" />
         ) : (
-          <>
-            <span className={cn("group-hover:hidden", current && "text-[var(--ch-music)]")}>{number}</span>
-            <Play className="hidden group-hover:block" />
-          </>
+          <VinylRecord className={cn(current && "text-[var(--ch-music)]")} />
         )}
+        <span
+          className={cn(
+            "absolute inset-0 flex items-center justify-center bg-black/55 text-white transition-opacity",
+            current ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          )}
+        >
+          {current && playing ? <Pause weight="fill" /> : <Play weight="fill" />}
+        </span>
       </button>
       <div className="min-w-0">
-        <div className={cn("truncate text-sm font-medium", current && "text-[var(--ch-music)]")}>{track.title}</div>
+        <div className={cn("truncate text-sm font-semibold", current && "text-[var(--ch-music)]")} title={track.title}>
+          {track.title}
+        </div>
         {track.artist && <div className="truncate text-2xs text-muted-foreground">{track.artist}</div>}
       </div>
       <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -196,7 +217,7 @@ function TrackRow({
           )
         )}
       </div>
-      <span className="w-12 text-right font-mono text-2xs text-muted-foreground tabular-nums">
+      <span className="text-right font-mono text-2xs text-muted-foreground tabular-nums">
         {formatTime(track.durationMs)}
       </span>
       {menu && <AddToPlaylist track={track} anchor={menu} onClose={() => setMenu(null)} />}
@@ -270,6 +291,7 @@ export function MusicView() {
             disabled={list.length === 0}
             onClick={() => (listPlaying ? music.toggle() : music.play(ids, 0))}
           >
+            {listPlaying ? <Pause weight="fill" /> : <Play weight="fill" />}
             {listPlaying ? "Pause" : "Abspielen"}
           </Button>
           <Button
@@ -282,11 +304,10 @@ export function MusicView() {
               await music.play(ids, Math.floor(Math.random() * ids.length));
             }}
           >
-            Zufällig
+            <Shuffle /> Zufällig
           </Button>
-          <LiveSource />
           <Button variant="outline" size="sm" onClick={() => music.pickFiles()}>
-            {importing > 0 && <Loader2 className="animate-spin" />}
+            {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
             {importing > 0 ? `Lade ${importing} …` : "Musik hinzufügen"}
           </Button>
           {playlist && (

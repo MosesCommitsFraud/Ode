@@ -141,8 +141,8 @@ function VoiceDisplay({ voice, enabled }: { voice: number; enabled: boolean }) {
       {history.current.map((v, i) => (
         <span
           key={i}
-          className={cn("flex-1 rounded-[1px]", v > 0.6 ? "bg-success" : "bg-muted-foreground/35")}
-          style={{ height: `${Math.max(3, v * 100)}%`, opacity: 0.35 + (i / HISTORY) * 0.65 }}
+          className={cn("flex-1 rounded-[1px]", v > 0.6 ? "bg-success" : "bg-muted-foreground/30")}
+          style={{ height: `${Math.max(3, v * 100)}%` }}
         />
       ))}
     </div>

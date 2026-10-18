@@ -1,18 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import {
-  Disc3,
-  Loader2,
-  Pause,
-  Play,
-  Repeat,
-  Repeat1,
-  Shuffle,
-  SkipBack,
-  SkipForward,
-  Volume1,
-  Volume2,
-  VolumeX,
-} from "lucide-react";
+import { VinylRecord as Disc3, CircleNotch as Loader2, Pause, Play, Repeat, RepeatOnce as Repeat1, Shuffle, SkipBack, SkipForward, SpeakerLow as Volume1, SpeakerHigh as Volume2, SpeakerSlash as VolumeX } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { SetupWizard } from "~/components/setup/SetupWizard";
 import { downloads } from "~/lib/downloads";
@@ -232,7 +219,7 @@ export function MusicBar() {
               <Shuffle />
             </ControlButton>
             <ControlButton title="Zurück" disabled={!hasTrack} onClick={() => music.previous()}>
-              <SkipBack className="fill-current" />
+              <SkipBack weight="fill" />
             </ControlButton>
             <button
               type="button"
@@ -241,10 +228,10 @@ export function MusicBar() {
               onClick={() => music.toggle()}
               className="mx-1 flex size-8 cursor-default items-center justify-center rounded-full bg-foreground text-background transition-transform active:scale-95 disabled:opacity-35 [&_svg]:size-4 [&_svg]:fill-current"
             >
-              {state.playing ? <Pause /> : <Play className="translate-x-px" />}
+              {state.playing ? <Pause weight="fill" /> : <Play weight="fill" className="translate-x-px" />}
             </button>
             <ControlButton title="Weiter" disabled={!hasTrack} onClick={() => music.next()}>
-              <SkipForward className="fill-current" />
+              <SkipForward weight="fill" />
             </ControlButton>
             <ControlButton
               title={REPEAT_TITLE[state.repeat]}

@@ -1,4 +1,4 @@
-import { Cable, Headphones, Mic, Play, RefreshCw } from "lucide-react";
+import { Plugs as Cable, Headphones, Microphone as Mic, Play, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/misc";
@@ -46,7 +46,7 @@ export function DeviceSetup() {
           </Button>
           {!running && (
             <Button disabled={starting || !config.inputId} onClick={() => actions.start()}>
-              <Play className="fill-current" /> {starting ? "Startet …" : "Erneut starten"}
+              <Play weight="fill" /> {starting ? "Startet …" : "Erneut starten"}
             </Button>
           )}
         </div>

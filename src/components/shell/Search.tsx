@@ -1,4 +1,4 @@
-import { Play, Search as SearchIcon, X } from "lucide-react";
+import { Play, MagnifyingGlass as SearchIcon, X } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Kbd } from "~/components/ui/misc";
 import { library, useLibrary, type Sound } from "~/lib/library";
@@ -175,14 +175,14 @@ export function Search() {
                     </div>
                     <span
                       className={cn(
-                        "flex size-7 items-center justify-center rounded-full transition-all [&_svg]:size-3.5 [&_svg]:fill-current",
+                        "flex size-7 items-center justify-center rounded-full transition-all [&_svg]:size-3.5",
                         justPlayed
                           ? "scale-110 bg-primary text-primary-foreground"
                           : "text-muted-foreground opacity-0 group-hover:opacity-100",
                         i === active && "opacity-100",
                       )}
                     >
-                      <Play />
+                      <Play weight="fill" />
                     </span>
                   </button>
                 </div>

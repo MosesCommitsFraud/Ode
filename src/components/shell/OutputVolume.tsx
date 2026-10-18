@@ -1,4 +1,4 @@
-import { VolumeX } from "lucide-react";
+import { SpeakerSlash as VolumeX } from "@phosphor-icons/react";
 import type { CSSProperties } from "react";
 import { Fader } from "~/components/mixer/Fader";
 import { Meter } from "~/components/mixer/Meter";
@@ -37,7 +37,7 @@ function MiniStrip({
           {muted ? "MUTE" : formatDb(gainDb)}
         </span>
       </div>
-      <div className="flex h-28 justify-center">
+      <div className="flex h-24 justify-center">
         <Fader
           label={`${label} Lautstärke`}
           value={gainDb}
