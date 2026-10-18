@@ -90,11 +90,11 @@ export function ChannelStrip({
   return (
     <div
       style={{ "--ch": color } as CSSProperties}
-      className={cn("flex w-[calc((100vw-21rem)/5)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-3 py-3.5", disabled && "opacity-55")}
+      className={cn("relative flex w-[calc((100vw-21rem)/5)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-2.5 py-3.5", disabled && "opacity-55")}
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--ch)_16%,transparent)] text-[var(--ch)] [&_svg]:size-4"
+          className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--ch)_16%,transparent)] text-[var(--ch)] [&_svg]:size-4"
         >
           {icon}
         </span>
@@ -102,15 +102,16 @@ export function ChannelStrip({
           <div className="truncate text-[13px] font-semibold">{name}</div>
           <div className="truncate font-mono text-3xs text-muted-foreground uppercase">{badge ?? kind}</div>
         </div>
-        <button
-          type="button"
-          title="Auf Standard zurücksetzen"
-          disabled={isDefault}
-          onClick={onReset}
-          className="-mr-1 flex size-6 shrink-0 cursor-default items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-0 [&_svg]:size-3.5"
-        >
-          <RotateCcw />
-        </button>
+        {!isDefault && (
+          <button
+            type="button"
+            title="Auf Standard zurücksetzen"
+            onClick={onReset}
+            className="absolute top-1.5 right-1.5 flex size-6 cursor-default items-center justify-center rounded-md bg-panel text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-3.5"
+          >
+            <RotateCcw />
+          </button>
+        )}
       </div>
 
       <button
