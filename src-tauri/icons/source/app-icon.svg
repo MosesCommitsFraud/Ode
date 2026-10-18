@@ -1,5 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="1024" height="1024">
-  <rect width="32" height="32" rx="8" fill="#141110"/>
-  <circle cx="14" cy="16" r="7" fill="none" stroke="#F5F2EE" stroke-width="3"/>
-  <path d="M22.7 8.7A11 11 0 0 1 22.7 23.3" fill="none" stroke="#F5F2EE" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- App-Symbol: Ring, der wie eine Schallwelle aufgeht; die Welle in Ode-Orange. -->
+  <rect width="1024" height="1024" rx="224" fill="#1d1a17"/>
+  <circle cx="452" cy="512" r="226" fill="none" stroke="#f5f1ec" stroke-width="100"/>
+  <path d="M736 272A370 370 0 0 1 736 752" fill="none" stroke="#f26b21" stroke-width="72" stroke-linecap="round"/>
 </svg>

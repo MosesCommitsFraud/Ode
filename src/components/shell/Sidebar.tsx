@@ -20,20 +20,15 @@ export const SETTINGS = {
   icon: <Settings2 />,
 };
 
-/** Wortmarke: ein Ring, der wie eine Schallwelle aufgeht. */
+/** Wortmarke mit App-Symbol: ein Ring, der wie eine Schallwelle aufgeht. */
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      <svg viewBox="0 0 32 32" className="size-8 text-foreground" aria-hidden>
-        <circle cx="14" cy="16" r="8" fill="none" stroke="currentColor" strokeWidth="3.5" />
-        <path
-          d="M23.96 7.64A13 13 0 0 1 23.96 24.36"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          opacity=".5"
-        />
+      {/* Dasselbe Symbol wie in Taskleiste und Tray (src-tauri/icons/source/app-icon.svg). */}
+      <svg viewBox="0 0 1024 1024" className="size-8 shrink-0" aria-hidden>
+        <rect width="1024" height="1024" rx="224" fill="#1d1a17" />
+        <circle cx="452" cy="512" r="226" fill="none" stroke="#f5f1ec" strokeWidth="100" />
+        <path d="M736 272A370 370 0 0 1 736 752" fill="none" stroke="#f26b21" strokeWidth="72" strokeLinecap="round" />
       </svg>
       <div className="font-display text-2xl leading-none font-bold tracking-tight">ode</div>
     </div>
