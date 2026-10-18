@@ -68,7 +68,7 @@ export function Switch({
       onClick={() => onCheckedChange(!checked)}
       className={cn(
         "relative inline-flex h-5 w-9 shrink-0 cursor-default items-center rounded-full transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
-        checked ? "bg-primary shadow-[0_0_12px_-2px_var(--primary-glow)]" : "well",
+        checked ? "bg-primary" : "well",
       )}
     >
       <span
@@ -129,8 +129,7 @@ export function EmptyState({
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
       <div className="relative">
-        <div className="absolute inset-0 scale-150 rounded-full bg-primary/20 blur-2xl" />
-        <div className="relative flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.8_0.17_70)] to-primary text-primary-foreground shadow-[0_10px_30px_-8px_var(--primary-glow)] [&_svg]:size-7">
+        <div className="relative flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[oklch(0.8_0.17_70)] to-primary text-primary-foreground [&_svg]:size-7">
           {icon}
         </div>
       </div>

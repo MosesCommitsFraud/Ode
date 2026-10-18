@@ -49,16 +49,10 @@ export function SoundTile({
       style={{ "--tile": color } as CSSProperties}
       className={cn(
         "group panel relative flex h-full cursor-default flex-col overflow-hidden rounded-2xl p-3 text-left outline-none transition-all duration-150 select-none",
-        "hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring active:translate-y-0 active:scale-[0.98]",
-        playing &&
-          "shadow-[0_0_0_1.5px_var(--tile),0_10px_30px_-10px_var(--tile)]",
+        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.98]",
+        playing && "shadow-[inset_0_0_0_1.5px_var(--tile)]",
       )}
     >
-      {/* Farbiger Schimmer oben links */}
-      <span
-        className="pointer-events-none absolute -top-10 -left-10 size-28 rounded-full opacity-25 blur-2xl transition-opacity group-hover:opacity-40"
-        style={{ background: color }}
-      />
 
       <div className="relative flex items-start gap-2">
         <div className="min-w-0 flex-1">

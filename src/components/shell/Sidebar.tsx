@@ -19,7 +19,7 @@ export const SETTINGS = { id: "settings" as const, label: "Einstellungen", icon:
 function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <svg viewBox="0 0 32 32" className="size-8 drop-shadow-[0_4px_12px_var(--primary-glow)]" aria-hidden>
+      <svg viewBox="0 0 32 32" className="size-8" aria-hidden>
         <defs>
           <linearGradient id="ode-logo" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="oklch(0.8 0.17 70)" />
@@ -67,7 +67,7 @@ function NavItem({
         className={cn(
           "flex size-7 items-center justify-center rounded-lg transition-all duration-200 [&_svg]:size-4",
           active
-            ? "bg-primary text-primary-foreground shadow-[0_4px_14px_-2px_var(--primary-glow)]"
+            ? "bg-primary text-primary-foreground"
             : "text-muted-foreground group-hover:text-foreground",
         )}
       >

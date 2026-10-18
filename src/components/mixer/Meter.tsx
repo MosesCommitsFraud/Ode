@@ -57,7 +57,6 @@ export function Meter({
           WebkitMaskImage: mask,
           background: `linear-gradient(${dir}, var(--ch, var(--success)) 0%, var(--ch, var(--success)) 80%, var(--warning) 80%, var(--warning) 95%, var(--error) 95%)`,
           clipPath: vertical ? `inset(${(1 - level) * 100}% 0 0 0)` : `inset(0 ${(1 - level) * 100}% 0 0)`,
-          filter: level > 0.02 ? "drop-shadow(0 0 3px var(--ch, var(--success)))" : undefined,
         }}
       />
       {held > 0.02 && (

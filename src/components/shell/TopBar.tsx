@@ -1,32 +1,6 @@
-import { Cable, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Kbd } from "~/components/ui/misc";
-import { useStore } from "~/lib/store";
-import { cn } from "~/lib/utils";
 import { WindowControls } from "./WindowControls";
-
-function CableStatus() {
-  const info = useStore((s) => s.info);
-  const meters = useStore((s) => s.meters);
-  const hasErrors = (meters?.errors.length ?? 0) > 0;
-
-  const status = !info
-    ? { label: "Engine aus", tone: "text-muted-foreground" }
-    : !info.cable
-      ? { label: "Kein Kabel", tone: "text-warning-foreground" }
-      : hasErrors
-        ? { label: "Gerätefehler", tone: "text-error-foreground" }
-        : { label: "Kabel aktiv", tone: "text-success-foreground" };
-
-  return (
-    <div
-      className={cn("panel flex h-9 items-center gap-2 rounded-full px-3.5 text-xs font-medium", status.tone)}
-      title={info?.cable?.deviceName ?? "Virtuelles Kabel"}
-    >
-      <Cable className="size-3.5" />
-      {status.label}
-    </div>
-  );
-}
 
 export function TopBar({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -48,7 +22,6 @@ export function TopBar({ title, subtitle }: { title: string; subtitle?: string }
           <Kbd className="rounded-full px-2">Strg K</Kbd>
         </button>
       </div>
-      <CableStatus />
       <WindowControls />
     </header>
   );

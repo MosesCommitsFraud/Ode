@@ -2,7 +2,7 @@ import { Cable, Headphones, Mic, Music, RotateCcw, ShieldCheck, Sparkles } from 
 import type { ReactNode } from "react";
 import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
-import type { ChannelId, Meters, OutputId } from "~/lib/engine";
+import type { ChannelId, ChannelParams, Meters, OutputId, OutputParams } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 
@@ -16,6 +16,22 @@ const OUTPUTS: { id: OutputId; name: string; kind: string; icon: ReactNode }[] =
   { id: "a", name: "Kopfhörer", kind: "Bus A", icon: <Headphones /> },
   { id: "b", name: "Kabel", kind: "Bus B", icon: <Cable /> },
 ];
+
+/** Auslieferungszustand der Kanäle und Ausgänge, wie im Store. */
+const CHANNEL_DEFAULTS: Record<ChannelId, ChannelParams> = {
+  mic: { gainDb: 0, muted: false, routeA: false, routeB: true },
+  soundboard: { gainDb: 0, muted: false, routeA: true, routeB: true },
+  music: { gainDb: 0, muted: false, routeA: true, routeB: true },
+};
+
+const OUTPUT_DEFAULTS: Record<OutputId, OutputParams> = {
+  a: { gainDb: 0, muted: false, limiter: false },
+  b: { gainDb: 0, muted: false, limiter: true },
+};
+
+function same<T extends object>(a: T, b: T) {
+  return (Object.keys(b) as (keyof T)[]).every((k) => a[k] === b[k]);
+}
 
 function channelPeak(meters: Meters | null, id: ChannelId) {
   return meters?.channels.find((c) => c.id === id)?.peak ?? 0;
@@ -67,6 +83,8 @@ function Console() {
                   onB: (routeB) => actions.setChannel(id, { routeB }),
                 }}
                 disabled={!ready}
+                isDefault={same(params, CHANNEL_DEFAULTS[id])}
+                onReset={() => actions.setChannel(id, CHANNEL_DEFAULTS[id])}
               />
             );
           })}
@@ -94,6 +112,8 @@ function Console() {
                 peak={running ? (out?.peak ?? 0) : 0}
                 onGain={(gainDb) => actions.setOutput(id, { gainDb })}
                 onMute={(muted) => actions.setOutput(id, { muted })}
+                isDefault={same(params, OUTPUT_DEFAULTS[id])}
+                onReset={() => actions.setOutput(id, OUTPUT_DEFAULTS[id])}
                 footer={
                   <label className="flex h-8 items-center justify-between gap-1 rounded-lg bg-muted pr-1.5 pl-2 font-mono text-2xs font-semibold text-muted-foreground">
                     <span className={cn("flex items-center gap-1 transition-colors", reducing && "text-warning-foreground")}>

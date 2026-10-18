@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Headphones, Mic2, RotateCcw, VolumeX } from "lucide-react";
-import { cn, formatDb, gainToDb } from "~/lib/utils";
+import { cn, formatDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
 
@@ -34,7 +34,7 @@ function PadButton({
       className={cn(
         "relative flex h-8 flex-1 cursor-default items-center justify-center gap-1.5 rounded-lg font-mono text-2xs font-semibold transition-all duration-150 disabled:opacity-40 [&_svg]:size-3.5",
         active
-          ? "bg-[color-mix(in_oklch,var(--pad)_18%,transparent)] text-[var(--pad)] shadow-[0_0_0_1px_color-mix(in_oklch,var(--pad)_40%,transparent)_inset,0_0_18px_-6px_var(--pad)]"
+          ? "bg-[color-mix(in_oklch,var(--pad)_18%,transparent)] text-[var(--pad)] shadow-[0_0_0_1px_color-mix(in_oklch,var(--pad)_40%,transparent)_inset]"
           : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground active:scale-95",
         className,
       )}
@@ -62,6 +62,9 @@ export interface StripProps {
   };
   footer?: ReactNode;
   disabled?: boolean;
+  /** Stellt Lautstärke, Mute, Routing und Limiter auf den Auslieferungszustand. */
+  onReset: () => void;
+  isDefault: boolean;
   badge?: string;
 }
 
@@ -79,10 +82,10 @@ export function ChannelStrip({
   footer,
   disabled,
   badge,
+  onReset,
+  isDefault,
 }: StripProps) {
   const live = muted ? 0 : peak;
-  // Das Symbol glüht mit dem Pegel mit.
-  const glow = Math.max(0, (gainToDb(live, -48) + 48) / 48);
 
   return (
     <div
@@ -91,15 +94,23 @@ export function ChannelStrip({
     >
       <div className="flex items-center gap-2.5">
         <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--ch)_16%,transparent)] text-[var(--ch)] transition-shadow duration-75 [&_svg]:size-4"
-          style={{ boxShadow: `0 0 ${4 + glow * 22}px -4px color-mix(in oklch, var(--ch) ${Math.round(glow * 90)}%, transparent)` }}
+          className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--ch)_16%,transparent)] text-[var(--ch)] [&_svg]:size-4"
         >
           {icon}
         </span>
-        <div className="min-w-0 leading-tight">
+        <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-[13px] font-semibold">{name}</div>
           <div className="truncate font-mono text-3xs text-muted-foreground uppercase">{badge ?? kind}</div>
         </div>
+        <button
+          type="button"
+          title="Auf Standard zurücksetzen"
+          disabled={isDefault}
+          onClick={onReset}
+          className="-mr-1 flex size-6 shrink-0 cursor-default items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-0 [&_svg]:size-3.5"
+        >
+          <RotateCcw />
+        </button>
       </div>
 
       <button

@@ -111,7 +111,7 @@ export function Fader({
         ))}
         <div className="well absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 rounded-full" />
         <div
-          className="absolute bottom-0 left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-[var(--ch)] shadow-[0_0_10px_var(--ch)]"
+          className="absolute bottom-0 left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-[var(--ch)]"
           style={{ height: `${pos * 100}%`, opacity: disabled ? 0.35 : 1 }}
         />
         {/* Kappe */}

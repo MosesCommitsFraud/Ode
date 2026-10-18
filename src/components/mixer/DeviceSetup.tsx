@@ -1,4 +1,4 @@
-import { AudioLines, Cable, Headphones, Mic, Play, RefreshCw, Square } from "lucide-react";
+import { AudioLines, Cable, Headphones, Mic, Play, RefreshCw } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Badge, Card, SectionLabel } from "~/components/ui/misc";
@@ -94,13 +94,9 @@ export function DeviceSetup() {
           <Button variant="ghost" size="icon" title="Geräte neu laden" onClick={() => actions.refreshDevices()}>
             <RefreshCw />
           </Button>
-          {running ? (
-            <Button variant="outline" onClick={() => actions.stop()}>
-              <Square className="fill-current" /> Stoppen
-            </Button>
-          ) : (
+          {!running && (
             <Button disabled={starting || !config.inputId} onClick={() => actions.start()}>
-              <Play className="fill-current" /> {starting ? "Startet …" : "Engine starten"}
+              <Play className="fill-current" /> {starting ? "Startet …" : "Erneut starten"}
             </Button>
           )}
         </div>
