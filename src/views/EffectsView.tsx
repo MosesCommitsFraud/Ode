@@ -1,4 +1,3 @@
-import { AudioLines, Gauge, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import { Badge, Card, Switch } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
@@ -52,10 +51,9 @@ function Range({
   );
 }
 
+/** Ein Effekt als Zeile im Rack: Name und Schalter, Regler, Anzeige. */
 function Module({
   title,
-  hint,
-  icon,
   enabled,
   onToggle,
   status,
@@ -63,8 +61,6 @@ function Module({
   children,
 }: {
   title: string;
-  hint: string;
-  icon: ReactNode;
   enabled: boolean;
   onToggle: (on: boolean) => void;
   status?: ReactNode;
@@ -72,36 +68,18 @@ function Module({
   children: ReactNode;
 }) {
   return (
-    <Card className="flex min-h-0 min-w-0 flex-col p-4">
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "shrink-0 transition-colors [&_svg]:size-4",
-            enabled ? "text-[var(--ch-mic)]" : "text-muted-foreground",
-          )}
-        >
-          {icon}
-        </span>
-        <h3 className="min-w-0 flex-1 truncate font-display text-[15px] leading-tight font-semibold tracking-tight" title={title}>
-          {title}
-        </h3>
+    <Card className="grid min-h-0 grid-cols-[12rem_minmax(0,1fr)_minmax(12rem,20rem)] items-stretch gap-6 px-5 py-3">
+      <div className="flex items-center gap-3">
         <Switch label={title} checked={enabled} onCheckedChange={onToggle} />
+        <h3 className="min-w-0 flex-1 truncate font-display text-base leading-tight font-semibold tracking-tight">{title}</h3>
       </div>
-      <p className="mt-2 line-clamp-2 text-2xs text-muted-foreground" title={hint}>
-        {hint}
-      </p>
 
-      <div
-        className={cn(
-          "well relative mt-3 min-h-16 flex-1 overflow-hidden rounded-xl transition-opacity",
-          !enabled && "opacity-40",
-        )}
-      >
+      <div className="grid grid-flow-col auto-cols-[minmax(0,13rem)] content-center justify-start gap-8">{children}</div>
+
+      <div className={cn("well relative min-h-0 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
         {display}
         {status && <div className="absolute top-2 right-2">{status}</div>}
       </div>
-
-      <div className="mt-3.5 space-y-3">{children}</div>
     </Card>
   );
 }
@@ -109,6 +87,8 @@ function Module({
 /* ---------- Anzeigen ---------- */
 
 const GATE_FLOOR = -80;
+/** LED-Segmente wie bei den Pegeln im Mischpult. */
+const SEGMENTS = "repeating-linear-gradient(to right, #000 0 3px, transparent 3px 5px)";
 
 /** Pegel des Mikrofons gegen die Schwelle des Gates. */
 function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: number; open: boolean }) {
@@ -119,14 +99,18 @@ function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: n
   const threshold = (thresholdDb - GATE_FLOOR) / -GATE_FLOOR;
 
   return (
-    <div className="absolute inset-0 flex items-end justify-center gap-1.5 px-4 pt-9 pb-3">
-      <div className="relative h-full w-full max-w-24 overflow-hidden rounded-lg bg-[var(--led-off)]">
+    <div className="absolute inset-0 flex items-center px-4">
+      <div className="relative h-3 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
+        <div className="absolute inset-0 bg-[var(--led-off)]" />
         <div
-          className={cn("absolute inset-x-0 bottom-0 rounded-lg", open ? "bg-[var(--ch-mic)]" : "bg-muted-foreground/40")}
-          style={{ height: `${level * 100}%` }}
+          className={cn("absolute inset-y-0 left-0", open ? "bg-[var(--ch-mic)]" : "bg-muted-foreground/40")}
+          style={{ width: `${level * 100}%` }}
         />
-        <div className="absolute inset-x-0 h-0.5 bg-foreground" style={{ bottom: `${threshold * 100}%` }} />
       </div>
+      <div
+        className="absolute top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-foreground"
+        style={{ left: `calc(1rem + (100% - 2rem) * ${threshold})` }}
+      />
     </div>
   );
 }
@@ -138,7 +122,7 @@ function VoiceDisplay({ voice, enabled }: { voice: number; enabled: boolean }) {
   const history = useRef<number[]>(Array(HISTORY).fill(0));
   history.current = [...history.current.slice(1), enabled ? voice : 0];
   return (
-    <div className="absolute inset-0 flex items-end gap-[3px] px-3 pt-9 pb-3">
+    <div className="absolute inset-0 flex items-end gap-[3px] p-2.5">
       {history.current.map((v, i) => (
         <span
           key={i}
@@ -194,13 +178,14 @@ function CompressorDisplay({ thresholdDb, ratio, makeupDb }: { thresholdDb: numb
   );
 }
 
-/** Absenkung als Balken von oben, dazu die Obergrenze bzw. Schwelle. */
+/** Absenkung als Balken von rechts. */
 function ReductionDisplay({ db, max }: { db: number; max: number }) {
   const amount = Math.min(1, Math.max(0, -db / max));
   return (
-    <div className="absolute inset-0 flex justify-center px-4 pt-9 pb-3">
-      <div className="relative h-full w-full max-w-24 overflow-hidden rounded-lg bg-[var(--led-off)]">
-        <div className="absolute inset-x-0 top-0 rounded-lg bg-warning" style={{ height: `${amount * 100}%` }} />
+    <div className="absolute inset-0 flex items-center px-4">
+      <div className="relative h-3 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
+        <div className="absolute inset-0 bg-[var(--led-off)]" />
+        <div className="absolute inset-y-0 right-0 bg-warning" style={{ width: `${amount * 100}%` }} />
       </div>
     </div>
   );
@@ -221,11 +206,9 @@ export function EffectsView() {
   const voice = running ? (live?.voice ?? 0) : 0;
 
   return (
-    <div className="grid h-full auto-rows-fr grid-cols-3 gap-3 overflow-hidden px-6 pt-3 pb-3 xl:grid-cols-5">
+    <div className="grid h-full auto-rows-fr gap-3 overflow-hidden px-6 pt-3 pb-3">
       <Module
         title="Noise Gate"
-        hint="Schaltet das Mikro stumm, solange es leiser als die Schwelle ist."
-        icon={<AudioLines />}
         enabled={fx.gate.enabled}
         onToggle={(enabled) => actions.setEffect("gate", { enabled })}
         status={
@@ -255,8 +238,6 @@ export function EffectsView() {
 
       <Module
         title="Rauschfilter"
-        hint="RNNoise filtert Lüfter, Tastatur und Rauschen heraus. Kostet 10 ms Verzögerung."
-        icon={<Sparkles />}
         enabled={fx.denoise.enabled}
         onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
         status={
@@ -273,8 +254,6 @@ export function EffectsView() {
 
       <Module
         title="Equalizer"
-        hint="Bass bei 120 Hz, Präsenz bei 2,5 kHz, Höhen bei 8 kHz."
-        icon={<SlidersHorizontal />}
         enabled={fx.eq.enabled}
         onToggle={(enabled) => actions.setEffect("eq", { enabled })}
         display={<EqDisplay low={fx.eq.lowDb} mid={fx.eq.midDb} high={fx.eq.highDb} />}
@@ -302,8 +281,6 @@ export function EffectsView() {
 
       <Module
         title="Kompressor"
-        hint="Gleicht leise und laute Stellen an, damit du gleichmäßig klingst."
-        icon={<Gauge />}
         enabled={fx.compressor.enabled}
         onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
         status={
@@ -359,8 +336,6 @@ export function EffectsView() {
 
       <Module
         title="Limiter"
-        hint="Harte Obergrenze für dein Mikro, damit Schreie nicht übersteuern."
-        icon={<ShieldCheck />}
         enabled={fx.limiter.enabled}
         onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
         status={

@@ -28,6 +28,7 @@ export function Fader({
   disabled,
   label,
   meter,
+  size = "default",
   className,
 }: {
   value: number;
@@ -35,8 +36,11 @@ export function Fader({
   disabled?: boolean;
   label: string;
   meter?: ReactNode;
+  /** "sm" für das kleine Pult in der Sidebar. */
+  size?: "default" | "sm";
   className?: string;
 }) {
+  const sm = size === "sm";
   const track = useRef<HTMLDivElement>(null);
   const pos = dbToPosition(value);
 
@@ -96,7 +100,7 @@ export function Fader({
         onPointerMove={onPointerMove}
         onDoubleClick={() => !disabled && onChange(0)}
         onKeyDown={onKeyDown}
-        className="group relative w-9 touch-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn("group relative touch-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring", sm ? "w-6" : "w-9")}
       >
         {/* Rillen links und rechts der Schiene */}
         {SCALE.map((db) => (
@@ -104,7 +108,7 @@ export function Fader({
             key={db}
             className={cn(
               "absolute left-1/2 h-px -translate-x-1/2 bg-muted-foreground/25",
-              db === 0 ? "w-9 bg-muted-foreground/50" : "w-6",
+              db === 0 ? (sm ? "w-6 bg-muted-foreground/50" : "w-9 bg-muted-foreground/50") : sm ? "w-4" : "w-6",
             )}
             style={{ bottom: `${dbToPosition(db) * 100}%` }}
           />
@@ -117,16 +121,17 @@ export function Fader({
         {/* Kappe */}
         <div
           className={cn(
-            "absolute left-1/2 h-[26px] w-9 -translate-x-1/2 translate-y-1/2 rounded-[7px] transition-transform duration-100",
+            "absolute left-1/2 -translate-x-1/2 translate-y-1/2 transition-transform duration-100",
+            sm ? "h-4 w-6 rounded-[5px]" : "h-[26px] w-9 rounded-[7px]",
             "bg-[linear-gradient(to_bottom,oklch(98%_0.003_75),oklch(86%_0.006_75))] dark:bg-[linear-gradient(to_bottom,oklch(40%_0.006_60),oklch(26%_0.006_60))]",
             "shadow-[0_1px_0_oklch(100%_0_0/35%)_inset,0_6px_14px_-4px_oklch(0%_0_0/55%),0_0_0_1px_oklch(0%_0_0/18%)]",
             !disabled && "group-hover:scale-105 group-active:scale-95",
           )}
           style={{ bottom: `${pos * 100}%` }}
         >
-          <span className="absolute inset-x-1 top-[5px] h-px bg-black/10 dark:bg-white/8" />
+          {!sm && <span className="absolute inset-x-1 top-[5px] h-px bg-black/10 dark:bg-white/8" />}
           <span className="absolute inset-x-1.5 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-[var(--ch)]" />
-          <span className="absolute inset-x-1 bottom-[5px] h-px bg-black/10 dark:bg-white/8" />
+          {!sm && <span className="absolute inset-x-1 bottom-[5px] h-px bg-black/10 dark:bg-white/8" />}
         </div>
       </div>
 

@@ -46,7 +46,6 @@ function PadButton({
 
 export interface StripProps {
   name: string;
-  kind: string;
   icon: ReactNode;
   color: string;
   gainDb: number;
@@ -65,12 +64,10 @@ export interface StripProps {
   /** Stellt Lautstärke, Mute, Routing und Limiter auf den Auslieferungszustand. */
   onReset: () => void;
   isDefault: boolean;
-  badge?: string;
 }
 
 export function ChannelStrip({
   name,
-  kind,
   icon,
   color,
   gainDb,
@@ -81,7 +78,6 @@ export function ChannelStrip({
   routing,
   footer,
   disabled,
-  badge,
   onReset,
   isDefault,
 }: StripProps) {
@@ -98,9 +94,8 @@ export function ChannelStrip({
         >
           {icon}
         </span>
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-[13px] font-semibold">{name}</div>
-          <div className="truncate font-mono text-3xs text-muted-foreground uppercase">{badge ?? kind}</div>
+        <div className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={name}>
+          {name}
         </div>
         {!isDefault && (
           <button

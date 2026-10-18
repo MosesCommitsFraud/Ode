@@ -2,7 +2,7 @@ import { Search } from "lucide-react";
 import { Kbd } from "~/components/ui/misc";
 import { WindowControls } from "./WindowControls";
 
-export function TopBar({ title, subtitle }: { title: string; subtitle?: string }) {
+export function TopBar({ title }: { title: string }) {
   return (
     <header
       data-tauri-drag-region
@@ -10,7 +10,6 @@ export function TopBar({ title, subtitle }: { title: string; subtitle?: string }
     >
       <div data-tauri-drag-region className="min-w-0">
         <h1 data-tauri-drag-region className="font-display text-2xl leading-none font-semibold tracking-tight">{title}</h1>
-        {subtitle && <p data-tauri-drag-region className="mt-1 truncate text-xs text-muted-foreground">{subtitle}</p>}
       </div>
       <div data-tauri-drag-region className="flex flex-1 justify-end">
         <button

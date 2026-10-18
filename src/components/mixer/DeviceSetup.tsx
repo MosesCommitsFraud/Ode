@@ -1,69 +1,25 @@
-import { AudioLines, Cable, Headphones, Mic, Play, RefreshCw } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import { Cable, Headphones, Mic, Play, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "~/components/ui/button";
-import { Badge, Card, SectionLabel } from "~/components/ui/misc";
+import { Card } from "~/components/ui/misc";
 import { Select } from "~/components/ui/select";
-import type { DeviceInfo, StreamInfo } from "~/lib/engine";
+import type { DeviceInfo } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
-import { cn } from "~/lib/utils";
 
-function options(devices: DeviceInfo[], icon: ReactNode) {
+function options(devices: DeviceInfo[]) {
   return devices.map((d) => ({
     value: d.id,
     label: d.name,
     hint: d.isDefault ? "Standard" : undefined,
-    icon,
   }));
 }
 
-function streamText(s: StreamInfo | null | undefined) {
-  return s ? `${(s.sampleRate / 1000).toFixed(1)} kHz · ${s.channels} ch · ${s.sampleFormat}` : null;
-}
-
-/** Ein Knoten im Signalweg: Symbol auf der Leitung, rechts die Geräteauswahl. */
-function Node({
-  icon,
-  color,
-  label,
-  detail,
-  stream,
-  live,
-  last,
-  children,
-}: {
-  icon: ReactNode;
-  color: string;
-  label: string;
-  detail: string;
-  stream?: string | null;
-  live: boolean;
-  last?: boolean;
-  children: ReactNode;
-}) {
+/** Eine Geräte-Zeile: Symbol und Name links, Auswahl rechts. */
+function Row({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
-    <div style={{ "--ch": color } as CSSProperties} className="relative grid grid-cols-[2.5rem_9.5rem_1fr] items-center gap-3">
-      {!last && (
-        <span
-          className={cn(
-            "absolute top-10 bottom-[-0.75rem] left-[1.25rem] w-0.5 -translate-x-1/2 rounded-full",
-            live ? "bg-[var(--ch)] opacity-50" : "bg-border",
-          )}
-        />
-      )}
-      <span
-        className={cn(
-          "relative z-10 flex size-10 items-center justify-center rounded-full border-2 [&_svg]:size-4",
-          live
-            ? "border-[var(--ch)] bg-[color-mix(in_oklch,var(--ch)_12%,var(--panel))] text-[var(--ch)]"
-            : "border-border bg-panel text-muted-foreground",
-        )}
-      >
-        {icon}
-      </span>
-      <div className="min-w-0 leading-tight">
-        <div className="text-sm font-semibold">{label}</div>
-        <div className="truncate font-mono text-3xs text-muted-foreground">{stream ?? detail}</div>
-      </div>
+    <div className="grid grid-cols-[1.25rem_8.5rem_1fr] items-center gap-3">
+      <span className="text-muted-foreground [&_svg]:size-4">{icon}</span>
+      <span className="text-sm font-semibold">{label}</span>
       {children}
     </div>
   );
@@ -82,14 +38,8 @@ export function DeviceSetup() {
 
   return (
     <Card className="p-5">
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <SectionLabel>Signalweg</SectionLabel>
-          <h2 className="mt-1 font-display text-lg font-semibold tracking-tight">Geräte</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Mikrofon rein, Kopfhörer zum Mithören, Kabel als Mikro für Discord und Spiele.
-          </p>
-        </div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold tracking-tight">Geräte</h2>
         <div className="flex items-center gap-1.5">
           <Button variant="ghost" size="icon" title="Geräte neu laden" onClick={() => actions.refreshDevices()}>
             <RefreshCw />
@@ -102,65 +52,31 @@ export function DeviceSetup() {
         </div>
       </div>
 
-      <div className="space-y-3">
-        <Node
-          icon={<Mic />}
-          color="var(--ch-mic)"
-          label="Mikrofon"
-          detail="Eingang"
-          stream={streamText(info?.input)}
-          live={running}
-        >
+      <div className="space-y-2.5">
+        <Row icon={<Mic />} label="Mikrofon">
           <Select
             value={config.inputId}
             onChange={(inputId) => actions.setConfig({ inputId })}
-            options={options(devices.inputs.filter((d) => !d.isVirtualCable), <Mic />)}
+            options={options(devices.inputs.filter((d) => !d.isVirtualCable))}
             placeholder="Mikrofon wählen"
           />
-        </Node>
-        <Node
-          icon={<AudioLines />}
-          color="var(--primary)"
-          label="Ode"
-          detail="Mischpult und Effekte"
-          live={running}
-        >
-          <div className="flex flex-wrap gap-1.5">
-            <Badge tone={running ? "primary" : "default"}>{running ? "läuft" : "gestoppt"}</Badge>
-            <Badge>{config.bufferMs} ms Puffer</Badge>
-          </div>
-        </Node>
-        <Node
-          icon={<Headphones />}
-          color="var(--ch-out)"
-          label="Kopfhörer"
-          detail="Ausgang A"
-          stream={streamText(info?.monitor)}
-          live={running && !!info?.monitor}
-        >
+        </Row>
+        <Row icon={<Headphones />} label="Kopfhörer">
           <Select
             value={config.monitorId ?? ""}
             onChange={(id) => actions.setConfig({ monitorId: id || null })}
-            options={options(devices.outputs.filter((d) => !d.isVirtualCable), <Headphones />)}
+            options={options(devices.outputs.filter((d) => !d.isVirtualCable))}
             placeholder="Aus"
           />
-        </Node>
-        <Node
-          icon={<Cable />}
-          color="var(--ch-out)"
-          label="Virtuelles Kabel"
-          detail="Ausgang B"
-          stream={streamText(info?.cable)}
-          live={running && !!info?.cable}
-          last
-        >
+        </Row>
+        <Row icon={<Cable />} label="Virtuelles Kabel">
           <Select
             value={config.cableId ?? ""}
             onChange={(id) => actions.setConfig({ cableId: id || null })}
-            options={options(cables.length > 0 ? cables : devices.outputs, <Cable />)}
+            options={options(cables.length > 0 ? cables : devices.outputs)}
             placeholder="Aus"
           />
-        </Node>
+        </Row>
       </div>
 
       {noCable && (

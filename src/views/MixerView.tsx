@@ -1,4 +1,4 @@
-import { Cable, Headphones, Mic, Music, RotateCcw, ShieldCheck, Sparkles } from "lucide-react";
+import { Cable, Headphones, LayoutGrid, Mic, Music, RotateCcw, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
@@ -8,13 +8,13 @@ import { cn } from "~/lib/utils";
 
 const CHANNELS: { id: ChannelId; name: string; icon: ReactNode; color: string; ready: boolean }[] = [
   { id: "mic", name: "Mikrofon", icon: <Mic />, color: "var(--ch-mic)", ready: true },
-  { id: "soundboard", name: "Soundboard", icon: <Sparkles />, color: "var(--ch-soundboard)", ready: true },
+  { id: "soundboard", name: "Soundboard", icon: <LayoutGrid />, color: "var(--ch-soundboard)", ready: true },
   { id: "music", name: "Musik", icon: <Music />, color: "var(--ch-music)", ready: true },
 ];
 
-const OUTPUTS: { id: OutputId; name: string; kind: string; icon: ReactNode }[] = [
-  { id: "a", name: "Kopfhörer", kind: "Bus A", icon: <Headphones /> },
-  { id: "b", name: "Kabel", kind: "Bus B", icon: <Cable /> },
+const OUTPUTS: { id: OutputId; name: string; icon: ReactNode }[] = [
+  { id: "a", name: "Kopfhörer", icon: <Headphones /> },
+  { id: "b", name: "Kabel", icon: <Cable /> },
 ];
 
 /** Auslieferungszustand der Kanäle und Ausgänge, wie im Store. */
@@ -67,8 +67,6 @@ function Console() {
               <ChannelStrip
                 key={id}
                 name={name}
-                kind="Kanal"
-                badge={ready ? undefined : "Phase 3"}
                 icon={icon}
                 color={color}
                 gainDb={params.gainDb}
@@ -96,7 +94,7 @@ function Console() {
       <section className="well flex flex-col rounded-xl">
         <SectionLabel className="flex h-[30px] items-center px-3 pt-1.5">Ausgänge</SectionLabel>
         <div className="flex flex-1 divide-x divide-hairline">
-          {OUTPUTS.map(({ id, name, kind, icon }) => {
+          {OUTPUTS.map(({ id, name, icon }) => {
             const params = outputs[id];
             const out = id === "a" ? meters?.outA : meters?.outB;
             const reducing = params.limiter && (out?.gainReductionDb ?? 0) < -0.1;
@@ -104,7 +102,6 @@ function Console() {
               <ChannelStrip
                 key={id}
                 name={name}
-                kind={kind}
                 icon={icon}
                 color="var(--ch-out)"
                 gainDb={params.gainDb}
@@ -156,9 +153,8 @@ function DuckingBar() {
           checked={ducking.enabled}
           onCheckedChange={(enabled) => actions.setDucking({ enabled })}
         />
-        <div className="leading-tight">
-          <div className="text-sm font-semibold">Ducking</div>
-          <div className="text-2xs text-muted-foreground">Soundboard und Musik leiser, während du sprichst</div>
+        <div className="text-sm font-semibold" title="Soundboard und Musik werden leiser, während du sprichst">
+          Ducking
         </div>
       </div>
 

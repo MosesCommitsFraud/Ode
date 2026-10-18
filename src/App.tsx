@@ -8,15 +8,6 @@ import { SettingsView } from "~/views/SettingsView";
 import { DownloadsView, EffectsView, MusicView } from "~/views/Placeholders";
 import { SoundboardView } from "~/views/SoundboardView";
 
-const SUBTITLES: Record<View, string> = {
-  soundboard: "Sounds auf Knopfdruck ins Mikrofon",
-  music: "Playlists für den Musikkanal",
-  mixer: "Pegel, Wege und Geräte",
-  effects: "Die Kette für deine Stimme",
-  downloads: "Links rein, Sounds raus",
-  settings: "Geräte, Latenz und Puffer",
-};
-
 const ALL_VIEWS = [...VIEWS, SETTINGS];
 
 const THEME_KEY = "ode.theme";
@@ -72,13 +63,12 @@ export default function App() {
   };
 
   const title = ALL_VIEWS.find((v) => v.id === view)?.label ?? "";
-  const subtitle = SUBTITLES[view];
 
   return (
     <div className="grain relative isolate flex h-full">
       <Sidebar view={view} onView={changeView} dark={dark} onToggleTheme={toggle} />
       <main className="flex min-w-0 flex-1 flex-col">
-        <TopBar title={title} subtitle={subtitle} />
+        <TopBar title={title} />
         <div className="min-h-0 flex-1 overflow-hidden">
           {view === "soundboard" && <SoundboardView />}
           {view === "music" && <MusicView />}

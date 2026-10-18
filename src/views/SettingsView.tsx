@@ -1,5 +1,5 @@
 import { DeviceSetup } from "~/components/mixer/DeviceSetup";
-import { Badge, Card, SectionLabel, Segmented } from "~/components/ui/misc";
+import { Badge, Card, Segmented } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
 
 const PARTS = [
@@ -24,10 +24,7 @@ function LatencyCard() {
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between">
-        <div>
-          <SectionLabel>Latenz</SectionLabel>
-          <h2 className="mt-1 font-display text-lg font-semibold tracking-tight">Mikrofon → Kabel</h2>
-        </div>
+        <h2 className="font-display text-lg font-semibold tracking-tight">Latenz</h2>
         {running && <Badge tone={tone}>Ziel &lt; {TARGET_MS} ms</Badge>}
       </div>
 
@@ -64,12 +61,9 @@ function LatencyCard() {
               </dd>
             </div>
           </dl>
-          <p className="mt-3 text-2xs text-muted-foreground">
-            Geschätzt innerhalb der App, ohne Wandler- und Treiberlatenz.
-          </p>
         </>
       ) : (
-        <p className="mt-3 text-sm text-muted-foreground">Starte die Engine, um die Verzögerung zu messen.</p>
+        <p className="mt-3 text-sm text-muted-foreground">Engine aus</p>
       )}
     </Card>
   );
@@ -79,10 +73,12 @@ function BufferCard() {
   const bufferMs = useStore((s) => s.config.bufferMs);
   return (
     <Card className="p-5">
-      <SectionLabel>Puffer</SectionLabel>
-      <p className="mt-1 mb-3 text-xs text-muted-foreground">
-        Kleiner = weniger Verzögerung, größer = robuster gegen Knackser.
-      </p>
+      <h2
+        className="mb-3 font-display text-lg font-semibold tracking-tight"
+        title="Kleiner = weniger Verzögerung, größer = robuster gegen Knackser"
+      >
+        Puffer
+      </h2>
       <Segmented
         value={bufferMs}
         options={[5, 10, 20, 40]}
