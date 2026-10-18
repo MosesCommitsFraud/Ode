@@ -55,6 +55,7 @@ export function PageChannel({
         }}
         isDefault={same(params, CHANNEL_DEFAULTS[id])}
         onReset={() => actions.setChannel(id, CHANNEL_DEFAULTS[id])}
+        hideName
       />
     </Card>
   );

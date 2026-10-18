@@ -71,6 +71,8 @@ export interface StripProps {
   /** Stellt Lautstärke, Mute, Routing und Limiter auf den Auslieferungszustand. */
   onReset: () => void;
   isDefault: boolean;
+  /** Ohne Name und Symbol, z. B. wenn die Seite den Kanal schon benennt. */
+  hideName?: boolean;
 }
 
 export function ChannelStrip({
@@ -87,50 +89,55 @@ export function ChannelStrip({
   disabled,
   onReset,
   isDefault,
+  hideName,
 }: StripProps) {
   const live = muted ? 0 : peak;
+  const reset = (
+    <button
+      type="button"
+      title="Auf Standard zurücksetzen"
+      disabled={isDefault}
+      onClick={onReset}
+      className="flex size-7 shrink-0 cursor-default items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground [&_svg]:size-4"
+    >
+      <RotateCcw />
+    </button>
+  );
 
   return (
     <div
       style={{ "--ch": color } as CSSProperties}
       className={cn("flex w-[calc((100vw-21rem)/6)] max-w-[10rem] min-w-[6.5rem] shrink-0 flex-col px-2.5 py-3.5", disabled && "opacity-55")}
     >
-      <div className="flex items-center gap-1.5">
-        <span
-          className="flex shrink-0 items-center text-[var(--ch)] [&_svg]:size-[18px]"
-        >
-          {icon}
-        </span>
-        <div className="min-w-0 flex-1 truncate text-[12.5px] font-semibold" title={name}>
-          {name}
+      {!hideName && (
+        <div className="mb-3 flex items-center gap-1.5">
+          <span className="flex shrink-0 items-center text-[var(--ch)] [&_svg]:size-[18px]">{icon}</span>
+          <div className="min-w-0 flex-1 truncate text-[12.5px] font-semibold" title={name}>
+            {name}
+          </div>
+          {reset}
         </div>
+      )}
+
+      <div className="flex items-center gap-1.5">
         <button
           type="button"
-          title="Auf Standard zurücksetzen"
-          disabled={isDefault}
-          onClick={onReset}
-          className="flex size-7 shrink-0 cursor-default items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground [&_svg]:size-4"
+          title={gainDb === 0 ? "Grundlautstärke 0 dB" : "Auf 0 dB zurücksetzen"}
+          disabled={disabled || gainDb === 0}
+          onClick={() => onGain(0)}
+          className={cn(
+            "well group/db relative min-w-0 flex-1 cursor-default rounded-lg py-1.5 text-center font-mono text-sm font-medium tabular-nums transition-colors",
+            muted ? "text-error-foreground" : gainDb > 0 ? "text-[var(--ch)]" : "text-foreground",
+          )}
         >
-          <RotateCcw />
+          {muted ? "MUTE" : formatDb(gainDb)}
+          {!muted && <span className="ml-1 text-3xs text-muted-foreground">dB</span>}
+          {gainDb !== 0 && !disabled && (
+            <RotateCcw className="absolute top-1/2 right-2 size-3 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover/db:opacity-100" />
+          )}
         </button>
+        {hideName && reset}
       </div>
-
-      <button
-        type="button"
-        title={gainDb === 0 ? "Grundlautstärke 0 dB" : "Auf 0 dB zurücksetzen"}
-        disabled={disabled || gainDb === 0}
-        onClick={() => onGain(0)}
-        className={cn(
-          "well group/db relative mt-3 cursor-default rounded-lg py-1.5 text-center font-mono text-sm font-medium tabular-nums transition-colors",
-          muted ? "text-error-foreground" : gainDb > 0 ? "text-[var(--ch)]" : "text-foreground",
-        )}
-      >
-        {muted ? "MUTE" : formatDb(gainDb)}
-        {!muted && <span className="ml-1 text-3xs text-muted-foreground">dB</span>}
-        {gainDb !== 0 && !disabled && (
-          <RotateCcw className="absolute top-1/2 right-2 size-3 -translate-y-1/2 text-muted-foreground opacity-0 transition-opacity group-hover/db:opacity-100" />
-        )}
-      </button>
 
       <div className="flex min-h-0 flex-1 justify-center">
         <Fader
