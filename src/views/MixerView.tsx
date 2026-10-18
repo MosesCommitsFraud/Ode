@@ -9,7 +9,7 @@ import { cn } from "~/lib/utils";
 const CHANNELS: { id: ChannelId; name: string; icon: ReactNode; color: string; ready: boolean }[] = [
   { id: "mic", name: "Mikrofon", icon: <Mic />, color: "var(--ch-mic)", ready: true },
   { id: "soundboard", name: "Soundboard", icon: <Sparkles />, color: "var(--ch-soundboard)", ready: true },
-  { id: "music", name: "Musik", icon: <Music />, color: "var(--ch-music)", ready: false },
+  { id: "music", name: "Musik", icon: <Music />, color: "var(--ch-music)", ready: true },
 ];
 
 const OUTPUTS: { id: OutputId; name: string; kind: string; icon: ReactNode }[] = [
