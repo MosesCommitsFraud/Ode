@@ -17,7 +17,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, typ
 import { SetupWizard } from "~/components/setup/SetupWizard";
 import { downloads } from "~/lib/downloads";
 import { isTauri } from "~/lib/engine";
-import { formatTime, music, useMusic, type PlayerState, type Repeat as RepeatMode, type Track } from "~/lib/music";
+import { formatTime, music, useMusic, type Repeat as RepeatMode, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
 
 const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { off: "all", all: "one", one: "off" };
@@ -26,12 +26,6 @@ const REPEAT_TITLE: Record<RepeatMode, string> = {
   all: "Wiederholen: alle",
   one: "Wiederholen: dieser Titel",
 };
-
-/* Lautstärke und Cover kommen mit dem nächsten Stand der Musik-Bibliothek;
-   bis dahin bleiben die Felder optional. */
-type WithVolume = PlayerState & { volume?: number };
-type WithCover = Track & { cover?: string | null };
-const player = music as typeof music & { setVolume?: (v: number) => void };
 
 /** Waagerechter Regler mit Ziehen, Klicken und Pfeiltasten. Wert 0–1. */
 function useDrag(onChange: (v: number) => void, onCommit?: (v: number) => void) {
@@ -105,7 +99,7 @@ function Timeline({ position, duration }: { position: number; duration: number }
   );
 }
 
-function VolumeSlider({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled: boolean }) {
+function VolumeSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const { ref, handlers } = useDrag(onChange);
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "ArrowRight" || e.key === "ArrowUp") onChange(Math.min(1, value + 0.05));
@@ -117,19 +111,15 @@ function VolumeSlider({ value, onChange, disabled }: { value: number; onChange: 
     <div
       ref={ref}
       role="slider"
-      tabIndex={disabled ? -1 : 0}
+      tabIndex={0}
       aria-label="Player-Lautstärke"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(value * 100)}
-      aria-disabled={disabled}
-      title={disabled ? "Kommt mit dem nächsten Musik-Update" : `${Math.round(value * 100)} %`}
-      {...(disabled ? {} : handlers)}
-      onKeyDown={disabled ? undefined : onKeyDown}
-      className={cn(
-        "group relative flex h-4 w-24 touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        disabled && "opacity-40",
-      )}
+      title={`${Math.round(value * 100)} %`}
+      {...handlers}
+      onKeyDown={onKeyDown}
+      className="group relative flex h-4 w-24 touch-none items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="well relative h-1 w-full overflow-hidden rounded-full transition-[height] duration-150 group-hover:h-1.5">
         <div className="absolute inset-y-0 left-0 rounded-full bg-foreground" style={{ width: `${value * 100}%` }} />
@@ -172,7 +162,7 @@ function ControlButton({
   );
 }
 
-function Cover({ track, loading }: { track: WithCover | null; loading: boolean }) {
+function Cover({ track, loading }: { track: Track | null; loading: boolean }) {
   const [failed, setFailed] = useState(false);
   const src = track?.cover && isTauri ? convertFileSrc(track.cover) : null;
   useEffect(() => setFailed(false), [src]);
@@ -202,7 +192,7 @@ function Cover({ track, loading }: { track: WithCover | null; loading: boolean }
 
 /** Schwebende Musik-Leiste unten: Titel mit Cover, Steuerung, Zeitleiste, Player-Lautstärke. */
 export function MusicBar() {
-  const state = useMusic((s) => s.player) as WithVolume;
+  const state = useMusic((s) => s.player);
 
   useEffect(() => {
     void music.init();
@@ -210,17 +200,16 @@ export function MusicBar() {
     void downloads.init();
   }, []);
 
-  const track = state.track as WithCover | null;
+  const track = state.track;
   const hasTrack = track !== null;
-  const canSetVolume = typeof player.setVolume === "function";
-  const volume = state.volume ?? 1;
+  const volume = state.volume;
   const lastVolume = useRef(volume > 0 ? volume : 1);
   if (volume > 0) lastVolume.current = volume;
   const VolumeIcon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   return (
-    <div className="px-4 pb-3">
-      <div className="mx-auto flex h-14 items-center gap-4 rounded-xl border border-border bg-card px-2.5 shadow-dock">
+    <div className="px-6 pt-1 pb-2">
+      <div className="panel mx-auto flex h-16 items-center gap-4 rounded-2xl px-3 shadow-dock">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Cover track={track} loading={state.loading} />
           <div className="min-w-0">
@@ -271,12 +260,11 @@ export function MusicBar() {
         <div className="flex flex-1 items-center justify-end gap-1.5 pr-1.5">
           <ControlButton
             title={volume === 0 ? "Ton an" : "Stumm"}
-            disabled={!canSetVolume}
-            onClick={() => player.setVolume?.(volume === 0 ? lastVolume.current : 0)}
+            onClick={() => music.setVolume(volume === 0 ? lastVolume.current : 0)}
           >
             <VolumeIcon />
           </ControlButton>
-          <VolumeSlider value={volume} disabled={!canSetVolume} onChange={(v) => player.setVolume?.(v)} />
+          <VolumeSlider value={volume} onChange={(v) => music.setVolume(v)} />
         </div>
       </div>
       {/* Einrichtungsassistent beim ersten Start (Portal, liegt nur hier, weil die Leiste immer da ist). */}

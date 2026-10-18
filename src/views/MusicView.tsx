@@ -3,7 +3,6 @@ import {
   ChevronRight,
   ListPlus,
   Loader2,
-  Music,
   Pause,
   Play,
   Trash2,
@@ -315,7 +314,10 @@ export function MusicView() {
 
         <div ref={ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden">
           {loaded && list.length === 0 ? (
-            <EmptyState icon={<Music />} title={playlist ? "Playlist ist leer" : "Noch keine Musik"} />
+            <EmptyState
+              art={playlist ? "playlist" : "music"}
+              title={playlist ? "Diese Playlist hat Lampenfieber" : "Hier herrscht Funkstille"}
+            />
           ) : (
             <div className="grid" style={{ gridAutoRows: ROW_HEIGHT }}>
               {shown.map((track, i) => (

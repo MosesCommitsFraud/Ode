@@ -33,7 +33,7 @@ function Range({
     <label className={cn("block space-y-1.5", disabled && "opacity-45")}>
       <div className="flex justify-between gap-2 text-2xs">
         <span className="truncate text-muted-foreground">{label}</span>
-        <span className="font-mono tabular-nums">{format(value)}</span>
+        <span className="font-mono whitespace-nowrap tabular-nums">{format(value)}</span>
       </div>
       <input
         type="range"
@@ -51,13 +51,14 @@ function Range({
   );
 }
 
-/** Ein Effekt als Zeile im Rack: Name und Schalter, Regler, Anzeige. */
+/** Ein Effekt als Karte: Kopf mit Schalter, große Anzeige, Regler nebeneinander darunter. */
 function Module({
   title,
   enabled,
   onToggle,
   status,
   display,
+  className,
   children,
 }: {
   title: string;
@@ -65,21 +66,20 @@ function Module({
   onToggle: (on: boolean) => void;
   status?: ReactNode;
   display: ReactNode;
-  children: ReactNode;
+  className?: string;
+  children?: ReactNode;
 }) {
   return (
-    <Card className="grid min-h-0 grid-cols-[12rem_minmax(0,1fr)_minmax(12rem,20rem)] items-stretch gap-6 px-5 py-3">
-      <div className="flex items-center gap-3">
+    <Card className={cn("flex min-h-0 min-w-0 flex-col gap-3 p-4", className)}>
+      <div className="flex h-7 items-center gap-3">
         <Switch label={title} checked={enabled} onCheckedChange={onToggle} />
-        <h3 className="min-w-0 flex-1 truncate font-display text-base leading-tight font-semibold tracking-tight">{title}</h3>
+        <h3 className="min-w-0 flex-1 truncate font-display text-base font-semibold tracking-tight">{title}</h3>
+        {status}
       </div>
-
-      <div className="grid grid-flow-col auto-cols-[minmax(0,13rem)] content-center justify-start gap-8">{children}</div>
-
-      <div className={cn("well relative min-h-0 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
+      <div className={cn("well relative min-h-0 flex-1 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
         {display}
-        {status && <div className="absolute top-2 right-2">{status}</div>}
       </div>
+      {children && <div className="space-y-2.5">{children}</div>}
     </Card>
   );
 }
@@ -88,7 +88,7 @@ function Module({
 
 const GATE_FLOOR = -80;
 /** LED-Segmente wie bei den Pegeln im Mischpult. */
-const SEGMENTS = "repeating-linear-gradient(to right, #000 0 3px, transparent 3px 5px)";
+const SEGMENTS = "repeating-linear-gradient(to right, #000 0 4px, transparent 4px 7px)";
 
 /** Pegel des Mikrofons gegen die Schwelle des Gates. */
 function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: number; open: boolean }) {
@@ -100,7 +100,7 @@ function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: n
 
   return (
     <div className="absolute inset-0 flex items-center px-4">
-      <div className="relative h-3 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
+      <div className="relative h-8 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
         <div className="absolute inset-0 bg-[var(--led-off)]" />
         <div
           className={cn("absolute inset-y-0 left-0", open ? "bg-[var(--ch-mic)]" : "bg-muted-foreground/40")}
@@ -108,7 +108,7 @@ function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: n
         />
       </div>
       <div
-        className="absolute top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-foreground"
+        className="absolute top-1/2 h-12 w-0.5 -translate-y-1/2 rounded-full bg-foreground"
         style={{ left: `calc(1rem + (100% - 2rem) * ${threshold})` }}
       />
     </div>
@@ -183,7 +183,7 @@ function ReductionDisplay({ db, max }: { db: number; max: number }) {
   const amount = Math.min(1, Math.max(0, -db / max));
   return (
     <div className="absolute inset-0 flex items-center px-4">
-      <div className="relative h-3 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
+      <div className="relative h-8 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
         <div className="absolute inset-0 bg-[var(--led-off)]" />
         <div className="absolute inset-y-0 right-0 bg-warning" style={{ width: `${amount * 100}%` }} />
       </div>
@@ -206,8 +206,9 @@ export function EffectsView() {
   const voice = running ? (live?.voice ?? 0) : 0;
 
   return (
-    <div className="grid h-full auto-rows-fr gap-3 overflow-hidden px-6 pt-3 pb-3">
+    <div className="grid h-full grid-cols-6 grid-rows-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3 overflow-hidden px-6 pt-3 pb-3">
       <Module
+        className="col-span-3"
         title="Noise Gate"
         enabled={fx.gate.enabled}
         onToggle={(enabled) => actions.setEffect("gate", { enabled })}
@@ -237,6 +238,7 @@ export function EffectsView() {
       </Module>
 
       <Module
+        className="col-span-3"
         title="Rauschfilter"
         enabled={fx.denoise.enabled}
         onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
@@ -245,14 +247,10 @@ export function EffectsView() {
           running && <Reading tone={voice > 0.6 ? "success" : "default"}>{voice > 0.6 ? "Sprache" : "Ruhe"}</Reading>
         }
         display={<VoiceDisplay voice={voice} enabled={fx.denoise.enabled} />}
-      >
-        <div className="flex justify-between text-2xs">
-          <span className="text-muted-foreground">Sprache erkannt</span>
-          <span className="font-mono tabular-nums">{fx.denoise.enabled ? Math.round(voice * 100) : 0} %</span>
-        </div>
-      </Module>
+      />
 
       <Module
+        className="col-span-2"
         title="Equalizer"
         enabled={fx.eq.enabled}
         onToggle={(enabled) => actions.setEffect("eq", { enabled })}
@@ -280,6 +278,7 @@ export function EffectsView() {
       </Module>
 
       <Module
+        className="col-span-2"
         title="Kompressor"
         enabled={fx.compressor.enabled}
         onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
@@ -335,6 +334,7 @@ export function EffectsView() {
       </Module>
 
       <Module
+        className="col-span-2"
         title="Limiter"
         enabled={fx.limiter.enabled}
         onToggle={(enabled) => actions.setEffect("limiter", { enabled })}

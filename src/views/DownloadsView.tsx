@@ -1,10 +1,11 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ChevronLeft, ChevronRight, ClipboardPaste, Download, Loader2, X } from "lucide-react";
-import { useEffect, useRef, useState, type WheelEvent } from "react";
+import { ArrowDown, ChevronLeft, ChevronRight, Download, Link2, Loader2, X } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type WheelEvent } from "react";
 import { Button } from "~/components/ui/button";
-import { Card, EmptyState, Segmented } from "~/components/ui/misc";
+import { Card, EmptyState, Kbd } from "~/components/ui/misc";
 import { ACTIVE, downloads, useDownloads, type Job, type Target } from "~/lib/downloads";
 import { isTauri } from "~/lib/engine";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { music } from "~/lib/music";
 import { cn } from "~/lib/utils";
 
@@ -21,18 +22,7 @@ const STATUS: Record<Job["status"], string> = {
   cancelled: "Abgebrochen",
 };
 
-/* „Beides“, Cover und nachträgliches Umstellen kommen mit dem nächsten Stand
-   der Download-Bibliothek; bis dahin sind die Felder optional. */
-type Choice = Target | "both";
-type JobExtra = Job & { cover?: string | null };
-const api = downloads as typeof downloads & {
-  setTarget?: (id: number, target: Choice) => Promise<void>;
-};
-const addJob = downloads.add as (url: string, target: Choice, playlistId?: number | null) => Promise<void>;
-const SUPPORTS_BOTH = typeof api.setTarget === "function";
-
-const CHOICES: Choice[] = ["soundboard", "music", "both"];
-const CHOICE_LABEL: Record<Choice, string> = { soundboard: "Soundboard", music: "Musik", both: "Beides" };
+const CHOICE_LABEL: Record<Target, string> = { soundboard: "Soundboard", music: "Musik", both: "Beides" };
 
 function isLink(text: string) {
   return /^https?:\/\/\S+$/i.test(text.trim());
@@ -81,74 +71,143 @@ function ToolsSetup() {
   );
 }
 
+function TargetChip({
+  on,
+  color,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  color: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      style={{ "--chip": color } as CSSProperties}
+      className={cn(
+        "h-8 cursor-default rounded-full px-3.5 text-xs font-semibold transition-colors",
+        on
+          ? "bg-[color-mix(in_oklch,var(--chip)_18%,transparent)] text-[var(--chip)]"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Eine Zeile: Link, Ziel (eins oder beides) und Los. */
 function AddForm() {
+  const input = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState("");
-  const [target, setTarget] = useState<Choice>("soundboard");
-  const [pasteError, setPasteError] = useState<string | null>(null);
+  const [toSounds, setToSounds] = useState(true);
+  const [toMusic, setToMusic] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const error = useDownloads((s) => s.error);
 
-  const submit = async (link = url) => {
-    const clean = link.trim();
-    if (!clean) return;
-    if (target === "both" && !SUPPORTS_BOTH) {
-      await addJob(clean, "soundboard", null);
-      await addJob(clean, "music", null);
-    } else {
-      await addJob(clean, target, null);
-    }
+  useEffect(() => input.current?.focus(), []);
+
+  const target: Target = toSounds && toMusic ? "both" : toMusic ? "music" : "soundboard";
+  const valid = isLink(url);
+
+  const submit = async () => {
+    if (!valid) return;
+    const clean = url.trim();
+    await downloads.add(clean, target);
     setUrl("");
+    input.current?.focus();
   };
 
   const paste = async () => {
-    setPasteError(null);
+    setHint(null);
     try {
-      const text = (await navigator.clipboard.readText()).trim();
-      if (!isLink(text)) {
-        setPasteError("In der Zwischenablage ist kein Link.");
-        return;
-      }
-      setUrl(text);
+      const text = (isTauri ? await readText() : await navigator.clipboard.readText()).trim();
+      if (isLink(text)) setUrl(text);
+      else setHint("In der Zwischenablage ist kein Link.");
     } catch {
-      setPasteError("Zwischenablage nicht lesbar.");
+      setHint("Zwischenablage nicht lesbar – Strg V geht auch.");
     }
+    input.current?.focus();
+  };
+
+  // Mindestens ein Ziel bleibt immer an.
+  const flip = (which: "sounds" | "music") => {
+    if (which === "sounds") setToSounds((on) => (on && !toMusic ? on : !on));
+    else setToMusic((on) => (on && !toSounds ? on : !on));
   };
 
   return (
-    <Card className="p-4">
-      <div className="flex items-center gap-3">
-        <div className="well flex h-11 min-w-0 flex-1 items-center rounded-xl pr-1.5 pl-4 focus-within:ring-2 focus-within:ring-ring">
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && void submit()}
-            placeholder="Link – YouTube, SoundCloud, …"
-            className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-          <Button variant="outline" size="sm" onClick={() => void paste()}>
-            <ClipboardPaste /> Einfügen
-          </Button>
-        </div>
-        <div className="w-64 shrink-0">
-          <Segmented value={target} options={CHOICES} onChange={setTarget} format={(t) => CHOICE_LABEL[t]} />
-        </div>
-        <Button disabled={!url.trim()} onClick={() => void submit()}>
-          <Download /> Laden
-        </Button>
+    <div>
+      <div className="panel flex h-16 items-center gap-2 rounded-2xl pr-2.5 pl-5 focus-within:shadow-[var(--shadow-panel),0_0_0_2px_var(--ring)]">
+        <Link2 className="size-5 shrink-0 text-muted-foreground" />
+        <input
+          ref={input}
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setHint(null);
+          }}
+          onKeyDown={(e) => e.key === "Enter" && void submit()}
+          placeholder="Link von YouTube, SoundCloud, …"
+          spellCheck={false}
+          className="h-full min-w-0 flex-1 bg-transparent px-1 text-[15px] outline-none placeholder:text-muted-foreground"
+        />
+        {url ? (
+          <button
+            type="button"
+            title="Leeren"
+            onClick={() => {
+              setUrl("");
+              input.current?.focus();
+            }}
+            className="flex size-8 cursor-default items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground [&_svg]:size-4"
+          >
+            <X />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void paste()}
+            className="flex h-8 cursor-default items-center gap-2 rounded-full px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            Einfügen <Kbd>Strg V</Kbd>
+          </button>
+        )}
+        <span className="mx-1 h-6 w-px bg-border" />
+        <TargetChip on={toSounds} color="var(--ch-soundboard)" onClick={() => flip("sounds")}>
+          Soundboard
+        </TargetChip>
+        <TargetChip on={toMusic} color="var(--ch-music)" onClick={() => flip("music")}>
+          Musik
+        </TargetChip>
+        <button
+          type="button"
+          title="Laden"
+          disabled={!valid}
+          onClick={() => void submit()}
+          className="ml-1 flex size-11 shrink-0 cursor-default items-center justify-center rounded-xl bg-primary text-primary-foreground transition-all active:scale-95 disabled:bg-muted disabled:text-muted-foreground [&_svg]:size-5"
+        >
+          <ArrowDown />
+        </button>
       </div>
-      {(pasteError || error) && <p className="mt-2 px-1 text-sm text-error-foreground">{pasteError ?? error}</p>}
-    </Card>
+      {(hint || error) && <p className="mt-2 px-5 text-xs text-error-foreground">{hint ?? error}</p>}
+    </div>
   );
 }
 
 /** Ziel einer fertigen Datei umschalten: Soundboard, Musik oder beides. */
 function TargetToggle({ job }: { job: Job }) {
-  const editable = job.status === "done" && typeof api.setTarget === "function";
-  const current = job.target as Choice;
+  const editable = job.status === "done";
+  const current = job.target;
   const has = (t: Target) => current === t || current === "both";
   const toggle = (t: Target) => {
     const other: Target = t === "soundboard" ? "music" : "soundboard";
-    const next: Choice = has(t) ? (has(other) ? other : current) : has(other) ? "both" : t;
-    if (next !== current) void api.setTarget?.(job.id, next);
+    const next: Target = has(t) ? (has(other) ? other : current) : has(other) ? "both" : t;
+    if (next !== current) void downloads.setTarget(job.id, next);
   };
 
   return (
@@ -177,7 +236,7 @@ function TargetToggle({ job }: { job: Job }) {
   );
 }
 
-function Thumb({ job }: { job: JobExtra }) {
+function Thumb({ job }: { job: Job }) {
   const [failed, setFailed] = useState(false);
   const src = job.cover && isTauri ? convertFileSrc(job.cover) : null;
   return (
@@ -275,7 +334,9 @@ export function DownloadsView() {
         </div>
         <div ref={ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden">
           {jobs.length === 0 ? (
-            <EmptyState icon={<Download />} title="Keine Downloads" />
+            <EmptyState art="downloads" title="Die Kiste ist leer">
+              Link oben rein, den Rest macht Ode.
+            </EmptyState>
           ) : (
             <div className="grid" style={{ gridAutoRows: ROW_HEIGHT }}>
               {shown.map((job) => (

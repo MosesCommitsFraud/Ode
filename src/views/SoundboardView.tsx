@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, LayoutGrid, Loader2, Play, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Play, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { SoundEditor } from "~/components/soundboard/SoundEditor";
 import { SoundTile } from "~/components/soundboard/SoundTile";
@@ -194,7 +194,9 @@ export function SoundboardView() {
 
       <div ref={grid.ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden px-6">
         {sounds.length === 0 && loaded ? (
-          <EmptyState icon={<LayoutGrid />} title="Noch keine Sounds" />
+          <EmptyState art="sounds" title="Noch kein einziges Airhorn">
+            Zieh Audiodateien hier rein.
+          </EmptyState>
         ) : visible.length === 0 && loaded ? (
           <p className="pt-16 text-center text-sm text-muted-foreground">Keine Sounds für diese Auswahl.</p>
         ) : (
