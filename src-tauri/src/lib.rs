@@ -1,7 +1,9 @@
 pub mod audio;
+mod cable;
 pub mod downloader;
 pub mod library;
 pub mod music;
+mod shell;
 mod soundboard;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -253,6 +255,14 @@ fn set_effects(engine: State<Engine>, dirty: State<MixerDirty>, params: EffectsP
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Ein zweiter Start holt nur das laufende Fenster nach vorn.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            shell::show_main(app);
+        }))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![shell::MINIMIZED_ARG]),
+        ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(soundboard::hotkey_plugin())
@@ -260,11 +270,13 @@ pub fn run() {
         .manage(soundboard::Hotkeys::default())
         .manage(MixerDirty::default())
         .manage(Player::default())
+        .on_window_event(shell::on_window_event)
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             app.manage(Library::open(&data_dir)?);
             app.manage(MusicLibrary::open(&data_dir)?);
             app.manage(Tools::new(&data_dir)?);
+            app.manage(cable::Cable::new(&data_dir));
             app.manage(Downloads::new(&data_dir)?);
             downloader::start(app.handle());
             Player::spawn_monitor(app.handle().clone());
@@ -274,6 +286,8 @@ pub fn run() {
             let handle = app.handle().clone();
             thread::spawn(move || handle.state::<Library>().preload());
             spawn_meter_loop(app.handle().clone());
+            shell::create_tray(app.handle())?;
+            shell::show_on_start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -314,6 +328,12 @@ pub fn run() {
             downloader::download_add,
             downloader::download_cancel,
             downloader::downloads_clear,
+            shell::app_settings,
+            shell::set_app_settings,
+            shell::quit_app,
+            cable::cable_status,
+            cable::cable_install,
+            cable::open_sound_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

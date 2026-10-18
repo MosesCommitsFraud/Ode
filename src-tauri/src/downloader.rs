@@ -41,6 +41,42 @@ fn command(program: &Path) -> Command {
     cmd
 }
 
+/// Lädt eine Datei mit Fortschritt (0–1) herunter; erst fertig, dann umbenannt.
+pub(crate) fn download_file(
+    url: &str,
+    target: &Path,
+    progress: impl Fn(f32),
+) -> anyhow::Result<()> {
+    let mut response = ureq::get(url).call()?;
+    let total = response.body().content_length().unwrap_or(0);
+    let mut reader = response.body_mut().as_reader();
+    let partial = target.with_extension("part");
+    let mut file = File::create(&partial)?;
+    let mut buf = vec![0u8; 256 * 1024];
+    let mut done = 0u64;
+    let mut last = 0u64;
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        file.write_all(&buf[..n])?;
+        done += n as u64;
+        if total > 0 && done - last > total / 100 {
+            last = done;
+            progress(done as f32 / total as f32);
+        }
+    }
+    file.flush()?;
+    drop(file);
+    fs::rename(&partial, target)?;
+    Ok(())
+}
+
+pub(crate) fn hidden_command(program: &Path) -> Command {
+    command(program)
+}
+
 // ------------------------------------------------------------ Werkzeuge
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -124,30 +160,7 @@ impl Tools {
 
     /// Lädt eine Datei mit Fortschritt herunter.
     fn download(&self, url: &str, target: &Path, step: &str) -> anyhow::Result<()> {
-        let mut response = ureq::get(url).call()?;
-        let total = response.body().content_length().unwrap_or(0);
-        let mut reader = response.body_mut().as_reader();
-        let partial = target.with_extension("part");
-        let mut file = File::create(&partial)?;
-        let mut buf = vec![0u8; 256 * 1024];
-        let mut done = 0u64;
-        let mut last = 0u64;
-        loop {
-            let n = reader.read(&mut buf)?;
-            if n == 0 {
-                break;
-            }
-            file.write_all(&buf[..n])?;
-            done += n as u64;
-            if total > 0 && done - last > total / 100 {
-                last = done;
-                self.set_step(step, done as f32 / total as f32);
-            }
-        }
-        file.flush()?;
-        drop(file);
-        fs::rename(&partial, target)?;
-        Ok(())
+        download_file(url, target, |p| self.set_step(step, p))
     }
 
     fn install_files(&self) -> anyhow::Result<()> {
