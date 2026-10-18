@@ -136,7 +136,7 @@ function Cover({ seed }: { seed: number | null }) {
   const from = seed === null ? 200 : (seed * 67) % 360;
   return (
     <span
-      className="size-5 shrink-0 rounded-md"
+      className="size-5 shrink-0 rounded-[5px]"
       style={{
         background:
           seed === null
