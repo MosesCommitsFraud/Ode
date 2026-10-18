@@ -20,9 +20,9 @@ export const SETTINGS = {
   icon: <Settings2 />,
 };
 
-/** Wortmarke: nur der Name, kursiv in der Überschriftenschrift. */
+/** Wortmarke: nur der Name in der Überschriftenschrift. */
 function Logo() {
-  return <div className="font-display text-[30px] leading-none font-medium tracking-tight italic">ode</div>;
+  return <div className="font-display text-[30px] leading-none font-semibold tracking-tight">ode</div>;
 }
 
 function NavItem({

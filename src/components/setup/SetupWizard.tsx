@@ -156,7 +156,7 @@ export function SetupWizard() {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div role="dialog" aria-label="Einrichtung" className="relative w-full max-w-md rounded-3xl bg-popover p-6 shadow-[var(--shadow-pop)]">
-        <div className="mb-4 font-display text-2xl italic leading-none">ode</div>
+        <div className="mb-4 font-display text-2xl leading-none font-semibold tracking-tight">ode</div>
         <div className="mb-5 flex gap-1.5">
           {STEPS.map((s, i) => (
             <span key={s} className={cn("h-1 flex-1 rounded-full", i <= step ? "bg-primary" : "bg-[var(--meter-track)]")} />
