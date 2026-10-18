@@ -116,6 +116,7 @@ fn play_noise(device: &cpal::Device) -> anyhow::Result<(cpal::Stream, Arc<Mutex<
 }
 
 /// Findet die Verzögerung von `late` gegenüber `early` in ms.
+#[allow(clippy::needless_range_loop)]
 fn correlate(early: &[f32], late: &[f32], early_base: f64, late_base: f64) -> (f64, f64) {
     // late[j] ≈ early[j + shift - lag]
     let shift = ((late_base - early_base) * RATE as f64 / 1e9).round() as i64;

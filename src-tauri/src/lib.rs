@@ -1,4 +1,6 @@
 pub mod audio;
+pub mod library;
+mod soundboard;
 
 use std::sync::atomic::Ordering;
 use std::thread;
@@ -11,6 +13,8 @@ use audio::ENGINE_RATE;
 use audio::devices::{self, DeviceList};
 use audio::engine::{Engine, EngineConfig, EngineInfo};
 use audio::mixer::{ChannelId, ChannelParams, Mixer, Output, OutputId, OutputParams};
+use audio::sampler::PlayingSound;
+use library::Library;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -49,6 +53,7 @@ struct Meters {
     /// Geschätzte Verzögerung Mikrofon → Kabel innerhalb der App.
     latency_ms: f32,
     errors: Vec<String>,
+    playing: Vec<PlayingSound>,
 }
 
 fn frames_to_ms(frames: u32, rate: u32) -> f32 {
@@ -102,6 +107,7 @@ fn snapshot(engine: &Engine) -> Meters {
         input_callback_ms,
         latency_ms,
         errors: engine.errors.lock().clone(),
+        playing: engine.playing.lock().clone(),
     }
 }
 
@@ -165,8 +171,16 @@ fn set_output(engine: State<Engine>, output: OutputId, params: OutputParams) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(soundboard::hotkey_plugin())
         .manage(Engine::spawn())
+        .manage(soundboard::Hotkeys::default())
         .setup(|app| {
+            let data_dir = app.path().app_data_dir()?;
+            app.manage(Library::open(&data_dir)?);
+            soundboard::sync_hotkeys(app.handle());
+            let handle = app.handle().clone();
+            thread::spawn(move || handle.state::<Library>().preload());
             spawn_meter_loop(app.handle().clone());
             Ok(())
         })
@@ -178,6 +192,14 @@ pub fn run() {
             get_mixer,
             set_channel,
             set_output,
+            soundboard::library_list,
+            soundboard::library_import,
+            soundboard::library_update,
+            soundboard::library_delete,
+            soundboard::hotkey_errors,
+            soundboard::sound_play,
+            soundboard::sound_stop,
+            soundboard::sound_stop_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

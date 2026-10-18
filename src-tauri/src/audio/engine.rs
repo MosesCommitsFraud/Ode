@@ -1,6 +1,7 @@
 //! Engine-Thread: besitzt die Geräte-Streams und wird nur über Befehle
-//! gesteuert. Mikrofon → Kanal-Fader → je ein Puffer pro Ausgang →
-//! Routing, Ausgangs-Fader, Limiter → Kopfhörer (A) und Kabel (B).
+//! gesteuert. Mikrofon → Kanal-Fader → je ein Puffer pro Ausgang; dort
+//! kommen Soundboard-Sounds dazu → Routing, Ausgangs-Fader, Limiter →
+//! Kopfhörer (A) und Kabel (B).
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -20,12 +21,15 @@ use serde::{Deserialize, Serialize};
 use super::dsp::{Limiter, SmoothedGain, peak};
 use super::mixer::{ChannelId, Mixer, OutputId};
 use super::resample::{PullResampler, PushResampler};
+use super::sampler::{PlayingSound, Sampler, SamplerCommand};
 use super::{BLOCK_FRAMES, ENGINE_RATE, devices};
 
 /// Größter Callback, für den Puffer vorab angelegt werden.
 const MAX_CALLBACK_FRAMES: usize = 16_384;
 /// Kapazität der Puffer zwischen Eingang und Ausgängen: 1 s.
 const RING_FRAMES: usize = ENGINE_RATE as usize;
+/// Glättung für Routing und Kanal-Fader, etwa 10 ms Zeitkonstante.
+const SMOOTHING: f32 = 1.0 / 480.0;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +68,7 @@ enum Command {
 struct Running {
     _streams: Vec<Stream>,
     info: EngineInfo,
+    samplers: Vec<Sender<SamplerCommand>>,
 }
 
 pub struct Engine {
@@ -71,6 +76,9 @@ pub struct Engine {
     pub mixer: Arc<Mixer>,
     pub errors: Arc<Mutex<Vec<String>>>,
     info: Arc<Mutex<Option<EngineInfo>>>,
+    samplers: Arc<Mutex<Vec<Sender<SamplerCommand>>>>,
+    /// Laufende Sounds für die Oberfläche.
+    pub playing: Arc<Mutex<Vec<PlayingSound>>>,
 }
 
 impl Engine {
@@ -79,13 +87,19 @@ impl Engine {
         let mixer = Arc::new(Mixer::default());
         let errors = Arc::new(Mutex::new(Vec::new()));
         let info = Arc::new(Mutex::new(None));
+        let samplers = Arc::new(Mutex::new(Vec::new()));
+        let playing = Arc::new(Mutex::new(Vec::new()));
 
-        let thread_mixer = mixer.clone();
-        let thread_errors = errors.clone();
-        let thread_info = info.clone();
+        let shared = Shared {
+            mixer: mixer.clone(),
+            errors: errors.clone(),
+            info: info.clone(),
+            samplers: samplers.clone(),
+            playing: playing.clone(),
+        };
         thread::Builder::new()
             .name("ode-engine".into())
-            .spawn(move || run(receiver, thread_mixer, thread_errors, thread_info))
+            .spawn(move || run(receiver, shared))
             .expect("Engine-Thread konnte nicht starten");
 
         Self {
@@ -93,7 +107,21 @@ impl Engine {
             mixer,
             errors,
             info,
+            samplers,
+            playing,
         }
+    }
+
+    /// Schickt einen Befehl an die Sampler aller Ausgänge.
+    pub fn sampler(&self, command: SamplerCommand) -> Result<(), String> {
+        let samplers = self.samplers.lock();
+        if samplers.is_empty() {
+            return Err("Engine ist nicht gestartet".into());
+        }
+        for sampler in samplers.iter() {
+            let _ = sampler.send(command.clone());
+        }
+        Ok(())
     }
 
     pub fn start(&self, config: EngineConfig) -> Result<EngineInfo, String> {
@@ -118,12 +146,23 @@ impl Engine {
     }
 }
 
-fn run(
-    commands: Receiver<Command>,
+struct Shared {
     mixer: Arc<Mixer>,
     errors: Arc<Mutex<Vec<String>>>,
     info: Arc<Mutex<Option<EngineInfo>>>,
-) {
+    samplers: Arc<Mutex<Vec<Sender<SamplerCommand>>>>,
+    playing: Arc<Mutex<Vec<PlayingSound>>>,
+}
+
+impl Shared {
+    fn clear(&self) {
+        *self.info.lock() = None;
+        self.samplers.lock().clear();
+        self.playing.lock().clear();
+    }
+}
+
+fn run(commands: Receiver<Command>, shared: Shared) {
     let host = cpal::default_host();
     let mut running: Option<Running> = None;
 
@@ -132,12 +171,13 @@ fn run(
             Command::Start(config, reply) => {
                 // Alte Streams zuerst schließen, damit Geräte frei werden.
                 running = None;
-                *info.lock() = None;
-                let result = start(&host, &config, &mixer, &errors).map_err(|e| e.to_string());
+                shared.clear();
+                let result = start(&host, &config, &shared).map_err(|e| e.to_string());
                 let response = match result {
                     Ok(state) => {
                         let engine_info = state.info.clone();
-                        *info.lock() = Some(engine_info.clone());
+                        *shared.info.lock() = Some(engine_info.clone());
+                        *shared.samplers.lock() = state.samplers.clone();
                         running = Some(state);
                         Ok(engine_info)
                     }
@@ -147,7 +187,7 @@ fn run(
             }
             Command::Stop(reply) => {
                 running = None;
-                *info.lock() = None;
+                shared.clear();
                 let _ = reply.send(());
             }
         }
@@ -155,12 +195,9 @@ fn run(
     drop(running);
 }
 
-fn start(
-    host: &Host,
-    config: &EngineConfig,
-    mixer: &Arc<Mixer>,
-    errors: &Arc<Mutex<Vec<String>>>,
-) -> anyhow::Result<Running> {
+fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<Running> {
+    let mixer = &shared.mixer;
+    let errors = &shared.errors;
     errors.lock().clear();
     mixer.out_a.reset_stats();
     mixer.out_b.reset_stats();
@@ -170,6 +207,7 @@ fn start(
 
     let mut producers = Vec::new();
     let mut streams = Vec::new();
+    let mut samplers = Vec::new();
     let mut monitor = None;
     let mut cable = None;
 
@@ -180,14 +218,20 @@ fn start(
         let Some(id) = id else { continue };
         let device = devices::find(host, id)?;
         let (producer, consumer) = HeapRb::<f32>::new(RING_FRAMES).split();
+        // Den Fortschritt meldet das Kabel, ohne Kabel der Kopfhörer.
+        let reports = output == OutputId::B || config.cable_id.is_none();
+        let (sampler_tx, sampler_rx) = unbounded();
+        let sampler = Sampler::new(sampler_rx, reports.then(|| shared.playing.clone()));
         let (stream, stream_info) = build_output(
             &device,
             mixer.clone(),
             errors.clone(),
             output,
             consumer,
+            sampler,
             target_frames,
         )?;
+        samplers.push(sampler_tx);
         producers.push((output, producer));
         streams.push(stream);
         match output {
@@ -213,6 +257,7 @@ fn start(
             monitor,
             cable,
         },
+        samplers,
     })
 }
 
@@ -403,9 +448,13 @@ struct OutputProcessor {
     mixer: Arc<Mixer>,
     output: OutputId,
     consumer: HeapCons<f32>,
+    sampler: Sampler,
     resampler: PullResampler,
     channels: usize,
     target_frames: usize,
+    /// Weich nachgeführte Kanal-Pegel für dieses Ziel (pro Sample).
+    mic_send: f32,
+    soundboard_send: f32,
     /// Erst ausgeben, wenn der Puffer einmal den Zielwert erreicht hat.
     primed: bool,
     mono: Vec<f32>,
@@ -441,14 +490,35 @@ impl OutputProcessor {
         out.buffered_frames
             .store(self.consumer.occupied_len() as u32, Ordering::Relaxed);
 
+        self.sampler.poll();
+
+        // Kanäle in Engine-Rate mischen; Routing und Fader gleiten weich.
+        let mic_target = self.mixer.channel(ChannelId::Mic).send(self.output);
+        let soundboard = self.mixer.channel(ChannelId::Soundboard);
+        let soundboard_fader = soundboard.gain();
+        let soundboard_target = soundboard_fader * soundboard.send(self.output);
+        let mut soundboard_peak = 0.0f32;
+
         self.mono.resize(frames, 0.0);
         let mut starved = false;
         let consumer = &mut self.consumer;
+        let sampler = &mut self.sampler;
+        let mic_send = &mut self.mic_send;
+        let soundboard_send = &mut self.soundboard_send;
         let mut next = || {
-            consumer.try_pop().unwrap_or_else(|| {
+            let mic = consumer.try_pop().unwrap_or_else(|| {
                 starved = true;
                 0.0
-            })
+            });
+            *mic_send += (mic_target - *mic_send) * SMOOTHING;
+            *soundboard_send += (soundboard_target - *soundboard_send) * SMOOTHING;
+            let mut sum = mic * *mic_send;
+            if !sampler.is_idle() {
+                let sound = sampler.next_sample();
+                soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
+                sum += sound * *soundboard_send;
+            }
+            sum
         };
         if self.resampler.is_passthrough() {
             self.mono.iter_mut().for_each(|s| *s = next());
@@ -458,11 +528,10 @@ impl OutputProcessor {
         if starved {
             out.underruns.fetch_add(1, Ordering::Relaxed);
         }
+        soundboard.meter.fetch_max(soundboard_peak);
+        self.sampler.report();
 
-        // Routing und Ausgangs-Fader; weitere Kanäle werden hier gemischt.
-        let mic = self.mixer.channel(ChannelId::Mic);
-        let gain = mic.send(self.output) * out.gain();
-        self.gain.apply(&mut self.mono, gain);
+        self.gain.apply(&mut self.mono, out.gain());
 
         if out.limiter_enabled() {
             self.limiter.process(&mut self.mono);
@@ -486,6 +555,7 @@ fn build_output(
     errors: Arc<Mutex<Vec<String>>>,
     output: OutputId,
     consumer: HeapCons<f32>,
+    sampler: Sampler,
     target_frames: usize,
 ) -> anyhow::Result<(Stream, StreamInfo)> {
     let supported = pick_config(
@@ -503,9 +573,12 @@ fn build_output(
         mixer,
         output,
         consumer,
+        sampler,
         resampler: PullResampler::new(ENGINE_RATE, rate),
         channels: supported.channels() as usize,
         target_frames,
+        mic_send: 0.0,
+        soundboard_send: 0.0,
         primed: false,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),
         gain: SmoothedGain::new(0.0),

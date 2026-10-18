@@ -27,6 +27,10 @@ ringbuf = "0.5"
 parking_lot = "0.12.5"
 anyhow = "1.0.104"
 crossbeam-channel = "0.5.17"
+rusqlite = { version = "0.40", features = ["bundled"] }
+symphonia = { version = "0.6", features = ["all"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

@@ -137,6 +137,8 @@ Phase 1 entscheidet über das ganze Projekt: Erst wenn das Mikrofon mit unter 30
 
 Phasen 1 bis 4 ergeben Version 1; Phase 5 bleibt Planung.
 
+**Stand 18.10.2026:** Phase 1 ist abgeschlossen. Ode selbst braucht vom Mikrofon bis ins Kabel etwa 15 ms und bleibt damit unter dem 30-ms-Ziel. VB-Cable fügt im geteilten Modus rund 100 ms hinzu (siehe Messungen). Für Discord und Spiele ist das akzeptabel; das Ziel gilt deshalb für den Anteil, den Ode beeinflusst. Weiter mit Phase 2: Soundboard.
+
 ## Risiken und offene Fragen
 
 Das größte Risiko ist die Latenz der Kette Mikrofon → App → Kabel; sie muss früh in Phase 1 gemessen werden.
