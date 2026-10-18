@@ -19,24 +19,19 @@ export const SETTINGS = { id: "settings" as const, label: "Einstellungen", icon:
 /** Wortmarke: ein Ring, der wie eine Schallwelle aufgeht. */
 function Logo() {
   return (
-    <div className="flex items-center gap-2.5">
-      <svg viewBox="0 0 32 32" className="size-8" aria-hidden>
-        <defs>
-          <linearGradient id="ode-logo" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="oklch(0.8 0.17 70)" />
-            <stop offset="1" stopColor="var(--primary)" />
-          </linearGradient>
-        </defs>
-        <rect width="32" height="32" rx="10" fill="url(#ode-logo)" />
-        <circle cx="16" cy="16" r="7" fill="none" stroke="oklch(18% 0.02 50)" strokeWidth="3" />
-        <path d="M24.5 9.5a11 11 0 0 1 0 13" fill="none" stroke="oklch(18% 0.02 50)" strokeWidth="2" strokeLinecap="round" opacity=".55" />
+    <div className="flex items-center gap-2">
+      <svg viewBox="0 0 32 32" className="size-8 text-foreground" aria-hidden>
+        <circle cx="14" cy="16" r="8" fill="none" stroke="currentColor" strokeWidth="3.5" />
+        <path
+          d="M23.96 7.64A13 13 0 0 1 23.96 24.36"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          opacity=".5"
+        />
       </svg>
-      <div className="leading-none">
-        <div className="font-display text-xl font-bold tracking-tight">ode</div>
-        <div className="mt-0.5 font-mono text-3xs tracking-[0.18em] text-muted-foreground uppercase">
-          Soundboard
-        </div>
-      </div>
+      <div className="font-display text-2xl leading-none font-bold tracking-tight">ode</div>
     </div>
   );
 }
