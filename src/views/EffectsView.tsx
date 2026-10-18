@@ -1,9 +1,11 @@
-import { ArrowRight, AudioLines, Gauge, Mic, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
-import type { ReactNode } from "react";
-import { Meter } from "~/components/mixer/Meter";
-import { Badge, Card, SectionLabel, Switch } from "~/components/ui/misc";
+import { AudioLines, Gauge, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
+import { useRef, type ReactNode } from "react";
+import { Badge, Card, Switch } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
-import { cn, formatDb } from "~/lib/utils";
+import { cn, formatDb, gainToDb } from "~/lib/utils";
+
+/* Die Mikrofon-Kette als Rack: fünf Module nebeneinander, jedes mit einer
+   Anzeige, die zeigt, was der Effekt gerade tut, und den Reglern darunter. */
 
 function Range({
   label,
@@ -13,6 +15,7 @@ function Range({
   step,
   format,
   onChange,
+  reset = 0,
   disabled,
 }: {
   label: string;
@@ -22,14 +25,16 @@ function Range({
   step: number;
   format: (v: number) => string;
   onChange: (v: number) => void;
+  /** Wert für Doppelklick. */
+  reset?: number;
   disabled?: boolean;
 }) {
   const fill = ((value - min) / (max - min)) * 100;
   return (
     <label className={cn("block space-y-1.5", disabled && "opacity-45")}>
-      <div className="flex justify-between font-mono text-3xs text-muted-foreground uppercase">
-        <span>{label}</span>
-        <span className="text-foreground tabular-nums">{format(value)}</span>
+      <div className="flex justify-between gap-2 text-2xs">
+        <span className="truncate text-muted-foreground">{label}</span>
+        <span className="font-mono tabular-nums">{format(value)}</span>
       </div>
       <input
         type="range"
@@ -39,241 +44,347 @@ function Range({
         step={step}
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
-        onDoubleClick={() => onChange(Math.min(max, Math.max(min, 0)))}
-        className="h-1.5 w-full cursor-default appearance-none rounded-full [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_1px_4px_oklch(0%_0_0/40%)]"
+        onDoubleClick={() => onChange(Math.min(max, Math.max(min, reset)))}
+        className="h-1.5 w-full cursor-default appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_1px_3px_oklch(0%_0_0/45%)]"
         style={{ background: `linear-gradient(to right, var(--ch-mic) ${fill}%, var(--meter-track) 0)` }}
       />
     </label>
   );
 }
 
-/** Balken für Absenkung in dB (0 … max). */
-function Reduction({ db, max, label }: { db: number; max: number; label: string }) {
-  const amount = Math.min(1, Math.max(0, -db / max));
-  return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between font-mono text-3xs text-muted-foreground uppercase">
-        <span>{label}</span>
-        <span className="tabular-nums">{db < -0.05 ? `${db.toFixed(1)} dB` : "—"}</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--meter-track)]">
-        <div className="h-full rounded-full bg-warning transition-[width] duration-75" style={{ width: `${amount * 100}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function Stage({
-  index,
+function Module({
   title,
   hint,
   icon,
   enabled,
   onToggle,
   status,
+  display,
   children,
 }: {
-  index: number;
   title: string;
   hint: string;
   icon: ReactNode;
   enabled: boolean;
   onToggle: (on: boolean) => void;
   status?: ReactNode;
+  display: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <Card className={cn("flex min-w-0 flex-1 flex-col p-4 transition-opacity", !enabled && "opacity-80")}>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <div
-            className={cn(
-              "flex items-center gap-1.5 font-mono text-3xs [&_svg]:size-3.5",
-              enabled ? "text-[var(--ch-mic)]" : "text-muted-foreground",
-            )}
-          >
-            {icon}
-            {String(index).padStart(2, "0")}
-          </div>
-          <h3 className="mt-1 font-display text-base leading-tight font-semibold tracking-tight hyphens-manual">
-            {title}
-          </h3>
-        </div>
-        <Switch label={title.replace("­", "")} checked={enabled} onCheckedChange={onToggle} />
+    <Card className="flex min-h-0 min-w-0 flex-col p-4">
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            "shrink-0 transition-colors [&_svg]:size-4",
+            enabled ? "text-[var(--ch-mic)]" : "text-muted-foreground",
+          )}
+        >
+          {icon}
+        </span>
+        <h3 className="min-w-0 flex-1 truncate font-display text-[15px] leading-tight font-semibold tracking-tight" title={title}>
+          {title}
+        </h3>
+        <Switch label={title} checked={enabled} onCheckedChange={onToggle} />
       </div>
-      <p className="mt-2 min-h-8 text-xs text-muted-foreground">{hint}</p>
-      <div className="mt-3 flex flex-1 flex-col gap-3">{children}</div>
-      <div className="mt-4 flex h-6 items-center">{status}</div>
+      <p className="mt-2 line-clamp-2 text-2xs text-muted-foreground" title={hint}>
+        {hint}
+      </p>
+
+      <div
+        className={cn(
+          "well relative mt-3 min-h-16 flex-1 overflow-hidden rounded-xl transition-opacity",
+          !enabled && "opacity-40",
+        )}
+      >
+        {display}
+        {status && <div className="absolute top-2 right-2">{status}</div>}
+      </div>
+
+      <div className="mt-3.5 space-y-3">{children}</div>
     </Card>
   );
 }
 
-export function EffectsView() {
-  const fx = useStore((s) => s.effects);
-  const meters = useStore((s) => s.meters);
-  const micPeak = useStore((s) => s.meters?.channels.find((c) => c.id === "mic")?.peak ?? 0);
-  const live = meters?.effects;
-  const running = useStore((s) => s.info !== null);
-  const activeCount = Object.values(fx).filter((e) => e.enabled).length;
+/* ---------- Anzeigen ---------- */
+
+const GATE_FLOOR = -80;
+
+/** Pegel des Mikrofons gegen die Schwelle des Gates. */
+function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: number; open: boolean }) {
+  const display = useRef(GATE_FLOOR);
+  const db = gainToDb(peak, GATE_FLOOR);
+  display.current = Math.max(db, display.current - 2);
+  const level = (display.current - GATE_FLOOR) / -GATE_FLOOR;
+  const threshold = (thresholdDb - GATE_FLOOR) / -GATE_FLOOR;
 
   return (
-    <div className="flex h-full flex-col gap-4 px-6 pt-5 pb-4">
-      <Card className="flex items-center gap-4 px-5 py-3.5">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--ch-mic)_16%,transparent)] text-[var(--ch-mic)]">
-          <Mic className="size-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <SectionLabel>Signalweg</SectionLabel>
-          <div className="flex items-center gap-1.5 truncate text-sm">
-            Mikrofon <ArrowRight className="size-3.5 text-muted-foreground" /> {activeCount} von 5 Effekten
-            <ArrowRight className="size-3.5 text-muted-foreground" /> Mikrofon-Fader im Mischpult
-          </div>
+    <div className="absolute inset-0 flex items-end justify-center gap-1.5 px-4 pt-9 pb-3">
+      <div className="relative h-full w-full max-w-24 overflow-hidden rounded-lg bg-[var(--led-off)]">
+        <div
+          className={cn("absolute inset-x-0 bottom-0 rounded-lg", open ? "bg-[var(--ch-mic)]" : "bg-muted-foreground/40")}
+          style={{ height: `${level * 100}%` }}
+        />
+        <div className="absolute inset-x-0 h-0.5 bg-foreground" style={{ bottom: `${threshold * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+const HISTORY = 28;
+
+/** Verlauf der Spracherkennung als Balken. */
+function VoiceDisplay({ voice, enabled }: { voice: number; enabled: boolean }) {
+  const history = useRef<number[]>(Array(HISTORY).fill(0));
+  history.current = [...history.current.slice(1), enabled ? voice : 0];
+  return (
+    <div className="absolute inset-0 flex items-end gap-[3px] px-3 pt-9 pb-3">
+      {history.current.map((v, i) => (
+        <span
+          key={i}
+          className={cn("flex-1 rounded-[2px]", v > 0.6 ? "bg-success" : "bg-muted-foreground/35")}
+          style={{ height: `${Math.max(4, v * 100)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Frequenzgang aus Tiefen-Shelf, Präsenz-Glocke und Höhen-Shelf, grob angenähert. */
+function EqDisplay({ low, mid, high }: { low: number; mid: number; high: number }) {
+  const points: string[] = [];
+  const W = 100;
+  const H = 60;
+  for (let i = 0; i <= 60; i++) {
+    const x = i / 60;
+    const f = 20 * Math.pow(1000, x); // 20 Hz … 20 kHz, logarithmisch
+    const lf = Math.log2(f);
+    const shelfLow = low / (1 + Math.pow(2, (lf - Math.log2(120)) * 2));
+    const shelfHigh = high / (1 + Math.pow(2, (Math.log2(8000) - lf) * 2));
+    const bell = mid * Math.exp(-Math.pow(lf - Math.log2(2500), 2) / 1.2);
+    const db = shelfLow + shelfHigh + bell;
+    points.push(`${x * W},${H / 2 - (db / 15) * (H / 2 - 4)}`);
+  }
+  const line = points.join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 size-full">
+      {[120, 2500, 8000].map((f) => {
+        const x = (Math.log10(f / 20) / 3) * W;
+        return <line key={f} x1={x} x2={x} y1="0" y2={H} stroke="var(--muted-foreground)" strokeOpacity=".18" vectorEffect="non-scaling-stroke" />;
+      })}
+      <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+      <polygon points={`0,${H / 2} ${line} ${W},${H / 2}`} fill="var(--ch-mic)" fillOpacity=".16" />
+      <polyline points={line} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Kennlinie: Eingang gegen Ausgang, oberhalb der Schwelle flacher. */
+function CompressorDisplay({ thresholdDb, ratio, makeupDb }: { thresholdDb: number; ratio: number; makeupDb: number }) {
+  const S = 60;
+  const map = (db: number) => ((db + S) / S) * 100;
+  const out = (db: number) => (db < thresholdDb ? db : thresholdDb + (db - thresholdDb) / ratio) + makeupDb;
+  const pts = [-S, thresholdDb, 0].map((db) => `${map(db)},${100 - map(Math.min(0, out(db)))}`).join(" ");
+  return (
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full p-3">
+      <line x1="0" y1="100" x2="100" y2="0" stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+      <line x1={map(thresholdDb)} x2={map(thresholdDb)} y1="0" y2="100" stroke="var(--muted-foreground)" strokeOpacity=".2" vectorEffect="non-scaling-stroke" />
+      <polyline points={pts} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Absenkung als Balken von oben, dazu die Obergrenze bzw. Schwelle. */
+function ReductionDisplay({ db, max }: { db: number; max: number }) {
+  const amount = Math.min(1, Math.max(0, -db / max));
+  return (
+    <div className="absolute inset-0 flex justify-center px-4 pt-9 pb-3">
+      <div className="relative h-full w-full max-w-24 overflow-hidden rounded-lg bg-[var(--led-off)]">
+        <div className="absolute inset-x-0 top-0 rounded-lg bg-warning" style={{ height: `${amount * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function Reading({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "success" | "warning" }) {
+  return <Badge tone={tone}>{children}</Badge>;
+}
+
+export function EffectsView() {
+  const fx = useStore((s) => s.effects);
+  const live = useStore((s) => s.meters?.effects);
+  const micPeak = useStore((s) => s.meters?.channels.find((c) => c.id === "mic")?.peak ?? 0);
+  const running = useStore((s) => s.info !== null);
+
+  const compressorDb = running ? (live?.compressorDb ?? 0) : 0;
+  const limiterDb = running ? (live?.limiterDb ?? 0) : 0;
+  const voice = running ? (live?.voice ?? 0) : 0;
+
+  return (
+    <div className="grid h-full auto-rows-fr grid-cols-3 gap-3 overflow-hidden px-6 pt-3 pb-3 xl:grid-cols-5">
+      <Module
+        title="Noise Gate"
+        hint="Schaltet das Mikro stumm, solange es leiser als die Schwelle ist."
+        icon={<AudioLines />}
+        enabled={fx.gate.enabled}
+        onToggle={(enabled) => actions.setEffect("gate", { enabled })}
+        status={
+          fx.gate.enabled &&
+          running && <Reading tone={live?.gateOpen ? "success" : "default"}>{live?.gateOpen ? "Offen" : "Zu"}</Reading>
+        }
+        display={
+          <GateDisplay
+            peak={running ? micPeak : 0}
+            thresholdDb={fx.gate.thresholdDb}
+            open={!fx.gate.enabled || !!live?.gateOpen}
+          />
+        }
+      >
+        <Range
+          label="Schwelle"
+          value={fx.gate.thresholdDb}
+          min={-80}
+          max={-10}
+          step={1}
+          reset={-50}
+          format={(v) => `${v} dB`}
+          disabled={!fx.gate.enabled}
+          onChange={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
+        />
+      </Module>
+
+      <Module
+        title="Rauschfilter"
+        hint="RNNoise filtert Lüfter, Tastatur und Rauschen heraus. Kostet 10 ms Verzögerung."
+        icon={<Sparkles />}
+        enabled={fx.denoise.enabled}
+        onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
+        status={
+          fx.denoise.enabled &&
+          running && <Reading tone={voice > 0.6 ? "success" : "default"}>{voice > 0.6 ? "Sprache" : "Ruhe"}</Reading>
+        }
+        display={<VoiceDisplay voice={voice} enabled={fx.denoise.enabled} />}
+      >
+        <div className="flex justify-between text-2xs">
+          <span className="text-muted-foreground">Sprache erkannt</span>
+          <span className="font-mono tabular-nums">{fx.denoise.enabled ? Math.round(voice * 100) : 0} %</span>
         </div>
-        {!running && <Badge tone="warning">Engine aus</Badge>}
-        <div className="w-56">
-          <Meter peak={micPeak} orientation="horizontal" className="[--ch:var(--ch-mic)]" />
-        </div>
-      </Card>
+      </Module>
 
-      <div className="flex min-h-0 flex-1 gap-3">
-        <Stage
-          index={1}
-          title="Noise Gate"
-          hint="Schaltet das Mikro stumm, solange es leiser als die Schwelle ist."
-          icon={<AudioLines />}
-          enabled={fx.gate.enabled}
-          onToggle={(enabled) => actions.setEffect("gate", { enabled })}
-          status={
-            fx.gate.enabled &&
-            running && <Badge tone={live?.gateOpen ? "success" : "default"}>{live?.gateOpen ? "Offen" : "Zu"}</Badge>
-          }
-        >
+      <Module
+        title="Equalizer"
+        hint="Bass bei 120 Hz, Präsenz bei 2,5 kHz, Höhen bei 8 kHz."
+        icon={<SlidersHorizontal />}
+        enabled={fx.eq.enabled}
+        onToggle={(enabled) => actions.setEffect("eq", { enabled })}
+        display={<EqDisplay low={fx.eq.lowDb} mid={fx.eq.midDb} high={fx.eq.highDb} />}
+      >
+        {(
+          [
+            ["lowDb", "Bass"],
+            ["midDb", "Präsenz"],
+            ["highDb", "Höhen"],
+          ] as const
+        ).map(([key, label]) => (
           <Range
-            label="Schwelle"
-            value={fx.gate.thresholdDb}
-            min={-80}
-            max={-10}
-            step={1}
-            format={(v) => `${v} dB`}
-            disabled={!fx.gate.enabled}
-            onChange={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
-          />
-        </Stage>
-
-        <Stage
-          index={2}
-          title={"Rausch­unterdrückung"}
-          hint="RNNoise filtert Lüfter, Tastatur und Rauschen heraus. Kostet 10 ms Verzögerung."
-          icon={<Sparkles />}
-          enabled={fx.denoise.enabled}
-          onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
-          status={fx.denoise.enabled && running && <Badge tone={(live?.voice ?? 0) > 0.6 ? "success" : "default"}>{(live?.voice ?? 0) > 0.6 ? "Sprache erkannt" : "Ruhe"}</Badge>}
-        >
-          <div className="space-y-1.5">
-            <div className="flex justify-between font-mono text-3xs text-muted-foreground uppercase">
-              <span>Sprache</span>
-              <span className="tabular-nums">{Math.round((live?.voice ?? 0) * 100)} %</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--meter-track)]">
-              <div
-                className="h-full rounded-full bg-success transition-[width] duration-75"
-                style={{ width: `${(fx.denoise.enabled ? (live?.voice ?? 0) : 0) * 100}%` }}
-              />
-            </div>
-          </div>
-        </Stage>
-
-        <Stage
-          index={3}
-          title="Equalizer"
-          hint="Klangfarbe: Bass bei 120 Hz, Präsenz bei 2,5 kHz, Höhen bei 8 kHz."
-          icon={<SlidersHorizontal />}
-          enabled={fx.eq.enabled}
-          onToggle={(enabled) => actions.setEffect("eq", { enabled })}
-        >
-          {(
-            [
-              ["lowDb", "Bass"],
-              ["midDb", "Präsenz"],
-              ["highDb", "Höhen"],
-            ] as const
-          ).map(([key, label]) => (
-            <Range
-              key={key}
-              label={label}
-              value={fx.eq[key]}
-              min={-12}
-              max={12}
-              step={0.5}
-              format={(v) => `${formatDb(v)} dB`}
-              disabled={!fx.eq.enabled}
-              onChange={(v) => actions.setEffect("eq", { [key]: v })}
-            />
-          ))}
-        </Stage>
-
-        <Stage
-          index={4}
-          title="Kompressor"
-          hint="Gleicht leise und laute Stellen an, damit du gleichmäßig klingst."
-          icon={<Gauge />}
-          enabled={fx.compressor.enabled}
-          onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
-          status={fx.compressor.enabled && running && <Reduction db={live?.compressorDb ?? 0} max={20} label="Absenkung" />}
-        >
-          <Range
-            label="Schwelle"
-            value={fx.compressor.thresholdDb}
-            min={-50}
-            max={0}
-            step={1}
-            format={(v) => `${v} dB`}
-            disabled={!fx.compressor.enabled}
-            onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
-          />
-          <Range
-            label="Verhältnis"
-            value={fx.compressor.ratio}
-            min={1}
-            max={10}
-            step={0.5}
-            format={(v) => `${v.toFixed(1)} : 1`}
-            disabled={!fx.compressor.enabled}
-            onChange={(ratio) => actions.setEffect("compressor", { ratio })}
-          />
-          <Range
-            label="Aufholen"
-            value={fx.compressor.makeupDb}
-            min={0}
-            max={18}
-            step={0.5}
-            format={(v) => `+${v.toFixed(1)} dB`}
-            disabled={!fx.compressor.enabled}
-            onChange={(makeupDb) => actions.setEffect("compressor", { makeupDb })}
-          />
-        </Stage>
-
-        <Stage
-          index={5}
-          title="Limiter"
-          hint="Harte Obergrenze für dein Mikro, damit Schreie nicht übersteuern."
-          icon={<ShieldCheck />}
-          enabled={fx.limiter.enabled}
-          onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
-          status={fx.limiter.enabled && running && <Reduction db={live?.limiterDb ?? 0} max={12} label="Absenkung" />}
-        >
-          <Range
-            label="Obergrenze"
-            value={fx.limiter.ceilingDb}
-            min={-20}
-            max={0}
+            key={key}
+            label={label}
+            value={fx.eq[key]}
+            min={-12}
+            max={12}
             step={0.5}
             format={(v) => `${formatDb(v)} dB`}
-            disabled={!fx.limiter.enabled}
-            onChange={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
+            disabled={!fx.eq.enabled}
+            onChange={(v) => actions.setEffect("eq", { [key]: v })}
           />
-        </Stage>
-      </div>
+        ))}
+      </Module>
+
+      <Module
+        title="Kompressor"
+        hint="Gleicht leise und laute Stellen an, damit du gleichmäßig klingst."
+        icon={<Gauge />}
+        enabled={fx.compressor.enabled}
+        onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
+        status={
+          fx.compressor.enabled &&
+          running && (
+            <Reading tone={compressorDb < -0.5 ? "warning" : "default"}>
+              {compressorDb < -0.05 ? `${compressorDb.toFixed(1)} dB` : "—"}
+            </Reading>
+          )
+        }
+        display={
+          <CompressorDisplay
+            thresholdDb={fx.compressor.thresholdDb}
+            ratio={fx.compressor.ratio}
+            makeupDb={fx.compressor.makeupDb}
+          />
+        }
+      >
+        <Range
+          label="Schwelle"
+          value={fx.compressor.thresholdDb}
+          min={-50}
+          max={0}
+          step={1}
+          reset={-20}
+          format={(v) => `${v} dB`}
+          disabled={!fx.compressor.enabled}
+          onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
+        />
+        <Range
+          label="Verhältnis"
+          value={fx.compressor.ratio}
+          min={1}
+          max={10}
+          step={0.5}
+          reset={3}
+          format={(v) => `${v.toFixed(1)} : 1`}
+          disabled={!fx.compressor.enabled}
+          onChange={(ratio) => actions.setEffect("compressor", { ratio })}
+        />
+        <Range
+          label="Aufholen"
+          value={fx.compressor.makeupDb}
+          min={0}
+          max={18}
+          step={0.5}
+          reset={4}
+          format={(v) => `+${v.toFixed(1)} dB`}
+          disabled={!fx.compressor.enabled}
+          onChange={(makeupDb) => actions.setEffect("compressor", { makeupDb })}
+        />
+      </Module>
+
+      <Module
+        title="Limiter"
+        hint="Harte Obergrenze für dein Mikro, damit Schreie nicht übersteuern."
+        icon={<ShieldCheck />}
+        enabled={fx.limiter.enabled}
+        onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
+        status={
+          fx.limiter.enabled &&
+          running && (
+            <Reading tone={limiterDb < -0.5 ? "warning" : "default"}>
+              {limiterDb < -0.05 ? `${limiterDb.toFixed(1)} dB` : "—"}
+            </Reading>
+          )
+        }
+        display={<ReductionDisplay db={limiterDb} max={12} />}
+      >
+        <Range
+          label="Obergrenze"
+          value={fx.limiter.ceilingDb}
+          min={-20}
+          max={0}
+          step={0.5}
+          reset={-3}
+          format={(v) => `${formatDb(v)} dB`}
+          disabled={!fx.limiter.enabled}
+          onChange={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
+        />
+      </Module>
     </div>
   );
 }
