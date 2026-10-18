@@ -1,13 +1,7 @@
-import { Download, Music, Wand2 } from "lucide-react";
+import { Download, Wand2 } from "lucide-react";
 import { EmptyState } from "~/components/ui/misc";
 
-export function MusicView() {
-  return (
-    <EmptyState icon={<Music />} title="Keine Playlists">
-      Playlists aus lokalen Dateien und Downloads, mit eigenem Kanal im Mischpult.
-    </EmptyState>
-  );
-}
+export { MusicView } from "./MusicView";
 
 export function EffectsView() {
   return (
