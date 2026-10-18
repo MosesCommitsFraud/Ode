@@ -88,11 +88,13 @@ export function Sidebar({
 }) {
   return (
     <aside className="flex w-[var(--sidebar-width)] shrink-0 flex-col border-r border-border bg-sidebar">
-      <div className="flex h-[var(--topbar-height)] items-center gap-2 px-4">
+      <div data-tauri-drag-region className="flex h-[var(--topbar-height)] items-center gap-2 px-4">
         <div className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
           <AudioLines className="size-3.5" />
         </div>
-        <span className="font-semibold tracking-tight">Ode</span>
+        <span data-tauri-drag-region className="font-semibold tracking-tight">
+          Ode
+        </span>
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">

@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { Kbd } from "~/components/ui/misc";
 import { useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
+import { WindowControls } from "./WindowControls";
 
 function CableStatus() {
   const info = useStore((s) => s.info);
@@ -34,9 +35,14 @@ function CableStatus() {
 
 export function TopBar({ title }: { title: string }) {
   return (
-    <header className="flex h-[var(--topbar-height)] shrink-0 items-center gap-3 border-b border-border px-4">
-      <h1 className="text-sm font-medium">{title}</h1>
-      <div className="flex flex-1 justify-center">
+    <header
+      data-tauri-drag-region
+      className="flex h-[var(--topbar-height)] shrink-0 items-center gap-3 border-b border-border px-4"
+    >
+      <h1 data-tauri-drag-region className="text-sm font-medium">
+        {title}
+      </h1>
+      <div data-tauri-drag-region className="flex flex-1 justify-center">
         <button
           type="button"
           className="flex h-7 w-full max-w-sm cursor-default items-center gap-2 rounded-control border border-border bg-card px-2.5 text-xs text-muted-foreground hover:border-input"
@@ -47,6 +53,7 @@ export function TopBar({ title }: { title: string }) {
         </button>
       </div>
       <CableStatus />
+      <WindowControls />
     </header>
   );
 }
