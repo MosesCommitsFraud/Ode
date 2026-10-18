@@ -1,9 +1,7 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { AudioWaveform, Disc3, Play, Search as SearchIcon, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { Play, Search as SearchIcon, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Kbd } from "~/components/ui/misc";
-import { isTauri } from "~/lib/engine";
-import { library, soundColor, useLibrary, type Sound } from "~/lib/library";
+import { library, useLibrary, type Sound } from "~/lib/library";
 import { formatTime, music, useMusic, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
 
@@ -21,18 +19,6 @@ function rank<T>(items: T[], query: string, fields: (item: T) => (string | null)
     else if (values.some((v) => v.includes(q))) scored.push([1, item]);
   }
   return scored.sort((a, b) => a[0] - b[0]).map(([, item]) => item);
-}
-
-function Thumb({ cover, children, color }: { cover: string | null; children: React.ReactNode; color: string }) {
-  const src = cover && isTauri ? convertFileSrc(cover) : null;
-  return (
-    <span
-      style={{ "--hit": color } as CSSProperties}
-      className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[color-mix(in_oklch,var(--hit)_16%,transparent)] text-[var(--hit)] [&_svg]:size-4"
-    >
-      {src ? <img src={src} alt="" className="size-full object-cover" draggable={false} /> : children}
-    </span>
-  );
 }
 
 /** Suche oben: findet Sounds und Titel, ein Klick spielt sie sofort. */
@@ -177,19 +163,10 @@ export function Search() {
                     onPointerMove={() => setActive(i)}
                     onClick={() => play(hit)}
                     className={cn(
-                      "group flex h-11 w-full cursor-default items-center gap-3 rounded-xl px-2 text-left transition-colors",
+                      "group flex h-11 w-full cursor-default items-center gap-3 rounded-xl px-2.5 text-left transition-colors",
                       i === active && "bg-accent",
                     )}
                   >
-                    {sound ? (
-                      <Thumb cover={sound.cover} color={soundColor(sound.color)}>
-                        <AudioWaveform />
-                      </Thumb>
-                    ) : (
-                      <Thumb cover={track!.cover} color="var(--ch-music)">
-                        <Disc3 />
-                      </Thumb>
-                    )}
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">{sound?.name ?? track!.title}</div>
                       <div className="truncate text-2xs text-muted-foreground">

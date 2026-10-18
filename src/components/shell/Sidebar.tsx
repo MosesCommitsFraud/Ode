@@ -24,11 +24,10 @@ export const SETTINGS = {
 function Logo() {
   return (
     <div className="flex items-center gap-2">
-      {/* Dasselbe Symbol wie in Taskleiste und Tray (src-tauri/icons/source/app-icon.svg). */}
-      <svg viewBox="0 0 1024 1024" className="size-8 shrink-0" aria-hidden>
-        <rect width="1024" height="1024" rx="224" fill="#1d1a17" />
-        <circle cx="452" cy="512" r="226" fill="none" stroke="#f5f1ec" strokeWidth="100" />
-        <path d="M736 272A370 370 0 0 1 736 752" fill="none" stroke="#f26b21" strokeWidth="72" strokeLinecap="round" />
+      {/* Symbol wie in Taskleiste und Tray (src-tauri/icons/source/app-icon.svg), hier ohne Box. */}
+      <svg viewBox="170 162 700 700" className="size-8 shrink-0" aria-hidden>
+        <circle cx="452" cy="512" r="226" fill="none" stroke="currentColor" strokeWidth="100" />
+        <path d="M736 272A370 370 0 0 1 736 752" fill="none" stroke="var(--primary)" strokeWidth="72" strokeLinecap="round" />
       </svg>
       <div className="font-display text-2xl leading-none font-bold tracking-tight">ode</div>
     </div>

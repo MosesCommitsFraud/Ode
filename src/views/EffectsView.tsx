@@ -87,8 +87,23 @@ function Module({
 /* ---------- Anzeigen ---------- */
 
 const GATE_FLOOR = -80;
-/** LED-Segmente wie bei den Pegeln im Mischpult. */
-const SEGMENTS = "repeating-linear-gradient(to right, #000 0 4px, transparent 4px 7px)";
+/** Feine LED-Streben wie bei den Pegeln im Mischpult. */
+const SEGMENTS = "repeating-linear-gradient(to right, #000 0 2px, transparent 2px 4px)";
+
+/** Beschriftung einer Achse; `at` ist die Position in Prozent. */
+function Tick({ at, axis, children }: { at: number; axis: "x" | "y"; children: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute font-mono text-[9px] leading-none text-muted-foreground/70 tabular-nums",
+        axis === "x" ? "bottom-1.5 -translate-x-1/2" : "left-2 -translate-y-1/2",
+      )}
+      style={axis === "x" ? { left: `${at}%` } : { top: `${at}%` }}
+    >
+      {children}
+    </span>
+  );
+}
 
 /** Pegel des Mikrofons gegen die Schwelle des Gates. */
 function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: number; open: boolean }) {
@@ -100,7 +115,7 @@ function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: n
 
   return (
     <div className="absolute inset-0 flex items-center px-4">
-      <div className="relative h-8 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
+      <div className="relative h-10 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
         <div className="absolute inset-0 bg-[var(--led-off)]" />
         <div
           className={cn("absolute inset-y-0 left-0", open ? "bg-[var(--ch-mic)]" : "bg-muted-foreground/40")}
@@ -108,84 +123,162 @@ function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: n
         />
       </div>
       <div
-        className="absolute top-1/2 h-12 w-0.5 -translate-y-1/2 rounded-full bg-foreground"
+        className="absolute top-1/2 h-14 w-0.5 -translate-y-1/2 rounded-full bg-foreground"
         style={{ left: `calc(1rem + (100% - 2rem) * ${threshold})` }}
       />
     </div>
   );
 }
 
-const HISTORY = 28;
+const HISTORY = 90;
 
-/** Verlauf der Spracherkennung als Balken. */
+/** Verlauf der Spracherkennung der letzten Sekunden als feine Balken. */
 function VoiceDisplay({ voice, enabled }: { voice: number; enabled: boolean }) {
   const history = useRef<number[]>(Array(HISTORY).fill(0));
   history.current = [...history.current.slice(1), enabled ? voice : 0];
   return (
-    <div className="absolute inset-0 flex items-end gap-[3px] p-2.5">
+    <div className="absolute inset-0 flex items-end gap-[2px] p-3">
       {history.current.map((v, i) => (
         <span
           key={i}
-          className={cn("flex-1 rounded-[2px]", v > 0.6 ? "bg-success" : "bg-muted-foreground/35")}
-          style={{ height: `${Math.max(4, v * 100)}%` }}
+          className={cn("flex-1 rounded-[1px]", v > 0.6 ? "bg-success" : "bg-muted-foreground/35")}
+          style={{ height: `${Math.max(3, v * 100)}%`, opacity: 0.35 + (i / HISTORY) * 0.65 }}
         />
       ))}
     </div>
   );
 }
 
+/* Zeichenfläche für Kurven mit Platz für die Achsen links und unten. */
+const PLOT = "absolute top-3 right-3 bottom-6 left-9";
+
+const EQ_RANGE = 15;
+const EQ_DB_TICKS = [12, 6, 0, -6, -12];
+const EQ_FREQ_TICKS: [number, string][] = [
+  [50, "50"],
+  [200, "200"],
+  [1000, "1k"],
+  [5000, "5k"],
+  [15000, "15k"],
+];
+
 /** Frequenzgang aus Tiefen-Shelf, Präsenz-Glocke und Höhen-Shelf, grob angenähert. */
 function EqDisplay({ low, mid, high }: { low: number; mid: number; high: number }) {
   const points: string[] = [];
-  const W = 100;
-  const H = 60;
-  for (let i = 0; i <= 60; i++) {
-    const x = i / 60;
+  for (let i = 0; i <= 80; i++) {
+    const x = i / 80;
     const f = 20 * Math.pow(1000, x); // 20 Hz … 20 kHz, logarithmisch
     const lf = Math.log2(f);
     const shelfLow = low / (1 + Math.pow(2, (lf - Math.log2(120)) * 2));
     const shelfHigh = high / (1 + Math.pow(2, (Math.log2(8000) - lf) * 2));
     const bell = mid * Math.exp(-Math.pow(lf - Math.log2(2500), 2) / 1.2);
     const db = shelfLow + shelfHigh + bell;
-    points.push(`${x * W},${H / 2 - (db / 15) * (H / 2 - 4)}`);
+    points.push(`${x * 100},${50 - (db / EQ_RANGE) * 50}`);
   }
   const line = points.join(" ");
+  const fx = (f: number) => (Math.log10(f / 20) / 3) * 100;
+  const dy = (db: number) => 50 - (db / EQ_RANGE) * 50;
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 size-full">
-      {[120, 2500, 8000].map((f) => {
-        const x = (Math.log10(f / 20) / 3) * W;
-        return <line key={f} x1={x} x2={x} y1="0" y2={H} stroke="var(--muted-foreground)" strokeOpacity=".18" vectorEffect="non-scaling-stroke" />;
-      })}
-      <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-      <polygon points={`0,${H / 2} ${line} ${W},${H / 2}`} fill="var(--ch-mic)" fillOpacity=".16" />
-      <polyline points={line} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
+    <>
+      <div className={PLOT}>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
+        {EQ_FREQ_TICKS.map(([f]) => (
+          <line key={f} x1={fx(f)} x2={fx(f)} y1="0" y2="100" stroke="var(--muted-foreground)" strokeOpacity=".15" vectorEffect="non-scaling-stroke" />
+        ))}
+        {EQ_DB_TICKS.map((db) => (
+          <line
+            key={db}
+            x1="0"
+            x2="100"
+            y1={dy(db)}
+            y2={dy(db)}
+            stroke="var(--muted-foreground)"
+            strokeOpacity={db === 0 ? ".4" : ".12"}
+            strokeDasharray={db === 0 ? "3 3" : undefined}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        <polygon points={`0,50 ${line} 100,50`} fill="var(--ch-mic)" fillOpacity=".16" />
+        <polyline points={line} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      </svg>
+      </div>
+      <div className="pointer-events-none absolute top-3 bottom-6 left-0 w-9">
+        {EQ_DB_TICKS.map((db) => (
+          <Tick key={db} axis="y" at={dy(db)}>
+            {db > 0 ? `+${db}` : db}
+          </Tick>
+        ))}
+      </div>
+      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
+        {EQ_FREQ_TICKS.map(([f, label]) => (
+          <Tick key={f} axis="x" at={fx(f)}>
+            {label}
+          </Tick>
+        ))}
+      </div>
+    </>
   );
 }
 
-/** Kennlinie: Eingang gegen Ausgang, oberhalb der Schwelle flacher. */
+const COMP_RANGE = 60;
+const COMP_TICKS = [-60, -40, -20, 0];
+
+/** Kennlinie: Eingang (unten) gegen Ausgang (links), oberhalb der Schwelle flacher. */
 function CompressorDisplay({ thresholdDb, ratio, makeupDb }: { thresholdDb: number; ratio: number; makeupDb: number }) {
-  const S = 60;
-  const map = (db: number) => ((db + S) / S) * 100;
+  const map = (db: number) => ((db + COMP_RANGE) / COMP_RANGE) * 100;
   const out = (db: number) => (db < thresholdDb ? db : thresholdDb + (db - thresholdDb) / ratio) + makeupDb;
-  const pts = [-S, thresholdDb, 0].map((db) => `${map(db)},${100 - map(Math.min(0, out(db)))}`).join(" ");
+  const pts = [-COMP_RANGE, thresholdDb, 0].map((db) => `${map(db)},${100 - map(Math.min(0, out(db)))}`).join(" ");
   return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 size-full p-3">
-      <line x1="0" y1="100" x2="100" y2="0" stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-      <line x1={map(thresholdDb)} x2={map(thresholdDb)} y1="0" y2="100" stroke="var(--muted-foreground)" strokeOpacity=".2" vectorEffect="non-scaling-stroke" />
-      <polyline points={pts} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-    </svg>
+    <>
+      <div className={PLOT}>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
+        {COMP_TICKS.map((db) => (
+          <g key={db} stroke="var(--muted-foreground)" strokeOpacity=".12">
+            <line x1={map(db)} x2={map(db)} y1="0" y2="100" vectorEffect="non-scaling-stroke" />
+            <line x1="0" x2="100" y1={100 - map(db)} y2={100 - map(db)} vectorEffect="non-scaling-stroke" />
+          </g>
+        ))}
+        <line x1="0" y1="100" x2="100" y2="0" stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+        <line x1={map(thresholdDb)} x2={map(thresholdDb)} y1="0" y2="100" stroke="var(--ch-mic)" strokeOpacity=".45" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+        <polyline points={pts} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      </svg>
+      </div>
+      <div className="pointer-events-none absolute top-3 bottom-6 left-0 w-9">
+        {COMP_TICKS.map((db) => (
+          <Tick key={db} axis="y" at={100 - map(db)}>
+            {db}
+          </Tick>
+        ))}
+      </div>
+      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
+        {COMP_TICKS.map((db) => (
+          <Tick key={db} axis="x" at={map(db)}>
+            {db}
+          </Tick>
+        ))}
+      </div>
+    </>
   );
 }
 
-/** Absenkung als Balken von rechts. */
+const GR_TICKS = [0, -3, -6, -9, -12];
+
+/** Absenkung als Balken von rechts, darunter die Skala in dB. */
 function ReductionDisplay({ db, max }: { db: number; max: number }) {
   const amount = Math.min(1, Math.max(0, -db / max));
   return (
-    <div className="absolute inset-0 flex items-center px-4">
-      <div className="relative h-8 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
+    <div className="absolute inset-0 flex flex-col justify-center gap-2 px-4">
+      <div className="relative h-10 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
         <div className="absolute inset-0 bg-[var(--led-off)]" />
         <div className="absolute inset-y-0 right-0 bg-warning" style={{ width: `${amount * 100}%` }} />
+      </div>
+      <div className="relative h-3">
+        {GR_TICKS.filter((t) => -t <= max).map((t) => (
+          <Tick key={t} axis="x" at={100 - (-t / max) * 100}>
+            {t}
+          </Tick>
+        ))}
       </div>
     </div>
   );
