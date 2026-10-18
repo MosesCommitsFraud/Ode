@@ -37,6 +37,8 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-clipboard-manager = "2"
+windows = { version = "0.62.2", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Foundation", "Win32_System_Threading", "Win32_Security"] }
+windows-core = "0.62"
 
 
 # Audio-Bibliotheken auch im Debug-Build optimieren, sonst dekodiert symphonia

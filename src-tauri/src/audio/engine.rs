@@ -30,6 +30,8 @@ use super::{BLOCK_FRAMES, ENGINE_RATE, devices};
 const MAX_CALLBACK_FRAMES: usize = 16_384;
 /// Kapazität der Puffer zwischen Eingang und Ausgängen: 1 s.
 const RING_FRAMES: usize = ENGINE_RATE as usize;
+/// Vorlauf für Live-Quellen: 20 ms gleichen die getrennten Takte aus.
+const LIVE_TARGET: usize = ENGINE_RATE as usize / 50;
 /// Glättung für Routing und Kanal-Fader, etwa 10 ms Zeitkonstante.
 const SMOOTHING: f32 = 1.0 / 480.0;
 
@@ -85,6 +87,8 @@ pub struct Engine {
     decks: Arc<Mutex<Vec<Sender<DeckCommand>>>>,
     /// Stand des Musik-Decks.
     pub deck_status: Arc<Mutex<DeckStatus>>,
+    /// Eingänge der Live-Puffer je Ausgang; die Live-Quelle schreibt hinein.
+    pub live_producers: Arc<Mutex<Vec<HeapProd<f32>>>>,
 }
 
 impl Engine {
@@ -97,6 +101,7 @@ impl Engine {
         let playing = Arc::new(Mutex::new(Vec::new()));
         let decks = Arc::new(Mutex::new(Vec::new()));
         let deck_status = Arc::new(Mutex::new(DeckStatus::default()));
+        let live_producers = Arc::new(Mutex::new(Vec::new()));
 
         let shared = Shared {
             mixer: mixer.clone(),
@@ -106,6 +111,7 @@ impl Engine {
             playing: playing.clone(),
             decks: decks.clone(),
             deck_status: deck_status.clone(),
+            live_producers: live_producers.clone(),
         };
         thread::Builder::new()
             .name("ode-engine".into())
@@ -121,6 +127,7 @@ impl Engine {
             playing,
             decks,
             deck_status,
+            live_producers,
         }
     }
 
@@ -178,6 +185,7 @@ struct Shared {
     playing: Arc<Mutex<Vec<PlayingSound>>>,
     decks: Arc<Mutex<Vec<Sender<DeckCommand>>>>,
     deck_status: Arc<Mutex<DeckStatus>>,
+    live_producers: Arc<Mutex<Vec<HeapProd<f32>>>>,
 }
 
 impl Shared {
@@ -187,6 +195,7 @@ impl Shared {
         self.playing.lock().clear();
         self.decks.lock().clear();
         *self.deck_status.lock() = DeckStatus::default();
+        self.live_producers.lock().clear();
     }
 }
 
@@ -238,6 +247,7 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
     let mut streams = Vec::new();
     let mut samplers = Vec::new();
     let mut decks = Vec::new();
+    let mut live_producers = Vec::new();
     let mut monitor = None;
     let mut cable = None;
 
@@ -254,13 +264,15 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
         let sampler = Sampler::new(sampler_rx, reports.then(|| shared.playing.clone()));
         let (deck_tx, deck_rx) = unbounded();
         let deck = Deck::new(deck_rx, reports.then(|| shared.deck_status.clone()));
+        let (live_producer, live_consumer) = HeapRb::<f32>::new(RING_FRAMES).split();
+        live_producers.push(live_producer);
         let (stream, stream_info) = build_output(
             &device,
             mixer.clone(),
             errors.clone(),
             output,
             consumer,
-            (sampler, deck),
+            (sampler, deck, live_consumer),
             target_frames,
         )?;
         samplers.push(sampler_tx);
@@ -272,6 +284,8 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
             OutputId::B => cable = Some(stream_info),
         }
     }
+
+    *shared.live_producers.lock() = live_producers;
 
     let input_device = devices::find(host, &config.input_id)?;
     let (input_stream, input) =
@@ -491,6 +505,10 @@ struct OutputProcessor {
     consumer: HeapCons<f32>,
     sampler: Sampler,
     deck: Deck,
+    /// Ton der Live-Quelle (Programm-Mitschnitt), Engine-Rate, mono.
+    live: HeapCons<f32>,
+    /// Live erst ausgeben, wenn genug Vorlauf da ist.
+    live_primed: bool,
     resampler: PullResampler,
     channels: usize,
     target_frames: usize,
@@ -561,6 +579,17 @@ impl OutputProcessor {
         let consumer = &mut self.consumer;
         let sampler = &mut self.sampler;
         let deck = &mut self.deck;
+
+        // Live-Quelle: Vorlauf abwarten, bei Überlauf auf den Zielwert kürzen.
+        let live_buffered = self.live.occupied_len();
+        if !self.live_primed && live_buffered >= LIVE_TARGET {
+            self.live_primed = true;
+        }
+        if live_buffered > LIVE_TARGET * 3 + frames {
+            self.live.skip(live_buffered - LIVE_TARGET);
+        }
+        let live = &mut self.live;
+        let live_primed = &mut self.live_primed;
         let mic_send = &mut self.mic_send;
         let soundboard_send = &mut self.soundboard_send;
         let music_send = &mut self.music_send;
@@ -583,8 +612,19 @@ impl OutputProcessor {
                 soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
                 sum += sound * *soundboard_send;
             }
+            let mut song = 0.0;
             if !deck.is_idle() {
-                let song = deck.next_sample() * *player * duck;
+                song += deck.next_sample();
+            }
+            if *live_primed {
+                match live.try_pop() {
+                    Some(s) => song += s,
+                    // Quelle beendet oder Lücke: neu vorlaufen lassen.
+                    None => *live_primed = false,
+                }
+            }
+            if song != 0.0 {
+                let song = song * *player * duck;
                 music_peak = music_peak.max((song * music_fader).abs());
                 sum += song * *music_send;
             }
@@ -635,7 +675,7 @@ fn build_output(
     errors: Arc<Mutex<Vec<String>>>,
     output: OutputId,
     consumer: HeapCons<f32>,
-    (sampler, deck): (Sampler, Deck),
+    (sampler, deck, live): (Sampler, Deck, HeapCons<f32>),
     target_frames: usize,
 ) -> anyhow::Result<(Stream, StreamInfo)> {
     let supported = pick_config(
@@ -655,6 +695,8 @@ fn build_output(
         consumer,
         sampler,
         deck,
+        live,
+        live_primed: false,
         resampler: PullResampler::new(ENGINE_RATE, rate),
         channels: supported.channels() as usize,
         target_frames,

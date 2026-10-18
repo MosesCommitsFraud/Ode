@@ -2893,6 +2893,8 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "ureq",
+ "windows",
+ "windows-core",
  "zip",
 ]
 

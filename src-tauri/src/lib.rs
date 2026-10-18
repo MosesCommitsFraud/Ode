@@ -259,8 +259,35 @@ fn set_player_volume(engine: State<Engine>, dirty: State<MixerDirty>, volume: f3
     dirty.0.store(true, Ordering::Relaxed);
 }
 
+#[tauri::command]
+fn live_sources() -> Result<Vec<audio::live::AppSource>, String> {
+    audio::live::list_sources().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn live_start(
+    live: State<'_, audio::live::Live>,
+    source: audio::live::AppSource,
+) -> Result<audio::live::LiveStatus, String> {
+    live.start(source)?;
+    Ok(live.status())
+}
+
+#[tauri::command]
+fn live_stop(live: State<audio::live::Live>) -> audio::live::LiveStatus {
+    live.stop();
+    live.status()
+}
+
+#[tauri::command]
+fn live_status(live: State<audio::live::Live>) -> audio::live::LiveStatus {
+    live.status()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let engine = Engine::spawn();
+    let live = audio::live::Live::new(engine.live_producers.clone());
     tauri::Builder::default()
         // Ein zweiter Start holt nur das laufende Fenster nach vorn.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -274,7 +301,8 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(soundboard::hotkey_plugin())
-        .manage(Engine::spawn())
+        .manage(engine)
+        .manage(live)
         .manage(soundboard::Hotkeys::default())
         .manage(MixerDirty::default())
         .manage(Player::default())
@@ -309,6 +337,10 @@ pub fn run() {
             set_ducking,
             set_effects,
             set_player_volume,
+            live_sources,
+            live_start,
+            live_stop,
+            live_status,
             soundboard::library_list,
             soundboard::library_import,
             soundboard::library_update,
