@@ -37,7 +37,7 @@ function MiniStrip({
           {muted ? "MUTE" : formatDb(gainDb)}
         </span>
       </div>
-      <div className="flex h-24 justify-center">
+      <div className="flex h-32 justify-center">
         <Fader
           label={`${label} Lautstärke`}
           value={gainDb}

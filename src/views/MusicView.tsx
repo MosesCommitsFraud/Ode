@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
+import { PageChannel } from "~/components/mixer/PageChannel";
 import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/misc";
 import { isTauri } from "~/lib/engine";
@@ -261,7 +262,7 @@ export function MusicView() {
   };
 
   return (
-    <div className="relative flex h-full gap-4 pl-6 pr-3 pt-3 pb-4">
+    <div className="relative flex h-full gap-4 pl-6 pr-3 pt-3 pb-3">
       {/* Titel */}
       <section className="panel flex min-w-0 flex-1 flex-col rounded-2xl p-4">
         <div className="flex items-center gap-3 pb-3">
@@ -374,6 +375,8 @@ export function MusicView() {
           )}
         </div>
       </section>
+
+      <PageChannel id="music" name="Musik" icon={<VinylRecord />} color="var(--ch-music)" />
 
       {dragOver && (
         <div className="pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-[var(--ch-music)] bg-[color-mix(in_oklch,var(--ch-music)_10%,transparent)] backdrop-blur-sm">

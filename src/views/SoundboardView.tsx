@@ -1,5 +1,6 @@
-import { CaretLeft as ChevronLeft, CaretRight as ChevronRight, CircleNotch as Loader2, Play, Rows, SquaresFour, X } from "@phosphor-icons/react";
+import { CaretLeft as ChevronLeft, CaretRight as ChevronRight, CircleNotch as Loader2, Play, Rows, SquaresFour, Waveform, X } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { PageChannel } from "~/components/mixer/PageChannel";
 import { SoundEditor } from "~/components/soundboard/SoundEditor";
 import { SoundRow, SoundTile } from "~/components/soundboard/SoundTile";
 import { Button } from "~/components/ui/button";
@@ -156,9 +157,10 @@ export function SoundboardView() {
   };
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="relative flex h-full">
+      <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 pl-6 pr-3 pt-3 pb-4">
-        <div className="well flex h-9 w-56 items-center gap-2 rounded-full px-3.5">
+        <div className="well flex h-9 w-44 items-center gap-2 rounded-full px-3.5">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -171,7 +173,7 @@ export function SoundboardView() {
             </button>
           )}
         </div>
-        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto">
+        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Chip active={filter === ALL} onClick={() => setFilter(ALL)}>
             Alle <span className="font-mono opacity-60">{sounds.length}</span>
           </Chip>
@@ -290,6 +292,12 @@ export function SoundboardView() {
             </Button>
           </>
         )}
+      </div>
+
+      </div>
+
+      <div className="flex shrink-0 py-3 pr-3">
+        <PageChannel id="soundboard" name="Soundboard" icon={<Waveform />} color="var(--ch-soundboard)" />
       </div>
 
       {dragOver && (

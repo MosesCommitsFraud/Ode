@@ -1,21 +1,15 @@
 import { ArrowsClockwise, Broadcast } from "@phosphor-icons/react";
 import { useEffect } from "react";
-import { ChannelStrip } from "~/components/mixer/ChannelStrip";
+import { PageChannel } from "~/components/mixer/PageChannel";
 import { Meter } from "~/components/mixer/Meter";
 import { Button } from "~/components/ui/button";
 import { EmptyState, Card } from "~/components/ui/misc";
-import type { ChannelParams } from "~/lib/engine";
 import { live, useLive, type AppSource } from "~/lib/live";
-import { actions, useStore } from "~/lib/store";
+import { useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 
-const DEFAULT: ChannelParams = { gainDb: 0, muted: false, routeA: true, routeB: true };
 /** Wie oft die Liste der Programme neu gelesen wird, damit „spielt“ stimmt. */
 const REFRESH_MS = 4000;
-
-function same(a: ChannelParams, b: ChannelParams) {
-  return a.gainDb === b.gainDb && a.muted === b.muted && a.routeA === b.routeA && a.routeB === b.routeB;
-}
 
 function SourceRow({ source, active }: { source: AppSource; active: boolean }) {
   return (
@@ -72,8 +66,6 @@ export function LiveView() {
   const active = useLive((s) => s.active);
   const loading = useLive((s) => s.loading);
   const error = useLive((s) => s.error);
-  const channel = useStore((s) => s.channels.live);
-  const peak = useStore((s) => (s.info ? (s.meters?.channels.find((c) => c.id === "live")?.peak ?? 0) : 0));
 
   useEffect(() => {
     void live.refresh();
@@ -109,26 +101,7 @@ export function LiveView() {
         </Card>
       </div>
 
-      <Card className="flex min-h-0 p-1.5">
-        <ChannelStrip
-          name="Live"
-          icon={<Broadcast />}
-          color="var(--ch-live)"
-          gainDb={channel.gainDb}
-          muted={channel.muted}
-          peak={peak}
-          onGain={(gainDb) => actions.setChannel("live", { gainDb })}
-          onMute={(muted) => actions.setChannel("live", { muted })}
-          routing={{
-            a: channel.routeA,
-            b: channel.routeB,
-            onA: (routeA) => actions.setChannel("live", { routeA }),
-            onB: (routeB) => actions.setChannel("live", { routeB }),
-          }}
-          isDefault={same(channel, DEFAULT)}
-          onReset={() => actions.setChannel("live", DEFAULT)}
-        />
-      </Card>
+      <PageChannel id="live" name="Live" icon={<Broadcast />} color="var(--ch-live)" />
     </div>
   );
 }

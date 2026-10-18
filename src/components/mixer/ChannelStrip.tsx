@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import { ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react";
+import { ArrowCounterClockwise as RotateCcw, Headphones, MicrophoneStage } from "@phosphor-icons/react";
 import { cn, formatDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
@@ -32,7 +32,7 @@ export function StripToggle({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex h-7 min-w-0 flex-1 cursor-default items-center justify-center rounded-lg font-mono text-2xs font-semibold uppercase transition-all duration-200 disabled:opacity-40",
+        "flex h-7 min-w-0 flex-1 cursor-default items-center justify-center rounded-lg font-mono text-2xs font-semibold uppercase transition-all duration-200 disabled:opacity-40 [&_svg]:size-4",
         on
           ? cn(
               "bg-panel-raised shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)]",
@@ -97,7 +97,7 @@ export function ChannelStrip({
     >
       <div className="flex items-center gap-1.5">
         <span
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_oklch,var(--ch)_16%,transparent)] text-[var(--ch)] [&_svg]:size-4"
+          className="flex shrink-0 items-center text-[var(--ch)] [&_svg]:size-[18px]"
         >
           {icon}
         </span>
@@ -109,7 +109,7 @@ export function ChannelStrip({
           title="Auf Standard zurücksetzen"
           disabled={isDefault}
           onClick={onReset}
-          className="flex size-7 shrink-0 cursor-default items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-35 disabled:hover:bg-muted disabled:hover:text-muted-foreground [&_svg]:size-4"
+          className="flex size-7 shrink-0 cursor-default items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground [&_svg]:size-4"
         >
           <RotateCcw />
         </button>
@@ -151,7 +151,7 @@ export function ChannelStrip({
               onClick={() => routing.onA(!routing.a)}
               disabled={disabled}
             >
-              A
+              <Headphones />
             </StripToggle>
             <StripToggle
               title="Ins virtuelle Mikrofon (B)"
@@ -159,7 +159,7 @@ export function ChannelStrip({
               onClick={() => routing.onB(!routing.b)}
               disabled={disabled}
             >
-              B
+              <MicrophoneStage />
             </StripToggle>
           </>
         )}

@@ -9,8 +9,9 @@ import {
 } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { ChannelStrip, StripToggle } from "~/components/mixer/ChannelStrip";
+import { CHANNEL_DEFAULTS, OUTPUT_DEFAULTS, same } from "~/components/mixer/PageChannel";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
-import type { ChannelId, ChannelParams, Meters, OutputId, OutputParams } from "~/lib/engine";
+import type { ChannelId, Meters, OutputId } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 
@@ -25,23 +26,6 @@ const OUTPUTS: { id: OutputId; name: string; icon: ReactNode }[] = [
   { id: "a", name: "Kopfhörer", icon: <Headphones /> },
   { id: "b", name: "Kabel", icon: <Cable /> },
 ];
-
-/** Auslieferungszustand der Kanäle und Ausgänge, wie im Store. */
-const CHANNEL_DEFAULTS: Record<ChannelId, ChannelParams> = {
-  mic: { gainDb: 0, muted: false, routeA: false, routeB: true },
-  soundboard: { gainDb: 0, muted: false, routeA: true, routeB: true },
-  music: { gainDb: 0, muted: false, routeA: true, routeB: true },
-  live: { gainDb: 0, muted: false, routeA: true, routeB: true },
-};
-
-const OUTPUT_DEFAULTS: Record<OutputId, OutputParams> = {
-  a: { gainDb: 0, muted: false, limiter: false },
-  b: { gainDb: 0, muted: false, limiter: true },
-};
-
-function same<T extends object>(a: T, b: T) {
-  return (Object.keys(b) as (keyof T)[]).every((k) => a[k] === b[k]);
-}
 
 function channelPeak(meters: Meters | null, id: ChannelId) {
   return meters?.channels.find((c) => c.id === id)?.peak ?? 0;
