@@ -1,5 +1,5 @@
-import { SpeakerSlash as VolumeX } from "@phosphor-icons/react";
 import type { CSSProperties } from "react";
+import { StripToggle, ToggleGroup } from "~/components/mixer/ChannelStrip";
 import { Fader } from "~/components/mixer/Fader";
 import { Meter } from "~/components/mixer/Meter";
 import type { ChannelId } from "~/lib/engine";
@@ -47,21 +47,16 @@ function MiniStrip({
           className="py-2"
         />
       </div>
-      <button
-        type="button"
-        title={muted ? `${label} einschalten` : `${label} stummschalten`}
-        aria-pressed={muted}
-        onClick={() => onMute(!muted)}
-        className={cn(
-          "flex h-7 cursor-default items-center justify-center gap-1 rounded-lg font-mono text-3xs font-semibold transition-colors [&_svg]:size-3",
-          muted
-            ? "bg-error/16 text-error-foreground shadow-[0_0_0_1px_color-mix(in_oklch,var(--error)_40%,transparent)_inset]"
-            : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
-        )}
-      >
-        <VolumeX />
-        MUTE
-      </button>
+      <ToggleGroup>
+        <StripToggle
+          title={muted ? `${label} einschalten` : `${label} stummschalten`}
+          on={muted}
+          tone="error"
+          onClick={() => onMute(!muted)}
+        >
+          Mute
+        </StripToggle>
+      </ToggleGroup>
     </div>
   );
 }

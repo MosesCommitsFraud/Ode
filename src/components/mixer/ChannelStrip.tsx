@@ -1,47 +1,53 @@
 import type { CSSProperties, ReactNode } from "react";
-import { Headphones, MicrophoneStage as Mic2, ArrowCounterClockwise as RotateCcw, SpeakerSlash as VolumeX } from "@phosphor-icons/react";
+import { ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react";
 import { cn, formatDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
 
-/** Taster wie auf einem Pult. */
-function PadButton({
-  active,
+/**
+ * Schalter im Stil der übrigen Auswahlen der App: in einer Mulde, eingeschaltet
+ * hebt er sich als helle Fläche heraus und trägt die Kanalfarbe (`--ch`),
+ * Stumm trägt Rot.
+ */
+export function StripToggle({
+  on,
   onClick,
   title,
   children,
   tone = "channel",
   disabled,
-  className,
 }: {
-  active: boolean;
+  on: boolean;
   onClick: () => void;
   title: string;
   children: ReactNode;
   tone?: "channel" | "error";
   disabled?: boolean;
-  className?: string;
 }) {
-  const color = tone === "error" ? "var(--error)" : "var(--ch)";
   return (
     <button
       type="button"
       title={title}
-      aria-pressed={active}
+      aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
-      style={{ "--pad": color } as CSSProperties}
       className={cn(
-        "relative flex h-8 flex-1 cursor-default items-center justify-center gap-1.5 rounded-xl font-mono text-2xs font-semibold transition-all duration-150 disabled:opacity-40 [&_svg]:size-3.5",
-        active
-          ? "bg-[color-mix(in_oklch,var(--pad)_18%,transparent)] text-[var(--pad)] shadow-[0_0_0_1px_color-mix(in_oklch,var(--pad)_40%,transparent)_inset]"
-          : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground active:scale-95",
-        className,
+        "flex h-7 min-w-0 flex-1 cursor-default items-center justify-center rounded-lg font-mono text-2xs font-semibold uppercase transition-all duration-200 disabled:opacity-40",
+        on
+          ? cn(
+              "bg-panel-raised shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)]",
+              tone === "error" ? "text-error-foreground" : "text-[var(--ch)]",
+            )
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
       {children}
     </button>
   );
+}
+
+export function ToggleGroup({ children }: { children: ReactNode }) {
+  return <div className="well flex gap-1 rounded-xl p-1">{children}</div>;
 }
 
 export interface StripProps {
@@ -59,7 +65,8 @@ export interface StripProps {
     onA: (on: boolean) => void;
     onB: (on: boolean) => void;
   };
-  footer?: ReactNode;
+  /** Weitere Schalter in derselben Mulde, z. B. der Limiter der Ausgänge. */
+  extra?: ReactNode;
   disabled?: boolean;
   /** Stellt Lautstärke, Mute, Routing und Limiter auf den Auslieferungszustand. */
   onReset: () => void;
@@ -76,7 +83,7 @@ export function ChannelStrip({
   onGain,
   onMute,
   routing,
-  footer,
+  extra,
   disabled,
   onReset,
   isDefault,
@@ -135,40 +142,38 @@ export function ChannelStrip({
         />
       </div>
 
-      <div className="space-y-1.5">
+      <ToggleGroup>
         {routing && (
-          <div className="flex gap-1.5">
-            <PadButton
+          <>
+            <StripToggle
               title="Auf Kopfhörer (A)"
-              active={routing.a}
+              on={routing.a}
               onClick={() => routing.onA(!routing.a)}
               disabled={disabled}
             >
-              <Headphones />A
-            </PadButton>
-            <PadButton
-              title="Auf virtuelles Mikrofon (B)"
-              active={routing.b}
+              A
+            </StripToggle>
+            <StripToggle
+              title="Ins virtuelle Mikrofon (B)"
+              on={routing.b}
               onClick={() => routing.onB(!routing.b)}
               disabled={disabled}
             >
-              <Mic2 />B
-            </PadButton>
-          </div>
+              B
+            </StripToggle>
+          </>
         )}
-        <PadButton
+        <StripToggle
           title={muted ? "Stummschaltung aufheben" : "Stummschalten"}
-          active={muted}
+          on={muted}
           tone="error"
           onClick={() => onMute(!muted)}
           disabled={disabled}
-          className="w-full"
         >
-          <VolumeX />
-          {muted ? "STUMM" : "MUTE"}
-        </PadButton>
-        {footer}
-      </div>
+          Mute
+        </StripToggle>
+        {extra}
+      </ToggleGroup>
     </div>
   );
 }

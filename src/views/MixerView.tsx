@@ -4,12 +4,11 @@ import {
   Headphones,
   Microphone as Mic,
   Plugs as Cable,
-  ShieldCheck,
   VinylRecord as Disc3,
   Waveform as AudioWaveform,
 } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { ChannelStrip } from "~/components/mixer/ChannelStrip";
+import { ChannelStrip, StripToggle } from "~/components/mixer/ChannelStrip";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
 import type { ChannelId, ChannelParams, Meters, OutputId, OutputParams } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
@@ -122,17 +121,14 @@ function Console() {
                 onMute={(muted) => actions.setOutput(id, { muted })}
                 isDefault={same(params, OUTPUT_DEFAULTS[id])}
                 onReset={() => actions.setOutput(id, OUTPUT_DEFAULTS[id])}
-                footer={
-                  <label className="flex h-8 items-center justify-between gap-1 rounded-lg bg-muted pr-1.5 pl-2 font-mono text-2xs font-semibold text-muted-foreground">
-                    <span className={cn("flex items-center gap-1 transition-colors", reducing && "text-warning-foreground")}>
-                      <ShieldCheck className="size-3.5" /> LIM
-                    </span>
-                    <Switch
-                      label="Limiter"
-                      checked={params.limiter}
-                      onCheckedChange={(limiter) => actions.setOutput(id, { limiter })}
-                    />
-                  </label>
+                extra={
+                  <StripToggle
+                    title={reducing ? "Limiter greift gerade" : "Limiter: harte Obergrenze für diesen Ausgang"}
+                    on={params.limiter}
+                    onClick={() => actions.setOutput(id, { limiter: !params.limiter })}
+                  >
+                    <span className={cn(reducing && "text-warning-foreground")}>Lim</span>
+                  </StripToggle>
                 }
               />
             );
