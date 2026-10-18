@@ -167,4 +167,12 @@ Das größte Risiko ist die Latenz der Kette Mikrofon → App → Kabel; sie mus
 | 10 ms | 115,5 ms | 0 |
 | 20 ms | 128,9 ms | 0 |
 
-Ode selbst trägt rund 30 ms bei (je 10 ms Eingangs-, Zwischen- und Ausgangspuffer). Der Rest liegt im Treiber: VB-Cable steht ab Werk auf `Max Latency = 7168` Samples (Registry `HKLM\SYSTEM\CurrentControlSet\Services\VB-Cable`, Wert `VBAudioCableWDM_Latency`). Wenn der Wert kleiner ist, sollte die Kette unter 30 ms liegen. Der Installer von Ode sollte ihn bei der stillen Installation gleich mitsetzen.
+Nach dem Umstellen von VB-Cable auf `Max Latency = 1536` (3 × 512) und einem Neustart änderte sich fast nichts: Die Kette lag weiter bei 113–139 ms. Eine Zerlegung mit `ODE_MODE=cable` (Rauschen direkt in CABLE Input, ganz ohne Mikrofon und ohne Ode) ergab:
+
+| Strecke | nach Gerätezeit | nach Callback-Zeit |
+| --- | --- | --- |
+| Selbsttest (Mikrofon doppelt) | 0,0 ms | 0,0 ms |
+| nur Kabel (CABLE Input → CABLE Output) | 55–60 ms | 97–104 ms |
+| Mikrofon → Ode (10 ms) → Kabel | 118–119 ms | 113–115 ms |
+
+Windows bedient beide Seiten in 10-ms-Blöcken. **Ode selbst trägt etwa 15 ms bei, das Kabel im geteilten Modus rund 100 ms.** Die Treibereinstellung „Max Latency“ ist nur eine Obergrenze und senkt diesen Wert nicht. Mit VB-Cable ist das 30-ms-Ziel für die ganze Kette so nicht zu erreichen; offen ist der Vergleich mit VAC Lite und der exklusive WASAPI-Modus auf der Schreibseite.
