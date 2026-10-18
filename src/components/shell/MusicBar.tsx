@@ -195,7 +195,7 @@ export function MusicBar() {
   const VolumeIcon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   return (
-    <div className="px-6 pt-1 pb-2">
+    <div className="pl-6 pr-3 pt-1 pb-2">
       <div className="panel mx-auto flex h-16 items-center gap-4 rounded-2xl px-3 shadow-dock">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Cover track={track} loading={state.loading} />

@@ -261,7 +261,7 @@ export function MusicView() {
   };
 
   return (
-    <div className="relative flex h-full gap-4 px-6 pt-5 pb-4">
+    <div className="relative flex h-full gap-4 pl-6 pr-3 pt-3 pb-4">
       {/* Titel */}
       <section className="panel flex min-w-0 flex-1 flex-col rounded-2xl p-4">
         <div className="flex items-center gap-3 pb-3">

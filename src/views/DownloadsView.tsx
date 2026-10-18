@@ -322,7 +322,7 @@ export function DownloadsView() {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 px-6 pt-5 pb-4">
+    <div className="flex h-full flex-col gap-4 pl-6 pr-3 pt-3 pb-4">
       {ready ? <AddForm /> : <ToolsSetup />}
 
       <Card className="flex min-h-0 flex-1 flex-col p-3">

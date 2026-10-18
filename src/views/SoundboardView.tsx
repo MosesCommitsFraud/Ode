@@ -157,7 +157,7 @@ export function SoundboardView() {
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 px-6 pt-5 pb-4">
+      <div className="flex flex-wrap items-center gap-2 pl-6 pr-3 pt-3 pb-4">
         <div className="well flex h-9 w-56 items-center gap-2 rounded-full px-3.5">
           <input
             value={query}
@@ -216,7 +216,7 @@ export function SoundboardView() {
       </div>
 
       {!running && sounds.length > 0 && (
-        <div className="mx-6 mb-4 flex items-center gap-3 rounded-2xl bg-warning/12 px-4 py-2.5 text-sm text-warning-foreground">
+        <div className="mr-3 ml-6 mb-4 flex items-center gap-3 rounded-2xl bg-warning/12 px-4 py-2.5 text-sm text-warning-foreground">
           <span className="flex-1">Die Engine ist aus – Sounds sind erst zu hören, wenn sie läuft.</span>
           <Button size="sm" disabled={starting} onClick={() => actions.start()}>
             <Play /> {starting ? "Startet …" : "Engine starten"}
@@ -225,7 +225,7 @@ export function SoundboardView() {
       )}
 
       {notices.length > 0 && (
-        <div className="mx-6 mb-4 space-y-1.5">
+        <div className="mr-3 ml-6 mb-4 space-y-1.5">
           {notices.map((n, i) => (
             <div key={`${i}-${n}`} className="flex items-center gap-3 rounded-2xl bg-error/10 px-4 py-2 text-sm text-error-foreground">
               <span className="flex-1">{n}</span>
@@ -237,7 +237,7 @@ export function SoundboardView() {
         </div>
       )}
 
-      <div ref={grid.ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden px-6">
+      <div ref={grid.ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden pr-3 pl-6">
         {sounds.length === 0 && loaded ? (
           <EmptyState art="sounds" title="Noch kein einziges Airhorn">
             Zieh Audiodateien hier rein.
@@ -276,7 +276,7 @@ export function SoundboardView() {
         )}
       </div>
 
-      <div className="flex h-12 shrink-0 items-center justify-center gap-3 px-6">
+      <div className="flex h-12 shrink-0 items-center justify-center gap-3 pr-3 pl-6">
         {pages > 1 && (
           <>
             <Button variant="ghost" size="icon-sm" title="Vorherige Seite" disabled={current === 0} onClick={() => turn(-1)}>

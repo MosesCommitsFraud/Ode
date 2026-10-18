@@ -1,4 +1,4 @@
-import { ArrowsClockwise } from "@phosphor-icons/react";
+import { ArrowsClockwise, Broadcast } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { Meter } from "~/components/mixer/Meter";
@@ -85,7 +85,7 @@ export function LiveView() {
   const sorted = [...sources].sort((a, b) => Number(b.playing) - Number(a.playing) || a.name.localeCompare(b.name));
 
   return (
-    <div className="grid h-full grid-cols-[minmax(0,1fr)_auto] gap-4 overflow-hidden px-6 pt-3 pb-3">
+    <div className="grid h-full grid-cols-[minmax(0,1fr)_auto] gap-4 overflow-hidden pl-6 pr-3 pt-3 pb-3">
       <div className="flex min-h-0 flex-col gap-4">
         {active && <ActiveSource source={active} />}
 
@@ -112,6 +112,7 @@ export function LiveView() {
       <Card className="flex min-h-0 p-1.5">
         <ChannelStrip
           name="Live"
+          icon={<Broadcast />}
           color="var(--ch-live)"
           gainDb={channel.gainDb}
           muted={channel.muted}

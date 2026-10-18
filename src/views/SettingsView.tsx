@@ -92,7 +92,7 @@ function BufferCard() {
 
 export function SettingsView() {
   return (
-    <div className="grid h-full grid-cols-[minmax(0,1fr)_20rem] items-start gap-4 overflow-hidden px-6 pt-3 pb-4">
+    <div className="grid h-full grid-cols-[minmax(0,1fr)_20rem] items-start gap-4 overflow-hidden pl-6 pr-3 pt-3 pb-4">
       <div className="space-y-4">
         <DeviceSetup />
         <GeneralSettings />

@@ -1,19 +1,30 @@
-import { ChannelStrip, StripToggle } from "~/components/mixer/ChannelStrip";
+import {
+  ArrowCounterClockwise as RotateCcw,
+  Broadcast,
+  Headphones,
+  Microphone as Mic,
+  Plugs as Cable,
+  ShieldCheck,
+  VinylRecord as Disc3,
+  Waveform as AudioWaveform,
+} from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+import { ChannelStrip } from "~/components/mixer/ChannelStrip";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
 import type { ChannelId, ChannelParams, Meters, OutputId, OutputParams } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 
-const CHANNELS: { id: ChannelId; name: string; color: string; ready: boolean }[] = [
-  { id: "mic", name: "Mikrofon", color: "var(--ch-mic)", ready: true },
-  { id: "soundboard", name: "Soundboard", color: "var(--ch-soundboard)", ready: true },
-  { id: "music", name: "Musik", color: "var(--ch-music)", ready: true },
-  { id: "live", name: "Live", color: "var(--ch-live)", ready: true },
+const CHANNELS: { id: ChannelId; name: string; icon: ReactNode; color: string; ready: boolean }[] = [
+  { id: "mic", name: "Mikrofon", icon: <Mic />, color: "var(--ch-mic)", ready: true },
+  { id: "soundboard", name: "Soundboard", icon: <AudioWaveform />, color: "var(--ch-soundboard)", ready: true },
+  { id: "music", name: "Musik", icon: <Disc3 />, color: "var(--ch-music)", ready: true },
+  { id: "live", name: "Live", icon: <Broadcast />, color: "var(--ch-live)", ready: true },
 ];
 
-const OUTPUTS: { id: OutputId; name: string }[] = [
-  { id: "a", name: "Kopfhörer" },
-  { id: "b", name: "Kabel" },
+const OUTPUTS: { id: OutputId; name: string; icon: ReactNode }[] = [
+  { id: "a", name: "Kopfhörer", icon: <Headphones /> },
+  { id: "b", name: "Kabel", icon: <Cable /> },
 ];
 
 /** Auslieferungszustand der Kanäle und Ausgänge, wie im Store. */
@@ -57,16 +68,17 @@ function Console() {
             onClick={() => actions.resetLevels()}
             className="flex h-6 cursor-default items-center gap-1.5 rounded-full bg-muted px-2.5 font-mono text-3xs font-semibold text-muted-foreground uppercase transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 [&_svg]:size-3"
           >
-            Alles auf 0 dB
+            <RotateCcw /> Alles auf 0 dB
           </button>
         </div>
         <div className="flex flex-1 divide-x divide-hairline">
-          {CHANNELS.map(({ id, name, color, ready }) => {
+          {CHANNELS.map(({ id, name, icon, color, ready }) => {
             const params = channels[id];
             return (
               <ChannelStrip
                 key={id}
                 name={name}
+                icon={icon}
                 color={color}
                 gainDb={params.gainDb}
                 muted={params.muted}
@@ -93,7 +105,7 @@ function Console() {
       <section className="well flex flex-col rounded-xl">
         <SectionLabel className="flex h-[30px] items-center px-3 pt-1.5">Ausgänge</SectionLabel>
         <div className="flex flex-1 divide-x divide-hairline">
-          {OUTPUTS.map(({ id, name }) => {
+          {OUTPUTS.map(({ id, name, icon }) => {
             const params = outputs[id];
             const out = id === "a" ? meters?.outA : meters?.outB;
             const reducing = params.limiter && (out?.gainReductionDb ?? 0) < -0.1;
@@ -101,6 +113,7 @@ function Console() {
               <ChannelStrip
                 key={id}
                 name={name}
+                icon={icon}
                 color="var(--ch-out)"
                 gainDb={params.gainDb}
                 muted={params.muted}
@@ -109,15 +122,17 @@ function Console() {
                 onMute={(muted) => actions.setOutput(id, { muted })}
                 isDefault={same(params, OUTPUT_DEFAULTS[id])}
                 onReset={() => actions.setOutput(id, OUTPUT_DEFAULTS[id])}
-                extra={
-                  <StripToggle
-                    title={reducing ? "Limiter greift gerade" : "Limiter: harte Obergrenze für diesen Ausgang"}
-                    on={params.limiter}
-                    onClick={() => actions.setOutput(id, { limiter: !params.limiter })}
-                    className={cn(reducing && "ring-2 ring-warning ring-inset")}
-                  >
-                    Limiter
-                  </StripToggle>
+                footer={
+                  <label className="flex h-8 items-center justify-between gap-1 rounded-lg bg-muted pr-1.5 pl-2 font-mono text-2xs font-semibold text-muted-foreground">
+                    <span className={cn("flex items-center gap-1 transition-colors", reducing && "text-warning-foreground")}>
+                      <ShieldCheck className="size-3.5" /> LIM
+                    </span>
+                    <Switch
+                      label="Limiter"
+                      checked={params.limiter}
+                      onCheckedChange={(limiter) => actions.setOutput(id, { limiter })}
+                    />
+                  </label>
                 }
               />
             );
@@ -192,7 +207,7 @@ function DuckingBar() {
 
 export function MixerView() {
   return (
-    <div className="flex h-full flex-col gap-3 overflow-hidden px-6 pt-3 pb-3">
+    <div className="flex h-full flex-col gap-3 overflow-hidden pl-6 pr-3 pt-3 pb-3">
       <Console />
       <DuckingBar />
     </div>

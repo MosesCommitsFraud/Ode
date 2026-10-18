@@ -299,7 +299,7 @@ export function EffectsView() {
   const voice = running ? (live?.voice ?? 0) : 0;
 
   return (
-    <div className="grid h-full grid-cols-6 grid-rows-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3 overflow-hidden px-6 pt-3 pb-3">
+    <div className="grid h-full grid-cols-6 grid-rows-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3 overflow-hidden pl-6 pr-3 pt-3 pb-3">
       <Module
         className="col-span-3"
         title="Noise Gate"
