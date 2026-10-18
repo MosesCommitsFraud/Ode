@@ -23,9 +23,9 @@ export const SETTINGS = {
 /** Wortmarke mit App-Symbol: ein Ring, der wie eine Schallwelle aufgeht. */
 function Logo() {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex h-8 items-center gap-2">
       {/* Symbol wie in Taskleiste und Tray (src-tauri/icons/source/app-icon.svg), hier ohne Box. */}
-      <svg viewBox="170 162 700 700" className="size-8 shrink-0" aria-hidden>
+      <svg viewBox="176 236 684 552" className="h-[18px] w-auto shrink-0 -translate-y-px" aria-hidden>
         <circle cx="452" cy="512" r="226" fill="none" stroke="currentColor" strokeWidth="100" />
         <path d="M736 272A370 370 0 0 1 736 752" fill="none" stroke="var(--primary)" strokeWidth="72" strokeLinecap="round" />
       </svg>
