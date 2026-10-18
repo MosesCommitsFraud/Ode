@@ -8,7 +8,7 @@ export function TopBar({ title }: { title: string }) {
       className="flex h-[var(--topbar-height)] shrink-0 items-center gap-3 pt-2 pr-3 pl-6"
     >
       <div data-tauri-drag-region className="min-w-0">
-        <h1 data-tauri-drag-region className="font-display text-2xl leading-none font-semibold tracking-tight">{title}</h1>
+        <h1 data-tauri-drag-region className="font-display text-[28px] leading-none font-medium tracking-tight">{title}</h1>
       </div>
       <div data-tauri-drag-region className="flex flex-1 justify-end">
         <Search />

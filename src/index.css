@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/newsreader/opsz.css";
+@import "@fontsource-variable/newsreader/opsz-italic.css";
 @import "@fontsource-variable/jetbrains-mono";
 
 /* Ode: dunkle Arbeitsfläche wie ein Studiopult, schwebende Paneele,
@@ -10,7 +11,7 @@
 
 @theme {
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-display: "Bricolage Grotesque Variable", "Segoe UI Variable Display", system-ui, sans-serif;
+  --font-display: "Newsreader Variable", Georgia, "Times New Roman", serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
