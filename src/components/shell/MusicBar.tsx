@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Button } from "~/components/ui/button";
+import { downloads } from "~/lib/downloads";
 import { formatTime, music, useMusic, type Repeat as RepeatMode } from "~/lib/music";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
@@ -123,6 +124,8 @@ export function MusicBar() {
 
   useEffect(() => {
     void music.init();
+    // Fertige Downloads sollen die Bibliothek auf jeder Seite neu laden.
+    void downloads.init();
   }, []);
 
   const { track } = player;

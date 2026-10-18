@@ -129,6 +129,11 @@ export const music = {
     });
   },
 
+  /** Titel und Playlists neu laden, z. B. nach einem Download. */
+  async reload() {
+    if (isTauri) await refresh().catch((e) => notify([message(e)]));
+  },
+
   selectPlaylist(selectedPlaylist: PlaylistSelection) {
     set({ selectedPlaylist });
   },
