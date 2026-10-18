@@ -72,6 +72,12 @@ export function Waveform({
           />
         );
       })}
+      {trim && progress !== undefined && (
+        <span
+          className="pointer-events-none absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-sm bg-foreground shadow-[0_0_6px_var(--foreground)]"
+          style={{ left: `${(start + progress * (end - start)) * 100}%` }}
+        />
+      )}
       {trim && (
         <>
           <Handle at={start} color={color} />

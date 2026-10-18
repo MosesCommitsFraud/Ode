@@ -153,6 +153,10 @@ impl Library {
                  duration_ms INTEGER NOT NULL,
                  waveform BLOB NOT NULL,
                  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+             );
+             CREATE TABLE IF NOT EXISTS settings (
+                 key TEXT PRIMARY KEY,
+                 value TEXT NOT NULL
              );",
         )?;
         Ok(Self {
@@ -160,6 +164,26 @@ impl Library {
             sounds_dir,
             cache: Mutex::new(HashMap::new()),
         })
+    }
+
+    pub fn setting(&self, key: &str) -> Option<String> {
+        self.db
+            .lock()
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get(0)
+            })
+            .optional()
+            .ok()
+            .flatten()
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> anyhow::Result<()> {
+        self.db.lock().execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
     }
 
     pub fn list(&self) -> anyhow::Result<Vec<Sound>> {
@@ -321,5 +345,22 @@ impl Library {
             fade_out: ms_to_samples(sound.fade_out_ms),
             mode: sound.play_mode,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_round_trip() {
+        let dir = std::env::temp_dir().join(format!("ode-settings-test-{}", std::process::id()));
+        let library = Library::open(&dir).unwrap();
+        assert_eq!(library.setting("mixer"), None);
+        library.set_setting("mixer", "{\"a\":1}").unwrap();
+        library.set_setting("mixer", "{\"a\":2}").unwrap();
+        assert_eq!(library.setting("mixer").as_deref(), Some("{\"a\":2}"));
+        drop(library);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

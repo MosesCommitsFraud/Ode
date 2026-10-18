@@ -278,7 +278,38 @@ impl Default for Mixer {
     }
 }
 
+/// Alle Mischpult-Einstellungen am Stück, zum Speichern und Laden.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MixerSettings {
+    pub channels: Vec<(ChannelId, ChannelParams)>,
+    pub out_a: OutputParams,
+    pub out_b: OutputParams,
+    pub ducking: DuckingParams,
+}
+
 impl Mixer {
+    pub fn settings(&self) -> MixerSettings {
+        MixerSettings {
+            channels: ChannelId::ALL
+                .iter()
+                .map(|&id| (id, self.channel(id).params()))
+                .collect(),
+            out_a: self.out_a.params(),
+            out_b: self.out_b.params(),
+            ducking: self.ducking.params(),
+        }
+    }
+
+    pub fn apply(&self, settings: &MixerSettings) {
+        for (id, params) in &settings.channels {
+            self.channel(*id).set(*params);
+        }
+        self.out_a.set(settings.out_a);
+        self.out_b.set(settings.out_b);
+        self.ducking.set(settings.ducking);
+    }
+
     pub fn channel(&self, id: ChannelId) -> &Channel {
         &self.channels[id.index()]
     }

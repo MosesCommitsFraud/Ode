@@ -2,7 +2,7 @@ pub mod audio;
 pub mod library;
 mod soundboard;
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -13,18 +13,40 @@ use audio::ENGINE_RATE;
 use audio::devices::{self, DeviceList};
 use audio::engine::{Engine, EngineConfig, EngineInfo};
 use audio::mixer::{
-    ChannelId, ChannelParams, DuckingParams, Mixer, Output, OutputId, OutputParams,
+    ChannelId, ChannelParams, DuckingParams, Mixer, MixerSettings, Output, OutputId, OutputParams,
 };
 use audio::sampler::PlayingSound;
 use library::Library;
 
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct MixerState {
-    channels: Vec<(ChannelId, ChannelParams)>,
-    out_a: OutputParams,
-    out_b: OutputParams,
-    ducking: DuckingParams,
+const MIXER_KEY: &str = "mixer";
+
+/// Merkt sich, dass das Mischpult gespeichert werden muss.
+#[derive(Default)]
+struct MixerDirty(AtomicBool);
+
+fn load_mixer(app: &AppHandle) {
+    let saved = app.state::<Library>().setting(MIXER_KEY);
+    if let Some(settings) = saved.and_then(|s| serde_json::from_str::<MixerSettings>(&s).ok()) {
+        app.state::<Engine>().mixer.apply(&settings);
+    }
+}
+
+/// Speichert gesammelt höchstens alle 500 ms, damit Fader-Ziehen nicht ständig schreibt.
+fn spawn_mixer_saver(app: AppHandle) {
+    thread::Builder::new()
+        .name("ode-settings".into())
+        .spawn(move || {
+            loop {
+                thread::sleep(Duration::from_millis(500));
+                if app.state::<MixerDirty>().0.swap(false, Ordering::Relaxed) {
+                    let settings = app.state::<Engine>().mixer.settings();
+                    if let Ok(json) = serde_json::to_string(&settings) {
+                        let _ = app.state::<Library>().set_setting(MIXER_KEY, &json);
+                    }
+                }
+            }
+        })
+        .expect("Einstellungs-Thread konnte nicht starten");
 }
 
 #[derive(Serialize, Clone)]
@@ -155,32 +177,36 @@ fn engine_info(engine: State<Engine>) -> Option<EngineInfo> {
 }
 
 #[tauri::command]
-fn get_mixer(engine: State<Engine>) -> MixerState {
-    let mixer = &engine.mixer;
-    MixerState {
-        channels: ChannelId::ALL
-            .iter()
-            .map(|&id| (id, mixer.channel(id).params()))
-            .collect(),
-        out_a: mixer.out_a.params(),
-        out_b: mixer.out_b.params(),
-        ducking: mixer.ducking.params(),
-    }
+fn get_mixer(engine: State<Engine>) -> MixerSettings {
+    engine.mixer.settings()
 }
 
 #[tauri::command]
-fn set_channel(engine: State<Engine>, channel: ChannelId, params: ChannelParams) {
+fn set_channel(
+    engine: State<Engine>,
+    dirty: State<MixerDirty>,
+    channel: ChannelId,
+    params: ChannelParams,
+) {
     engine.mixer.channel(channel).set(params);
+    dirty.0.store(true, Ordering::Relaxed);
 }
 
 #[tauri::command]
-fn set_output(engine: State<Engine>, output: OutputId, params: OutputParams) {
+fn set_output(
+    engine: State<Engine>,
+    dirty: State<MixerDirty>,
+    output: OutputId,
+    params: OutputParams,
+) {
     engine.mixer.output(output).set(params);
+    dirty.0.store(true, Ordering::Relaxed);
 }
 
 #[tauri::command]
-fn set_ducking(engine: State<Engine>, params: DuckingParams) {
+fn set_ducking(engine: State<Engine>, dirty: State<MixerDirty>, params: DuckingParams) {
     engine.mixer.ducking.set(params);
+    dirty.0.store(true, Ordering::Relaxed);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -191,9 +217,12 @@ pub fn run() {
         .plugin(soundboard::hotkey_plugin())
         .manage(Engine::spawn())
         .manage(soundboard::Hotkeys::default())
+        .manage(MixerDirty::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             app.manage(Library::open(&data_dir)?);
+            load_mixer(app.handle());
+            spawn_mixer_saver(app.handle().clone());
             soundboard::sync_hotkeys(app.handle());
             let handle = app.handle().clone();
             thread::spawn(move || handle.state::<Library>().preload());

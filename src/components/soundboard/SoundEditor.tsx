@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
 import { Kbd, SectionLabel, Segmented } from "~/components/ui/misc";
 import { library, SOUND_COLORS, soundColor, type PlayMode, type Sound } from "~/lib/library";
+import { useStore } from "~/lib/store";
 import { cn, formatDb } from "~/lib/utils";
 import { hotkeyFromEvent, hotkeyLabel } from "./hotkey";
 import { Waveform } from "./Waveform";
@@ -128,6 +129,10 @@ export function SoundEditor({
   const color = soundColor(draft.color);
   const duration = Math.max(1, draft.durationMs);
   const trimEnd = draft.trimEndMs || duration;
+  // Abspielposition des zuletzt gestarteten Durchlaufs dieses Sounds.
+  const progress = useStore((s) => s.meters?.playing.filter((p) => p.id === sound.id).at(-1)?.progress);
+  const positionMs =
+    progress === undefined ? undefined : draft.trimStartMs + progress * (trimEnd - draft.trimStartMs);
 
   const patch = (p: Partial<Sound>) => setDraft((d) => ({ ...d, ...p }));
 
@@ -182,12 +187,17 @@ export function SoundEditor({
         <div className="space-y-5 overflow-y-auto px-6 pb-5">
           <Field
             label="Trimmen"
-            aside={`${(draft.trimStartMs / 1000).toFixed(2)} – ${(trimEnd / 1000).toFixed(2)} s`}
+            aside={
+              positionMs !== undefined
+                ? `▶ ${(positionMs / 1000).toFixed(2)} s`
+                : `${(draft.trimStartMs / 1000).toFixed(2)} – ${(trimEnd / 1000).toFixed(2)} s`
+            }
           >
             <div className="well rounded-xl p-3">
               <Waveform
                 peaks={draft.waveform}
                 color={color}
+                progress={progress}
                 className="h-20"
                 trim={{
                   start: draft.trimStartMs / duration,
