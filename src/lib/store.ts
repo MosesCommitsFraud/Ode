@@ -6,6 +6,7 @@ import {
   type ChannelParams,
   type DeviceList,
   type DuckingParams,
+  type EffectsParams,
   type EngineConfig,
   type EngineInfo,
   type Meters,
@@ -20,6 +21,7 @@ export interface State {
   channels: Record<ChannelId, ChannelParams>;
   outputs: Record<OutputId, OutputParams>;
   ducking: DuckingParams;
+  effects: EffectsParams;
   meters: Meters | null;
   starting: boolean;
   error: string | null;
@@ -54,6 +56,13 @@ let state: State = {
     b: { gainDb: 0, muted: false, limiter: true },
   },
   ducking: { enabled: false, amountDb: 12, thresholdDb: -40 },
+  effects: {
+    gate: { enabled: false, thresholdDb: -50 },
+    denoise: { enabled: false },
+    eq: { enabled: false, lowDb: 0, midDb: 0, highDb: 0 },
+    compressor: { enabled: false, thresholdDb: -20, ratio: 3, makeupDb: 4 },
+    limiter: { enabled: false, ceilingDb: -3 },
+  },
   meters: null,
   starting: false,
   error: null,
@@ -115,6 +124,7 @@ export const actions = {
       channels: Object.fromEntries(mixer.channels) as State["channels"],
       outputs: { a: mixer.outA, b: mixer.outB },
       ducking: mixer.ducking,
+      effects: mixer.effects,
     });
     await actions.refreshDevices();
     // Ohne laufende Engine bleibt das Soundboard stumm – also gleich starten.
@@ -170,6 +180,13 @@ export const actions = {
     const params = { ...state.channels[id], ...patch };
     set({ channels: { ...state.channels, [id]: params } });
     if (isTauri) void engine.setChannel(id, params);
+  },
+
+  /** Ändert einen Effekt, z. B. setEffect("gate", { enabled: true }). */
+  setEffect<K extends keyof EffectsParams>(key: K, patch: Partial<EffectsParams[K]>) {
+    const effects = { ...state.effects, [key]: { ...state.effects[key], ...patch } };
+    set({ effects });
+    if (isTauri) void engine.setEffects(effects);
   },
 
   setDucking(patch: Partial<DuckingParams>) {
@@ -263,6 +280,12 @@ function startDemo() {
         latencyMs: 29.6 + Math.sin(t) * 0.4,
         errors: [],
         playing: demoPlaying(t),
+        effects: {
+          gateOpen: !state.effects.gate.enabled || voice > 0.05,
+          voice: state.effects.denoise.enabled ? Math.min(1, voice * 2) : 0,
+          compressorDb: state.effects.compressor.enabled ? -Math.max(0, voice * 12 - 3) : 0,
+          limiterDb: state.effects.limiter.enabled && voice > 0.6 ? -1.2 : 0,
+        },
         duckingDb: state.ducking.enabled && voice > 0.05 ? -state.ducking.amountDb : 0,
       },
     });
