@@ -1,5 +1,6 @@
 import { Download, LayoutGrid, Moon, Music, Plus, Settings, SlidersHorizontal, Star, Sun, Wand2 } from "lucide-react";
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { music, useMusic } from "~/lib/music";
 import { useStore } from "~/lib/store";
 import { cn, gainToDb } from "~/lib/utils";
 
@@ -78,34 +79,113 @@ function NavItem({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, onAdd, children }: { title: string; onAdd?: () => void; children: ReactNode }) {
   return (
     <div>
       <div className="group flex h-7 items-center justify-between pr-1 pl-2.5">
         <span className="font-mono text-3xs tracking-[0.16em] text-muted-foreground/80 uppercase">{title}</span>
-        <button
-          type="button"
-          title={`${title} hinzufügen`}
-          className="flex size-5 cursor-default items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-accent hover:text-foreground [&_svg]:size-3.5"
-        >
-          <Plus />
-        </button>
+        {onAdd && (
+          <button
+            type="button"
+            title={`${title} hinzufügen`}
+            onClick={onAdd}
+            className="flex size-5 cursor-default items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-accent hover:text-foreground [&_svg]:size-3.5"
+          >
+            <Plus />
+          </button>
+        )}
       </div>
       <div className="space-y-px">{children}</div>
     </div>
   );
 }
 
-function ListItem({ swatch, label, count }: { swatch: ReactNode; label: string; count: number }) {
+function ListItem({
+  swatch,
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  swatch: ReactNode;
+  label: string;
+  count: number;
+  active?: boolean;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
-      className="flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+      onClick={onClick}
+      className={cn(
+        "flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors",
+        active
+          ? "bg-sidebar-accent font-medium text-foreground"
+          : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+      )}
     >
       {swatch}
       <span className="flex-1 truncate">{label}</span>
       <span className="font-mono text-3xs tabular-nums opacity-60">{count}</span>
     </button>
+  );
+}
+
+/** Kleines Cover: jede Playlist bekommt einen eigenen Farbverlauf aus ihrer ID. */
+function Cover({ seed }: { seed: number | null }) {
+  const from = seed === null ? 200 : (seed * 67) % 360;
+  return (
+    <span
+      className="size-5 shrink-0 rounded-md"
+      style={{
+        background:
+          seed === null
+            ? "conic-gradient(from 200deg, var(--ch-music), var(--ch-soundboard), var(--primary), var(--ch-music))"
+            : `linear-gradient(135deg, oklch(0.72 0.14 ${from}), oklch(0.55 0.16 ${(from + 50) % 360}))`,
+      }}
+    />
+  );
+}
+
+function Playlists({ view, onView }: { view: View; onView: (view: View) => void }) {
+  const playlists = useMusic((s) => s.playlists);
+  const total = useMusic((s) => s.tracks.length);
+  const selected = useMusic((s) => s.selectedPlaylist);
+
+  useEffect(() => {
+    void music.init();
+  }, []);
+
+  const open = (id: number | null) => {
+    music.selectPlaylist(id);
+    onView("music");
+  };
+
+  const create = async () => {
+    await music.createPlaylist("Neue Playlist");
+    onView("music");
+  };
+
+  return (
+    <Section title="Playlists" onAdd={() => void create()}>
+      <ListItem
+        swatch={<Cover seed={null} />}
+        label="Alle Titel"
+        count={total}
+        active={view === "music" && selected === null}
+        onClick={() => open(null)}
+      />
+      {playlists.map((p) => (
+        <ListItem
+          key={p.id}
+          swatch={<Cover seed={p.id} />}
+          label={p.name}
+          count={p.trackIds.length}
+          active={view === "music" && selected === p.id}
+          onClick={() => open(p.id)}
+        />
+      ))}
+    </Section>
   );
 }
 
@@ -200,15 +280,7 @@ export function Sidebar({
           <ListItem swatch={<Star className="size-3.5 text-primary" />} label="Favoriten" count={0} />
         </Section>
 
-        <Section title="Playlists">
-          <ListItem
-            swatch={
-              <span className="size-5 rounded-md bg-[conic-gradient(from_200deg,var(--ch-music),var(--ch-soundboard),var(--primary),var(--ch-music))]" />
-            }
-            label="Alle Titel"
-            count={0}
-          />
-        </Section>
+        <Playlists view={view} onView={onView} />
       </nav>
 
       <div className="space-y-2 p-2">
