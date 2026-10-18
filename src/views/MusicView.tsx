@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
+import { LiveSource } from "~/components/music/LiveSource";
 import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/misc";
 import { isTauri } from "~/lib/engine";
@@ -283,6 +284,7 @@ export function MusicView() {
           >
             Zufällig
           </Button>
+          <LiveSource />
           <Button variant="outline" size="sm" onClick={() => music.pickFiles()}>
             {importing > 0 && <Loader2 className="animate-spin" />}
             {importing > 0 ? `Lade ${importing} …` : "Musik hinzufügen"}
