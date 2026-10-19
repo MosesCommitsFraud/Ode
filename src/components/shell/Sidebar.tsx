@@ -1,5 +1,6 @@
 import { Broadcast, DownloadSimple, GearSix, Moon, Plus, Sliders, Star, Sun, VinylRecord, Waveform, Waves } from "@phosphor-icons/react";
 import { useEffect, type ReactNode } from "react";
+import { library, useLibrary } from "~/lib/library";
 import { music, useMusic } from "~/lib/music";
 import { useUpdater } from "~/lib/updater";
 import { cn } from "~/lib/utils";
@@ -215,6 +216,12 @@ export function Sidebar({
   onToggleTheme: () => void;
 }) {
   const updateReady = useUpdater((s) => s.status === "available");
+  const favoriteCount = useLibrary((s) => s.sounds.filter((x) => x.favorite).length);
+  const soundFilter = useLibrary((s) => s.filter);
+
+  useEffect(() => {
+    void library.load();
+  }, []);
   return (
     <aside className="panel m-2 mr-0 flex w-[var(--sidebar-width)] shrink-0 flex-col rounded-2xl bg-sidebar backdrop-blur-xl">
       <div data-tauri-drag-region className="px-4 pt-4 pb-5">
@@ -229,7 +236,16 @@ export function Sidebar({
         </div>
 
         <Section title="Kategorien">
-          <ListItem swatch={<Star className="size-3.5 text-primary" />} label="Favoriten" count={0} />
+          <ListItem
+            swatch={<Star weight="fill" className="size-3.5 text-primary" />}
+            label="Favoriten"
+            count={favoriteCount}
+            active={view === "soundboard" && soundFilter.kind === "favorites"}
+            onClick={() => {
+              library.setFilter({ kind: "favorites" });
+              onView("soundboard");
+            }}
+          />
         </Section>
 
         <Playlists view={view} onView={onView} />

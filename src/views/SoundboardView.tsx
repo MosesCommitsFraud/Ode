@@ -1,4 +1,16 @@
-import { CaretLeft as ChevronLeft, CaretRight as ChevronRight, CircleNotch as Loader2, Play, Rows, SquaresFour, Waveform, X } from "@phosphor-icons/react";
+import {
+  CaretDown,
+  CaretLeft as ChevronLeft,
+  CaretRight as ChevronRight,
+  CircleNotch as Loader2,
+  MagnifyingGlass,
+  Play,
+  Rows,
+  SquaresFour,
+  Star,
+  Waveform,
+  X,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { PageChannel } from "~/components/mixer/PageChannel";
 import { SoundEditor } from "~/components/soundboard/SoundEditor";
@@ -6,12 +18,10 @@ import { SoundRow, SoundTile } from "~/components/soundboard/SoundTile";
 import { Button } from "~/components/ui/button";
 import { EmptyState } from "~/components/ui/misc";
 import { isTauri } from "~/lib/engine";
-import { library, useLibrary } from "~/lib/library";
+import { library, matchesFilter, useLibrary, type SoundFilter } from "~/lib/library";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 
-const ALL = "__all";
-const FAVORITES = "__favorites";
 
 /** Kachelmaße für die Seitenaufteilung; die Seite scrollt nie. */
 const TILE_MIN_WIDTH = 176;
@@ -83,20 +93,105 @@ function useFileDrop(onDrop: (paths: string[]) => void) {
   return over;
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/**
+ * Filter: „Alle“ und „Favoriten“ direkt, Kategorien in einem Menü mit Suche,
+ * damit auch viele Kategorien Platz haben.
+ */
+function FilterBar({ categories }: { categories: { name: string; count: number }[] }) {
+  const filter = useLibrary((s) => s.filter);
+  const total = useLibrary((s) => s.sounds.length);
+  const favorites = useLibrary((s) => s.sounds.filter((x) => x.favorite).length);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
+  const category = filter.kind === "category" ? filter.name : null;
+  const found = categories.filter((c) => c.name.toLowerCase().includes(search.trim().toLowerCase()));
+  const pick = (next: SoundFilter) => {
+    library.setFilter(next);
+    setOpen(false);
+    setSearch("");
+  };
+
+  const item = (on: boolean) =>
+    cn(
+      "flex h-7 cursor-default items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-all duration-200 [&_svg]:size-3.5",
+      on
+        ? "bg-panel-raised text-foreground shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)]"
+        : "text-muted-foreground hover:text-foreground",
+    );
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex h-8 shrink-0 cursor-default items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition-colors [&_svg]:size-3.5",
-        active
-          ? "bg-foreground text-background"
-          : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+    <div ref={root} className="relative">
+      <div className="well flex h-9 items-center gap-0.5 rounded-full p-1">
+        <button type="button" className={item(filter.kind === "all")} onClick={() => pick({ kind: "all" })}>
+          Alle <span className="font-mono opacity-60">{total}</span>
+        </button>
+        <button type="button" className={item(filter.kind === "favorites")} onClick={() => pick({ kind: "favorites" })}>
+          <Star weight={filter.kind === "favorites" ? "fill" : "bold"} />
+          Favoriten <span className="font-mono opacity-60">{favorites}</span>
+        </button>
+        {categories.length > 0 && (
+          <button
+            type="button"
+            aria-expanded={open}
+            className={cn(item(category !== null), "max-w-48")}
+            onClick={() => setOpen((o) => !o)}
+          >
+            <span className="truncate">{category ?? "Kategorie"}</span>
+            <CaretDown className={cn("shrink-0 transition-transform", open && "rotate-180")} />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute top-full left-0 z-50 mt-2 w-64 animate-[pop-in_140ms_var(--ease-drawer)] rounded-2xl border border-hairline bg-popover p-1.5 shadow-pop">
+          <div className="well mb-1 flex h-8 items-center gap-2 rounded-lg px-2.5">
+            <MagnifyingGlass className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setOpen(false);
+                if (e.key === "Enter" && found[0]) pick({ kind: "category", name: found[0].name });
+              }}
+              placeholder="Kategorie suchen"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {found.length === 0 ? (
+              <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">Keine Kategorie gefunden.</p>
+            ) : (
+              found.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onClick={() => pick({ kind: "category", name: c.name })}
+                  className={cn(
+                    "flex h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2.5 text-left text-sm hover:bg-accent",
+                    category === c.name && "font-semibold text-primary",
+                  )}
+                >
+                  <span className="truncate">{c.name}</span>
+                  <span className="font-mono text-3xs text-muted-foreground tabular-nums">{c.count}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
       )}
-    >
-      {children}
-    </button>
+    </div>
   );
 }
 
@@ -109,7 +204,7 @@ export function SoundboardView() {
   const running = useStore((s) => s.info !== null);
   const starting = useStore((s) => s.starting);
 
-  const [filter, setFilter] = useState(ALL);
+  const filter = useLibrary((s) => s.filter);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
   const [page, setPage] = useState(0);
@@ -133,11 +228,14 @@ export function SoundboardView() {
     () => [...new Set(sounds.map((s) => s.category).filter((c): c is string => !!c))].sort(),
     [sounds],
   );
+  const categoryCounts = useMemo(
+    () => categories.map((name) => ({ name, count: sounds.filter((s) => s.category === name).length })),
+    [categories, sounds],
+  );
   const progress = useMemo(() => new Map(playing?.map((p) => [p.id, p.progress])), [playing]);
 
   const visible = sounds.filter((s) => {
-    if (filter === FAVORITES && !s.favorite) return false;
-    if (filter !== ALL && filter !== FAVORITES && s.category !== filter) return false;
+    if (!matchesFilter(s, filter)) return false;
     const q = query.trim().toLowerCase();
     return !q || s.name.toLowerCase().includes(q) || s.category?.toLowerCase().includes(q);
   });
@@ -173,19 +271,8 @@ export function SoundboardView() {
             </button>
           )}
         </div>
-        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <Chip active={filter === ALL} onClick={() => setFilter(ALL)}>
-            Alle <span className="font-mono opacity-60">{sounds.length}</span>
-          </Chip>
-          <Chip active={filter === FAVORITES} onClick={() => setFilter(FAVORITES)}>
-            Favoriten
-          </Chip>
-          {categories.map((c) => (
-            <Chip key={c} active={filter === c} onClick={() => setFilter(c)}>
-              {c}
-            </Chip>
-          ))}
-        </div>
+        <FilterBar categories={categoryCounts} />
+        <div className="flex-1" />
         <div className="well flex h-8 rounded-full p-0.5">
           {(
             [
@@ -247,7 +334,11 @@ export function SoundboardView() {
         ) : visible.length === 0 && loaded ? (
           <p className="pt-16 text-center text-sm text-muted-foreground">Keine Sounds für diese Auswahl.</p>
         ) : layout === "list" ? (
-          <div className="grid" style={{ gap: ROW_GAP, gridAutoRows: ROW_HEIGHT }}>
+          <div
+            key="list"
+            className="grid animate-[layout-in_260ms_var(--ease-drawer)]"
+            style={{ gap: ROW_GAP, gridAutoRows: ROW_HEIGHT }}
+          >
             {shown.map((sound) => (
               <SoundRow
                 key={sound.id}
@@ -259,7 +350,8 @@ export function SoundboardView() {
           </div>
         ) : (
           <div
-            className="grid"
+            key="grid"
+            className="grid animate-[layout-in_260ms_var(--ease-drawer)]"
             style={{
               gap: GAP,
               gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`,

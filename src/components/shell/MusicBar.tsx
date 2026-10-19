@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { VinylRecord as Disc3, CircleNotch as Loader2, Pause, Play, Repeat, RepeatOnce as Repeat1, Shuffle, SkipBack, SkipForward, SpeakerLow as Volume1, SpeakerHigh as Volume2, SpeakerSlash as VolumeX } from "@phosphor-icons/react";
+import { VinylRecord as Disc3, CircleNotch as Loader2, Pause, Repeat, RepeatOnce as Repeat1, Shuffle, SkipBack, SkipForward, SpeakerLow as Volume1, SpeakerHigh as Volume2, SpeakerSlash as VolumeX } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { SetupWizard } from "~/components/setup/SetupWizard";
 import { downloads } from "~/lib/downloads";
@@ -177,6 +177,18 @@ function Cover({ track, loading }: { track: Track | null; loading: boolean }) {
   );
 }
 
+/**
+ * Play-Dreieck, dessen Schwerpunkt genau in der Mitte liegt. Ein Dreieck mit
+ * mittiger Box wirkt nach links versetzt, weil die meiste Fläche links sitzt.
+ */
+function PlayTriangle() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden>
+      <path d="M5.2 3.1v9.8c0 .6.6.9 1.1.6l7.4-4.9c.4-.3.4-.9 0-1.2L6.3 2.5c-.5-.3-1.1 0-1.1.6Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 /** Schwebende Musik-Leiste unten: Titel mit Cover, Steuerung, Zeitleiste, Player-Lautstärke. */
 export function MusicBar() {
   const state = useMusic((s) => s.player);
@@ -228,7 +240,7 @@ export function MusicBar() {
               onClick={() => music.toggle()}
               className="mx-1 flex size-8 cursor-default items-center justify-center rounded-full bg-foreground text-background transition-transform active:scale-95 disabled:opacity-35 [&_svg]:size-4 [&_svg]:fill-current"
             >
-              {state.playing ? <Pause weight="fill" /> : <Play weight="fill" className="translate-x-px" />}
+              {state.playing ? <Pause weight="fill" /> : <PlayTriangle />}
             </button>
             <ControlButton title="Weiter" disabled={!hasTrack} onClick={() => music.next()}>
               <SkipForward weight="fill" />

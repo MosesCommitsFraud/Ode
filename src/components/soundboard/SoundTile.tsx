@@ -79,7 +79,7 @@ function Hotkey({ sound }: { sound: Sound }) {
   if (!sound.hotkey) return null;
   return (
     <div className="flex gap-1">
-      {hotkeyLabel(sound.hotkey).map((k) => (
+      {hotkeyLabel(sound.hotkey, sound.hotkeyLabel).map((k) => (
         <Kbd key={k}>{k}</Kbd>
       ))}
     </div>
