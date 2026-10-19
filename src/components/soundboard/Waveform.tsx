@@ -1,4 +1,5 @@
 import { useRef, type PointerEvent } from "react";
+import { Bars } from "~/components/ui/canvas";
 import { cn } from "~/lib/utils";
 
 /**
@@ -54,24 +55,20 @@ export function Waveform({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={() => (dragging.current = null)}
-      className={cn("relative flex items-center gap-px", trim && "cursor-ew-resize touch-none", className)}
+      className={cn("relative", trim && "cursor-ew-resize touch-none", className)}
     >
-      {peaks.map((p, i) => {
-        const pos = i / peaks.length;
-        const inside = pos >= start && pos <= end;
-        const played = progress !== undefined && pos <= start + progress * (end - start);
-        return (
-          <span
-            key={i}
-            className="min-h-px flex-1 rounded-full transition-opacity"
-            style={{
-              height: `${Math.max(4, (p / 255) * 100)}%`,
-              background: color,
-              opacity: !inside ? 0.18 : played ? 1 : 0.55,
-            }}
-          />
-        );
-      })}
+      <Bars
+        values={peaks.map((p) => p / 255)}
+        bar={2}
+        gap={1}
+        color={(pos) => {
+          const inside = pos >= start && pos <= end;
+          const played = progress !== undefined && pos <= start + progress * (end - start);
+          return [color, !inside ? 0.18 : played ? 1 : 0.55];
+        }}
+        deps={[color, start, end, progress]}
+        className="absolute inset-0 size-full"
+      />
       {trim && progress !== undefined && (
         <span
           className="pointer-events-none absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-sm bg-foreground"
@@ -92,7 +89,7 @@ function Handle({ at, color }: { at: number; color: string }) {
   return (
     <span
       className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 rounded-full"
-      style={{ left: `${at * 100}%`, background: color, boxShadow: `0 0 8px ${color}` }}
+      style={{ left: `${at * 100}%`, background: color }}
     >
       <span
         className="absolute top-1/2 left-1/2 h-5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-sm ring-2 ring-panel"

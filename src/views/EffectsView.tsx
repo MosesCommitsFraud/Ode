@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from "react";
+import { Bars, LedBar, cssColor } from "~/components/ui/canvas";
 import { Badge, Card, Switch } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
 import { cn, formatDb, gainToDb } from "~/lib/utils";
@@ -90,8 +91,6 @@ function Module({
 /* ---------- Anzeigen ---------- */
 
 const GATE_FLOOR = -80;
-/** Feine LED-Streben wie bei den Pegeln im Mischpult. */
-const SEGMENTS = "repeating-linear-gradient(to right, #000 0 2px, transparent 2px 4px)";
 
 /** Beschriftung einer Achse; `at` ist die Position in Prozent. */
 function Tick({ at, axis, children }: { at: number; axis: "x" | "y"; children: ReactNode }) {
@@ -118,13 +117,12 @@ function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: n
 
   return (
     <div className="absolute inset-0 flex items-center px-4">
-      <div className="relative h-10 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
-        <div className="absolute inset-0 bg-[var(--led-off)]" />
-        <div
-          className={cn("absolute inset-y-0 left-0", open ? "bg-[var(--ch-mic)]" : "bg-muted-foreground/40")}
-          style={{ width: `${level * 100}%` }}
-        />
-      </div>
+      <LedBar
+        segment={2}
+        color={(pos) => (pos > level ? "off" : open ? "on" : "dim")}
+        deps={[level, open]}
+        className="h-10 w-full [--ch:var(--ch-mic)]"
+      />
       <div
         className="absolute top-1/2 h-14 w-0.5 -translate-y-1/2 rounded-full bg-foreground"
         style={{ left: `calc(1rem + (100% - 2rem) * ${threshold})` }}
@@ -140,14 +138,19 @@ function VoiceDisplay({ voice, enabled }: { voice: number; enabled: boolean }) {
   const history = useRef<number[]>(Array(HISTORY).fill(0));
   history.current = [...history.current.slice(1), enabled ? voice : 0];
   return (
-    <div className="absolute inset-0 flex items-end gap-[2px] p-3">
-      {history.current.map((v, i) => (
-        <span
-          key={i}
-          className={cn("flex-1 rounded-[1px]", v > 0.6 ? "bg-success" : "bg-muted-foreground/30")}
-          style={{ height: `${Math.max(3, v * 100)}%` }}
-        />
-      ))}
+    <div className="absolute inset-0 p-3">
+      <Bars
+        values={history.current}
+        align="bottom"
+        bar={2}
+        gap={1}
+        min={0.03}
+        color={(_, v, el) =>
+          v > 0.6 ? [cssColor(el, "--success"), 1] : [cssColor(el, "--muted-foreground"), 0.35]
+        }
+        deps={[]}
+        className="size-full"
+      />
     </div>
   );
 }
@@ -272,13 +275,15 @@ function AgcDisplay({ gainDb, maxGainDb }: { gainDb: number; maxGainDb: number }
   const ticks = [-range, -range / 2, 0, range / 2, range].map((t) => Math.round(t));
   return (
     <div className="absolute inset-0 flex flex-col justify-center gap-2 px-4">
-      <div className="relative h-10 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
-        <div className="absolute inset-0 bg-[var(--led-off)]" />
-        <div
-          className={cn("absolute inset-y-0", gainDb >= 0 ? "left-1/2 bg-[var(--ch-mic)]" : "right-1/2 bg-warning")}
-          style={{ width: `${amount}%` }}
-        />
-      </div>
+      <LedBar
+        segment={2}
+        color={(pos) => {
+          const lit = gainDb >= 0 ? pos >= 0.5 && pos <= 0.5 + amount / 100 : pos <= 0.5 && pos >= 0.5 - amount / 100;
+          return lit ? (gainDb >= 0 ? "on" : "warning") : "off";
+        }}
+        deps={[gainDb, amount]}
+        className="h-10 w-full [--ch:var(--ch-mic)]"
+      />
       <div className="absolute top-1/2 left-1/2 h-12 w-0.5 -translate-x-1/2 -translate-y-[calc(50%+0.625rem)] rounded-full bg-foreground/60" />
       <div className="relative h-3">
         {ticks.map((t) => (
@@ -298,10 +303,12 @@ function ReductionDisplay({ db, max }: { db: number; max: number }) {
   const amount = Math.min(1, Math.max(0, -db / max));
   return (
     <div className="absolute inset-0 flex flex-col justify-center gap-2 px-4">
-      <div className="relative h-10 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
-        <div className="absolute inset-0 bg-[var(--led-off)]" />
-        <div className="absolute inset-y-0 right-0 bg-warning" style={{ width: `${amount * 100}%` }} />
-      </div>
+      <LedBar
+        segment={2}
+        color={(pos) => (pos >= 1 - amount ? "warning" : "off")}
+        deps={[amount]}
+        className="h-10 w-full"
+      />
       <div className="relative h-3">
         {GR_TICKS.filter((t) => -t <= max).map((t) => (
           <Tick key={t} axis="x" at={100 - (-t / max) * 100}>

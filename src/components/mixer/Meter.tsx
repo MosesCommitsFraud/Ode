@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { LedBar } from "~/components/ui/canvas";
 import { cn, gainToDb } from "~/lib/utils";
 
 const FLOOR = -60;
@@ -9,10 +10,6 @@ const HOLD_UPDATES = 30;
 function dbToFraction(db: number) {
   return Math.min(1, Math.max(0, (db - FLOOR) / -FLOOR));
 }
-
-/** Teilt den Balken in LED-Segmente. */
-const SEGMENTS_V = "repeating-linear-gradient(to top, #000 0 3px, transparent 3px 5px)";
-const SEGMENTS_H = "repeating-linear-gradient(to right, #000 0 3px, transparent 3px 5px)";
 
 /**
  * Pegelanzeige in dBFS als LED-Kette: Kanalfarbe bis −12 dB, gelb bis −3 dB, darüber rot.
@@ -41,30 +38,14 @@ export function Meter({
   const level = dbToFraction(display.current);
   const held = dbToFraction(hold.current.db);
   const vertical = orientation === "vertical";
-  const dir = vertical ? "to top" : "to right";
-  const mask = vertical ? SEGMENTS_V : SEGMENTS_H;
 
   return (
-    <div className={cn("relative", vertical ? "w-2" : "h-2", className)}>
-      <div
-        className="absolute inset-0 bg-[var(--led-off)]"
-        style={{ maskImage: mask, WebkitMaskImage: mask }}
-      />
-      <div
-        className="absolute inset-0"
-        style={{
-          maskImage: mask,
-          WebkitMaskImage: mask,
-          background: `linear-gradient(${dir}, var(--ch, var(--success)) 0%, var(--ch, var(--success)) 80%, var(--warning) 80%, var(--warning) 95%, var(--error) 95%)`,
-          clipPath: vertical ? `inset(${(1 - level) * 100}% 0 0 0)` : `inset(0 ${(1 - level) * 100}% 0 0)`,
-        }}
-      />
-      {held > 0.02 && (
-        <div
-          className={cn("absolute rounded-full bg-foreground", vertical ? "inset-x-0 h-0.5" : "inset-y-0 w-0.5")}
-          style={vertical ? { bottom: `${held * 100}%` } : { left: `${held * 100}%` }}
-        />
-      )}
-    </div>
+    <LedBar
+      orientation={orientation}
+      color={(pos) => (pos > level ? "off" : pos > 0.95 ? "error" : pos > 0.8 ? "warning" : "on")}
+      marker={held > 0.02 ? held : null}
+      deps={[level]}
+      className={cn(vertical ? "h-full min-h-0 w-2" : "h-2 w-full", className)}
+    />
   );
 }
