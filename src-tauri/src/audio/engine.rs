@@ -660,10 +660,10 @@ impl OutputProcessor {
                 soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
                 sum += sound * *soundboard_send;
             }
-            if let Some(preview) = preview.as_mut() {
-                if !preview.is_idle() {
-                    sum += preview.next_sample();
-                }
+            if let Some(preview) = preview.as_mut()
+                && !preview.is_idle()
+            {
+                sum += preview.next_sample();
             }
             if !deck.is_idle() {
                 let song = deck.next_sample() * *player * duck;

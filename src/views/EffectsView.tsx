@@ -31,9 +31,9 @@ function Range({
   const fill = ((value - min) / (max - min)) * 100;
   return (
     <label className={cn("block space-y-1.5", disabled && "opacity-45")}>
-      <div className="flex justify-between gap-2 text-2xs">
-        <span className="truncate text-muted-foreground">{label}</span>
-        <span className="font-mono whitespace-nowrap tabular-nums">{format(value)}</span>
+      <div className="flex flex-wrap justify-between gap-x-2 text-2xs">
+        <span className="whitespace-nowrap text-muted-foreground">{label}</span>
+        <span className="ml-auto font-mono whitespace-nowrap tabular-nums">{format(value)}</span>
       </div>
       <input
         type="range"
@@ -59,6 +59,7 @@ function Module({
   status,
   display,
   className,
+  inline,
   children,
 }: {
   title: string;
@@ -67,6 +68,8 @@ function Module({
   status?: ReactNode;
   display: ReactNode;
   className?: string;
+  /** Regler nebeneinander statt untereinander, damit die Anzeige Platz behält. */
+  inline?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -79,7 +82,7 @@ function Module({
       <div className={cn("well relative min-h-0 flex-1 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
         {display}
       </div>
-      {children && <div className="space-y-2.5">{children}</div>}
+      {children && <div className={inline ? "grid grid-flow-col auto-cols-fr gap-3" : "space-y-2.5"}>{children}</div>}
     </Card>
   );
 }
@@ -262,6 +265,32 @@ function CompressorDisplay({ thresholdDb, ratio, makeupDb }: { thresholdDb: numb
   );
 }
 
+/** Aktuelle Anhebung oder Absenkung der automatischen Lautstärke, von der Mitte aus. */
+function AgcDisplay({ gainDb, maxGainDb }: { gainDb: number; maxGainDb: number }) {
+  const range = Math.max(6, maxGainDb);
+  const amount = Math.min(1, Math.abs(gainDb) / range) * 50;
+  const ticks = [-range, -range / 2, 0, range / 2, range].map((t) => Math.round(t));
+  return (
+    <div className="absolute inset-0 flex flex-col justify-center gap-2 px-4">
+      <div className="relative h-10 w-full" style={{ maskImage: SEGMENTS, WebkitMaskImage: SEGMENTS }}>
+        <div className="absolute inset-0 bg-[var(--led-off)]" />
+        <div
+          className={cn("absolute inset-y-0", gainDb >= 0 ? "left-1/2 bg-[var(--ch-mic)]" : "right-1/2 bg-warning")}
+          style={{ width: `${amount}%` }}
+        />
+      </div>
+      <div className="absolute top-1/2 left-1/2 h-12 w-0.5 -translate-x-1/2 -translate-y-[calc(50%+0.625rem)] rounded-full bg-foreground/60" />
+      <div className="relative h-3">
+        {ticks.map((t) => (
+          <Tick key={t} axis="x" at={50 + (t / range) * 50}>
+            {t > 0 ? `+${t}` : t}
+          </Tick>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const GR_TICKS = [0, -3, -6, -9, -12];
 
 /** Absenkung als Balken von rechts, darunter die Skala in dB. */
@@ -297,11 +326,13 @@ export function EffectsView() {
   const compressorDb = running ? (live?.compressorDb ?? 0) : 0;
   const limiterDb = running ? (live?.limiterDb ?? 0) : 0;
   const voice = running ? (live?.voice ?? 0) : 0;
+  const voiceOpen = fx.denoise.voiceGate ? !!live?.voiceOpen : voice > 0.6;
+  const agcGainDb = running ? (live?.agcGainDb ?? 0) : 0;
 
   return (
-    <div className="grid h-full grid-cols-6 grid-rows-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3 overflow-hidden pl-6 pr-3 pt-3 pb-3">
+    <div className="grid h-full grid-cols-6 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden pl-6 pr-3 pt-3 pb-3">
       <Module
-        className="col-span-3"
+        className="col-span-2"
         title="Noise Gate"
         enabled={fx.gate.enabled}
         onToggle={(enabled) => actions.setEffect("gate", { enabled })}
@@ -331,20 +362,38 @@ export function EffectsView() {
       </Module>
 
       <Module
-        className="col-span-3"
+        className="col-span-2"
         title="Rauschfilter"
         enabled={fx.denoise.enabled}
         onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
         status={
           fx.denoise.enabled &&
-          running && <Reading tone={voice > 0.6 ? "success" : "default"}>{voice > 0.6 ? "Sprache" : "Ruhe"}</Reading>
+          running && (
+            <Reading tone={voiceOpen ? "success" : "default"}>{voiceOpen ? "Sprache" : fx.denoise.voiceGate ? "Gesperrt" : "Ruhe"}</Reading>
+          )
         }
         display={<VoiceDisplay voice={voice} enabled={fx.denoise.enabled} />}
-      />
+      >
+        <label
+          className={cn(
+            "flex items-center justify-between gap-3 text-2xs",
+            !fx.denoise.enabled && "opacity-45",
+          )}
+        >
+          <span className="text-muted-foreground">Klicks zwischen Wörtern unterdrücken</span>
+          <Switch
+            label="Sprach-Gate"
+            checked={fx.denoise.voiceGate}
+            disabled={!fx.denoise.enabled}
+            onCheckedChange={(voiceGate) => actions.setEffect("denoise", { voiceGate })}
+          />
+        </label>
+      </Module>
 
       <Module
         className="col-span-2"
         title="Equalizer"
+        inline
         enabled={fx.eq.enabled}
         onToggle={(enabled) => actions.setEffect("eq", { enabled })}
         display={<EqDisplay low={fx.eq.lowDb} mid={fx.eq.midDb} high={fx.eq.highDb} />}
@@ -372,7 +421,47 @@ export function EffectsView() {
 
       <Module
         className="col-span-2"
+        title="Auto-Lautstärke"
+        enabled={fx.agc.enabled}
+        onToggle={(enabled) => actions.setEffect("agc", { enabled })}
+        status={
+          fx.agc.enabled &&
+          running && (
+            <Reading tone={Math.abs(agcGainDb) > 0.5 ? "warning" : "default"}>
+              {`${formatDb(agcGainDb)} dB`}
+            </Reading>
+          )
+        }
+        display={<AgcDisplay gainDb={agcGainDb} maxGainDb={fx.agc.maxGainDb} />}
+      >
+        <Range
+          label="Ziel"
+          value={fx.agc.targetDb}
+          min={-30}
+          max={-10}
+          step={1}
+          reset={-20}
+          format={(v) => `${v} dB`}
+          disabled={!fx.agc.enabled}
+          onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
+        />
+        <Range
+          label="Höchstens anheben"
+          value={fx.agc.maxGainDb}
+          min={0}
+          max={30}
+          step={1}
+          reset={18}
+          format={(v) => `+${v} dB`}
+          disabled={!fx.agc.enabled}
+          onChange={(maxGainDb) => actions.setEffect("agc", { maxGainDb })}
+        />
+      </Module>
+
+      <Module
+        className="col-span-2"
         title="Kompressor"
+        inline
         enabled={fx.compressor.enabled}
         onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
         status={
