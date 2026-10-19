@@ -1,5 +1,5 @@
 import { Play, Stop, X } from "@phosphor-icons/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
 import { Kbd, SectionLabel, Segmented } from "~/components/ui/misc";
@@ -71,6 +71,10 @@ function HotkeyRecorder({
   const [recording, setRecording] = useState(false);
   // Gerade gehaltene Modifier, damit man sieht, dass die Kombination ankommt.
   const [held, setHeld] = useState<string[]>([]);
+  // Aktueller Callback ohne Neuanmeldung des Listeners: Der Editor rendert mit
+  // den Pegeln ständig neu, das würde sonst die gehaltenen Tasten zurücksetzen.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     if (!recording) return;
@@ -83,7 +87,7 @@ function HotkeyRecorder({
       }
       const recorded = hotkeyFromEvent(e);
       if (recorded) {
-        onChange(recorded.hotkey, recorded.label);
+        onChangeRef.current(recorded.hotkey, recorded.label);
         setRecording(false);
       } else {
         setHeld(heldModifiers(e));
@@ -97,7 +101,7 @@ function HotkeyRecorder({
       window.removeEventListener("keyup", onUp, true);
       setHeld([]);
     };
-  }, [recording, onChange]);
+  }, [recording]);
 
   return (
     <div className="flex items-center gap-2">
