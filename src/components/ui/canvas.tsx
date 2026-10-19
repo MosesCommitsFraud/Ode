@@ -153,6 +153,7 @@ export function Bars({
   bar = 2,
   gap = 1,
   min = 0.04,
+  stretch = false,
   deps,
   className,
 }: {
@@ -164,15 +165,21 @@ export function Bars({
   gap?: number;
   /** Mindesthöhe als Anteil, damit stille Stellen sichtbar bleiben. */
   min?: number;
+  /** Genau ein Balken pro Wert; die Balken werden breiter, statt Werte zu wiederholen. */
+  stretch?: boolean;
   deps: unknown[];
   className?: string;
 }) {
   const ref = useCrispCanvas(
     (ctx, width, height, dpr, el) => {
       if (values.length === 0) return;
-      const w = px(bar, dpr);
       const space = px(gap, dpr);
-      const count = Math.max(1, Math.floor((width + space) / (w + space)));
+      let w = px(bar, dpr);
+      let count = Math.max(1, Math.floor((width + space) / (w + space)));
+      if (stretch && count > values.length) {
+        count = values.length;
+        w = Math.max(1, Math.floor((width + space) / count) - space);
+      }
       const offset = Math.floor((width - (count * (w + space) - space)) / 2);
       for (let i = 0; i < count; i++) {
         // Spitzenwert des Abschnitts, der auf diesen Balken fällt.
@@ -190,7 +197,7 @@ export function Bars({
       }
       ctx.globalAlpha = 1;
     },
-    [values, ...deps],
+    [values, stretch, ...deps],
   );
   return <canvas ref={ref} className={cn("block", className)} />;
 }

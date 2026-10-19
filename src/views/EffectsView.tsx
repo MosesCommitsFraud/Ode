@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bars, LedBar, cssColor } from "~/components/ui/canvas";
 import { Badge, Card, Switch } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
@@ -131,24 +131,41 @@ function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: n
   );
 }
 
-const HISTORY = 90;
+/** 60 Schritte zu 150 ms ≈ 9 s Verlauf. */
+const HISTORY = 60;
+const STEP_MS = 150;
 
-/** Verlauf der Spracherkennung der letzten Sekunden als feine Balken. */
+/**
+ * Verlauf der Spracherkennung als feine Balken. Läuft in festem Takt, egal wie
+ * oft die Seite neu zeichnet; pro Takt zählt der Höchstwert, damit kurze Laute
+ * nicht verloren gehen.
+ */
 function VoiceDisplay({ voice, enabled }: { voice: number; enabled: boolean }) {
-  const history = useRef<number[]>(Array(HISTORY).fill(0));
-  history.current = [...history.current.slice(1), enabled ? voice : 0];
+  const peak = useRef(0);
+  peak.current = Math.max(peak.current, enabled ? voice : 0);
+  const [history, setHistory] = useState<number[]>(() => Array(HISTORY).fill(0));
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const v = peak.current;
+      peak.current = 0;
+      setHistory((h) => [...h.slice(1), v]);
+    }, STEP_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
   return (
     <div className="absolute inset-0 p-3">
       <Bars
-        values={history.current}
+        values={history}
         align="bottom"
+        stretch
         bar={2}
         gap={1}
         min={0.03}
         color={(_, v, el) =>
           v > 0.6 ? [cssColor(el, "--success"), 1] : [cssColor(el, "--muted-foreground"), 0.35]
         }
-        deps={[]}
+        deps={[history]}
         className="size-full"
       />
     </div>
