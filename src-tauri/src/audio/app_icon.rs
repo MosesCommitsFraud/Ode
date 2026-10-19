@@ -92,14 +92,19 @@ fn rgba_icon(exe_path: &str) -> Option<(u32, u32, Vec<u8>)> {
             let (w, h) = (bitmap.bmWidth, bitmap.bmHeight);
             let mut pixels = bitmap_bgra(info.hbmColor, w, h)?;
             // Alte Icons ohne Alphakanal: Transparenz aus der Maske nehmen.
-            if pixels.chunks_exact(4).all(|p| p[3] == 0) {
+            if pixels.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
                 let mask = bitmap_bgra(info.hbmMask, w, h)?;
-                for (p, m) in pixels.chunks_exact_mut(4).zip(mask.chunks_exact(4)) {
+                for (p, m) in pixels
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .zip(mask.as_chunks::<4>().0)
+                {
                     p[3] = if m[0] == 0 { 255 } else { 0 };
                 }
             }
             // BGRA → RGBA
-            for p in pixels.chunks_exact_mut(4) {
+            for p in pixels.as_chunks_mut::<4>().0 {
                 p.swap(0, 2);
             }
             Some((w as u32, h as u32, pixels))

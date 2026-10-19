@@ -288,7 +288,13 @@ fn capture_loop(
                 } else {
                     let samples =
                         std::slice::from_raw_parts(data as *const f32, frames as usize * 2);
-                    mono.extend(samples.chunks_exact(2).map(|f| (f[0] + f[1]) * 0.5));
+                    mono.extend(
+                        samples
+                            .as_chunks::<2>()
+                            .0
+                            .iter()
+                            .map(|f| (f[0] + f[1]) * 0.5),
+                    );
                 }
                 let _ = capture.ReleaseBuffer(frames);
                 for producer in producers.lock().iter_mut() {
