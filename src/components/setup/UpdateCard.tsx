@@ -1,6 +1,6 @@
 import { ArrowsClockwise, CircleNotch, DownloadSimple } from "@phosphor-icons/react";
 import { useEffect } from "react";
-import { Button } from "~/components/ui/button";
+import { ActionGroup, ActionPill } from "~/components/ui/pills";
 import { Card } from "~/components/ui/misc";
 import { updater, useUpdater } from "~/lib/updater";
 import { cn } from "~/lib/utils";
@@ -53,9 +53,11 @@ export function UpdateCard() {
               </div>
             </div>
           ) : (
-            <Button size="sm" className="mt-3" onClick={() => void updater.install()}>
-              <DownloadSimple /> Jetzt aktualisieren
-            </Button>
+            <ActionGroup className="mt-3 w-fit">
+              <ActionPill primary onClick={() => void updater.install()}>
+                <DownloadSimple /> Jetzt aktualisieren
+              </ActionPill>
+            </ActionGroup>
           )}
         </div>
       ) : (
@@ -72,16 +74,12 @@ export function UpdateCard() {
 
       {error && <p className="mt-2 text-xs text-error-foreground">{error}</p>}
 
-      <Button
-        variant="outline"
-        size="sm"
-        className="mt-3"
-        disabled={busy}
-        onClick={() => void updater.check()}
-      >
-        {status === "checking" ? <CircleNotch className="animate-spin" /> : <ArrowsClockwise />}
-        Nach Updates suchen
-      </Button>
+      <ActionGroup className="mt-3 w-fit">
+        <ActionPill disabled={busy} onClick={() => void updater.check()}>
+          {status === "checking" ? <CircleNotch className="animate-spin" /> : <ArrowsClockwise />}
+          Nach Updates suchen
+        </ActionPill>
+      </ActionGroup>
     </Card>
   );
 }

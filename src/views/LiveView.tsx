@@ -7,6 +7,7 @@ import { EmptyState, Card } from "~/components/ui/misc";
 import { live, useLive, type AppSource } from "~/lib/live";
 import { useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
+import { ActionGroup, ActionPill } from "~/components/ui/pills";
 
 /** Wie oft die Liste der Programme neu gelesen wird, damit „spielt“ stimmt. */
 const REFRESH_MS = 4000;
@@ -45,13 +46,13 @@ function SourceRow({ source, active }: { source: AppSource; active: boolean }) {
         {source.playing ? "spielt" : "still"}
       </span>
       {active ? (
-        <Button variant="outline" size="sm" onClick={() => void live.stop()}>
-          Beenden
-        </Button>
+        <ActionGroup>
+          <ActionPill onClick={() => void live.stop()}>Beenden</ActionPill>
+        </ActionGroup>
       ) : (
-        <Button variant="outline" size="sm" onClick={() => void live.start(source)}>
-          Live schalten
-        </Button>
+        <ActionGroup>
+          <ActionPill onClick={() => void live.start(source)}>Live schalten</ActionPill>
+        </ActionGroup>
       )}
     </div>
   );
@@ -68,9 +69,11 @@ function ActiveSource({ source }: { source: AppSource }) {
         <div className="mt-1 truncate font-display text-2xl font-semibold tracking-tight">{source.name}</div>
         <Meter peak={muted ? 0 : peak} orientation="horizontal" className="mt-3 h-2.5" />
       </div>
-      <Button onClick={() => void live.stop()}>
-        Beenden
-      </Button>
+      <ActionGroup>
+        <ActionPill primary onClick={() => void live.stop()}>
+          Beenden
+        </ActionPill>
+      </ActionGroup>
     </Card>
   );
 }

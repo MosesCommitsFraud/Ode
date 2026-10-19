@@ -1,10 +1,11 @@
-import { Plugs as Cable, Headphones, Microphone as Mic, Play, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react";
+import { Plugs as Cable, Headphones, Microphone as Mic, ArrowsClockwise as RefreshCw } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Card } from "~/components/ui/misc";
 import { Select } from "~/components/ui/select";
 import type { DeviceInfo } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
+import { PlayGlyph } from "~/components/ui/transport";
 
 function options(devices: DeviceInfo[]) {
   return devices.map((d) => ({
@@ -46,7 +47,7 @@ export function DeviceSetup() {
           </Button>
           {!running && (
             <Button disabled={starting || !config.inputId} onClick={() => actions.start()}>
-              <Play weight="fill" /> {starting ? "Startet …" : "Erneut starten"}
+              <PlayGlyph /> {starting ? "Startet …" : "Erneut starten"}
             </Button>
           )}
         </div>

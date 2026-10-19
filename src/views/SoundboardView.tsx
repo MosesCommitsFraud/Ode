@@ -4,7 +4,7 @@ import {
   CaretRight as ChevronRight,
   CircleNotch as Loader2,
   MagnifyingGlass,
-  Play,
+  Plus,
   Rows,
   SquaresFour,
   Star,
@@ -21,6 +21,8 @@ import { isTauri } from "~/lib/engine";
 import { library, matchesFilter, useLibrary, type SoundFilter } from "~/lib/library";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
+import { ActionGroup, ActionPill, Pill, PillGroup } from "~/components/ui/pills";
+import { PlayGlyph, StopGlyph } from "~/components/ui/transport";
 
 
 /** Kachelmaße für die Seitenaufteilung; die Seite scrollt nie. */
@@ -122,36 +124,28 @@ function FilterBar({ categories }: { categories: { name: string; count: number }
     setSearch("");
   };
 
-  const item = (on: boolean) =>
-    cn(
-      "flex h-7 cursor-default items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-all duration-200 [&_svg]:size-3.5",
-      on
-        ? "bg-panel-raised text-foreground shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)]"
-        : "text-muted-foreground hover:text-foreground",
-    );
-
   return (
     <div ref={root} className="relative">
-      <div className="well flex h-9 items-center gap-0.5 rounded-full p-1">
-        <button type="button" className={item(filter.kind === "all")} onClick={() => pick({ kind: "all" })}>
+      <PillGroup>
+        <Pill active={filter.kind === "all"} onClick={() => pick({ kind: "all" })}>
           Alle <span className="font-mono opacity-60">{total}</span>
-        </button>
-        <button type="button" className={item(filter.kind === "favorites")} onClick={() => pick({ kind: "favorites" })}>
+        </Pill>
+        <Pill active={filter.kind === "favorites"} onClick={() => pick({ kind: "favorites" })}>
           <Star weight={filter.kind === "favorites" ? "fill" : "bold"} />
           Favoriten <span className="font-mono opacity-60">{favorites}</span>
-        </button>
+        </Pill>
         {categories.length > 0 && (
-          <button
-            type="button"
+          <Pill
+            active={category !== null}
             aria-expanded={open}
-            className={cn(item(category !== null), "max-w-48")}
+            className="max-w-48"
             onClick={() => setOpen((o) => !o)}
           >
             <span className="truncate">{category ?? "Kategorie"}</span>
-            <CaretDown className={cn("shrink-0 transition-transform", open && "rotate-180")} />
-          </button>
+            <CaretDown className={cn("transition-transform", open && "rotate-180")} />
+          </Pill>
         )}
-      </div>
+      </PillGroup>
 
       {open && (
         <div className="absolute top-full left-0 z-50 mt-2 w-64 animate-[pop-in_140ms_var(--ease-drawer)] rounded-2xl border border-hairline bg-popover p-1.5 shadow-pop">
@@ -257,8 +251,8 @@ export function SoundboardView() {
   return (
     <div className="relative flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 pl-6 pr-3 pt-3 pb-4">
-        <div className="well flex h-9 w-44 items-center gap-2 rounded-full px-3.5">
+      <div className="flex items-center gap-2 pl-6 pr-3 pt-3 pb-4">
+        <div className="well flex h-9 w-40 min-w-0 shrink items-center gap-2 rounded-full px-3.5">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -273,42 +267,30 @@ export function SoundboardView() {
         </div>
         <FilterBar categories={categoryCounts} />
         <div className="flex-1" />
-        <div className="well flex h-8 rounded-full p-0.5">
-          {(
-            [
-              ["grid", "Kacheln", <SquaresFour key="g" />],
-              ["list", "Liste", <Rows key="l" />],
-            ] as const
-          ).map(([value, label, icon]) => (
-            <button
-              key={value}
-              type="button"
-              title={label}
-              aria-pressed={layout === value}
-              onClick={() => setLayout(value)}
-              className={cn(
-                "flex w-9 cursor-default items-center justify-center rounded-full transition-colors [&_svg]:size-4",
-                layout === value ? "bg-panel-raised text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {icon}
-            </button>
-          ))}
-        </div>
-        <Button variant="outline" size="sm" disabled={!playing?.length} onClick={() => library.stopAll()}>
-          Alle stoppen
-        </Button>
-        <Button size="sm" onClick={() => library.pickFiles()}>
-          {importing > 0 && <Loader2 className="animate-spin" />}
-          {importing > 0 ? `Lade ${importing} …` : "Sounds hinzufügen"}
-        </Button>
+        <PillGroup>
+          <Pill active={layout === "grid"} title="Kacheln" className="px-2.5" onClick={() => setLayout("grid")}>
+            <SquaresFour className="!size-4" />
+          </Pill>
+          <Pill active={layout === "list"} title="Liste" className="px-2.5" onClick={() => setLayout("list")}>
+            <Rows className="!size-4" />
+          </Pill>
+        </PillGroup>
+        <ActionGroup>
+          <ActionPill disabled={!playing?.length} onClick={() => library.stopAll()}>
+            <StopGlyph /> Alle stoppen
+          </ActionPill>
+          <ActionPill primary onClick={() => library.pickFiles()}>
+            {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
+            {importing > 0 ? `Lade ${importing} …` : "Hinzufügen"}
+          </ActionPill>
+        </ActionGroup>
       </div>
 
       {!running && sounds.length > 0 && (
         <div className="mr-3 ml-6 mb-4 flex items-center gap-3 rounded-2xl bg-warning/12 px-4 py-2.5 text-sm text-warning-foreground">
           <span className="flex-1">Die Engine ist aus – Sounds sind erst zu hören, wenn sie läuft.</span>
           <Button size="sm" disabled={starting} onClick={() => actions.start()}>
-            <Play /> {starting ? "Startet …" : "Engine starten"}
+            <PlayGlyph /> {starting ? "Startet …" : "Engine starten"}
           </Button>
         </div>
       )}

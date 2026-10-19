@@ -1,9 +1,10 @@
-import { Play, MagnifyingGlass as SearchIcon, X } from "@phosphor-icons/react";
+import { MagnifyingGlass as SearchIcon, X } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Kbd } from "~/components/ui/misc";
 import { library, useLibrary, type Sound } from "~/lib/library";
 import { formatTime, music, useMusic, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
+import { PlayGlyph } from "~/components/ui/transport";
 
 const LIMIT = 6;
 
@@ -182,7 +183,7 @@ export function Search() {
                         i === active && "opacity-100",
                       )}
                     >
-                      <Play weight="fill" />
+                      <PlayGlyph />
                     </span>
                   </button>
                 </div>

@@ -1,10 +1,11 @@
-import { PencilSimple, Play, Stop, Star } from "@phosphor-icons/react";
+import { PencilSimple, Star } from "@phosphor-icons/react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { Kbd } from "~/components/ui/misc";
 import { library, soundColor, type Sound } from "~/lib/library";
 import { cn } from "~/lib/utils";
 import { hotkeyLabel } from "./hotkey";
 import { Waveform } from "./Waveform";
+import { PlayGlyph, StopGlyph } from "~/components/ui/transport";
 
 function formatDuration(ms: number) {
   const s = ms / 1000;
@@ -133,7 +134,7 @@ export function SoundTile({ sound, progress, onEdit }: ItemProps) {
             onClick={stop(() => void library.stop(sound.id))}
             className="ml-auto flex size-6 cursor-default items-center justify-center rounded-full bg-[var(--tile)] text-black/80 [&_svg]:size-3"
           >
-            <Stop weight="fill" />
+            <StopGlyph />
           </button>
         )}
       </div>
@@ -167,7 +168,7 @@ export function SoundRow({ sound, progress, onEdit }: ItemProps) {
             : "bg-[color-mix(in_oklch,var(--tile)_16%,transparent)] text-[var(--tile)] group-hover:bg-[var(--tile)] group-hover:text-black/80",
         )}
       >
-        {playing ? <Stop weight="fill" /> : <Play weight="fill" />}
+        {playing ? <StopGlyph /> : <PlayGlyph />}
       </button>
 
       <div className="flex min-w-0 items-baseline gap-2">

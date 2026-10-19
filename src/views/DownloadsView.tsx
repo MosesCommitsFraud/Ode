@@ -8,6 +8,7 @@ import { isTauri } from "~/lib/engine";
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { music } from "~/lib/music";
 import { cn } from "~/lib/utils";
+import { ActionGroup, ActionPill } from "~/components/ui/pills";
 
 const ROW_HEIGHT = 60;
 
@@ -63,10 +64,12 @@ function ToolsSetup() {
           tools.error && <p className="mt-1 text-sm text-error-foreground">{tools.error}</p>
         )}
       </div>
-      <Button disabled={tools.installing} onClick={() => downloads.installTools()}>
-        {tools.installing && <Loader2 className="animate-spin" />}
-        Installieren · 100 MB
-      </Button>
+      <ActionGroup>
+        <ActionPill primary disabled={tools.installing} onClick={() => downloads.installTools()}>
+          {tools.installing && <Loader2 className="animate-spin" />}
+          Installieren · 100 MB
+        </ActionPill>
+      </ActionGroup>
     </Card>
   );
 }
@@ -329,9 +332,9 @@ export function DownloadsView() {
         <div className="flex h-9 items-center justify-between px-2 pb-1">
           <span className="font-mono text-3xs text-muted-foreground uppercase">Warteschlange · {jobs.length}</span>
           {finished && (
-            <Button variant="ghost" size="sm" onClick={() => downloads.clearFinished()}>
-              Erledigte entfernen
-            </Button>
+            <ActionGroup>
+              <ActionPill onClick={() => downloads.clearFinished()}>Erledigte entfernen</ActionPill>
+            </ActionGroup>
           )}
         </div>
         <div ref={ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden">

@@ -1,4 +1,4 @@
-import { Stop, X } from "@phosphor-icons/react";
+import { X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
@@ -8,6 +8,7 @@ import { useStore } from "~/lib/store";
 import { cn, formatDb } from "~/lib/utils";
 import { heldModifiers, hotkeyFromEvent, hotkeyLabel } from "./hotkey";
 import { Waveform } from "./Waveform";
+import { PlayGlyph, StopGlyph } from "~/components/ui/transport";
 
 const MODES: PlayMode[] = ["restart", "overlap", "toggle"];
 const MODE_LABELS: Record<PlayMode, string> = {
@@ -135,18 +136,6 @@ function HotkeyRecorder({
         </Button>
       )}
     </div>
-  );
-}
-
-/**
- * Play-Dreieck mit dem Schwerpunkt in der Mitte; ein Dreieck in mittiger Box
- * wirkt sonst nach links versetzt (wie PlayTriangle in der MusicBar).
- */
-function PlayGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden>
-      <path d="M5.2 3.1v9.8c0 .6.6.9 1.1.6l7.4-4.9c.4-.3.4-.9 0-1.2L6.3 2.5c-.5-.3-1.1 0-1.1.6Z" fill="currentColor" />
-    </svg>
   );
 }
 
@@ -292,7 +281,7 @@ export function SoundEditor({
                 )}
                 style={{ background: color }}
               >
-                {progress !== undefined ? <Stop weight="fill" /> : <PlayGlyph />}
+                {progress !== undefined ? <StopGlyph /> : <PlayGlyph />}
               </button>
             </div>
           </Field>

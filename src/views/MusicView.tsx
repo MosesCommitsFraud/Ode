@@ -4,8 +4,6 @@ import {
   CaretRight as ChevronRight,
   CircleNotch as Loader2,
   ListPlus,
-  Pause,
-  Play,
   Plus,
   Shuffle,
   Trash as Trash2,
@@ -20,6 +18,8 @@ import { EmptyState } from "~/components/ui/misc";
 import { isTauri } from "~/lib/engine";
 import { formatTime, music, tracksOf, useMusic, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
+import { PauseGlyph, PlayGlyph } from "~/components/ui/transport";
+import { ActionGroup, ActionPill } from "~/components/ui/pills";
 
 const ROW_HEIGHT = 44;
 
@@ -172,7 +172,7 @@ function TrackRow({
             current ? "opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
         >
-          {current && playing ? <Pause weight="fill" /> : <Play weight="fill" />}
+          {current && playing ? <PauseGlyph /> : <PlayGlyph />}
         </span>
       </button>
       <div className="min-w-0">
@@ -287,40 +287,39 @@ export function MusicView() {
               {list.length} Titel · {formatTime(total)}
             </p>
           </div>
-          <Button
-            size="sm"
-            disabled={list.length === 0}
-            onClick={() => (listPlaying ? music.toggle() : music.play(ids, 0))}
-          >
-            {listPlaying ? <Pause weight="fill" /> : <Play weight="fill" />}
-            {listPlaying ? "Pause" : "Abspielen"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={list.length === 0}
-            title="Zufällig abspielen"
-            onClick={async () => {
-              await music.setShuffle(true);
-              await music.play(ids, Math.floor(Math.random() * ids.length));
-            }}
-          >
-            <Shuffle /> Zufällig
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => music.pickFiles()}>
-            {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
-            {importing > 0 ? `Lade ${importing} …` : "Musik hinzufügen"}
-          </Button>
-          {playlist && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              title="Playlist löschen (Titel bleiben erhalten)"
-              onClick={() => music.deletePlaylist(playlist.id)}
+          <ActionGroup>
+            <ActionPill
+              primary
+              disabled={list.length === 0}
+              onClick={() => (listPlaying ? music.toggle() : music.play(ids, 0))}
             >
-              <Trash2 />
-            </Button>
-          )}
+              {listPlaying ? <PauseGlyph /> : <PlayGlyph />}
+              {listPlaying ? "Pause" : "Abspielen"}
+            </ActionPill>
+            <ActionPill
+              disabled={list.length === 0}
+              title="Zufällig abspielen"
+              onClick={async () => {
+                await music.setShuffle(true);
+                await music.play(ids, Math.floor(Math.random() * ids.length));
+              }}
+            >
+              <Shuffle /> Zufällig
+            </ActionPill>
+            <ActionPill onClick={() => music.pickFiles()}>
+              {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
+              {importing > 0 ? `Lade ${importing} …` : "Musik hinzufügen"}
+            </ActionPill>
+            {playlist && (
+              <ActionPill
+                title="Playlist löschen (Titel bleiben erhalten)"
+                className="px-2.5"
+                onClick={() => music.deletePlaylist(playlist.id)}
+              >
+                <Trash2 />
+              </ActionPill>
+            )}
+          </ActionGroup>
         </div>
 
         {notices.length > 0 && (
