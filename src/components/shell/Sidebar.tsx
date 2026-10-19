@@ -58,7 +58,7 @@ function NavItem({
 function Section({ title, onAdd, children }: { title: string; onAdd?: () => void; children: ReactNode }) {
   return (
     <div>
-      <div className="group flex h-7 items-center justify-between pr-1 pl-2.5">
+      <div className="group flex h-6 items-center justify-between pr-1 pl-2.5">
         <span className="font-mono text-3xs tracking-[0.16em] text-muted-foreground/80 uppercase">{title}</span>
         {onAdd && (
           <button
@@ -94,7 +94,7 @@ function ListItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex h-8 w-full cursor-default items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors",
+        "flex h-7 w-full cursor-default items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors",
         active
           ? "bg-sidebar-accent font-medium text-foreground"
           : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
@@ -212,7 +212,7 @@ export function Sidebar({
         <Logo />
       </div>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-2 pb-3">
+      <nav className="min-h-0 shrink space-y-3 overflow-y-auto px-2 pb-3">
         <div className="space-y-0.5">
           {VIEWS.map((v) => (
             <NavItem key={v.id} icon={v.icon} label={v.label} active={view === v.id} onClick={() => onView(v.id)} />
@@ -226,7 +226,7 @@ export function Sidebar({
         <Playlists view={view} onView={onView} />
       </nav>
 
-      <div className="space-y-2 p-2">
+      <div className="flex min-h-56 flex-1 flex-col gap-2 p-2">
         <OutputVolume />
         <div className="flex items-center gap-1.5">
           <div className="min-w-0 flex-1">

@@ -37,7 +37,7 @@ function MiniStrip({
           {muted ? "MUTE" : formatDb(gainDb)}
         </span>
       </div>
-      <div className="flex h-32 justify-center">
+      <div className="flex min-h-0 flex-1 justify-center">
         <Fader
           label={`${label} Lautstärke`}
           value={gainDb}
@@ -78,7 +78,7 @@ export function OutputVolume() {
   const soundsPeak = Math.max(...SOUNDS.map((id) => (channels[id].muted ? 0 : peakOf(id))));
 
   return (
-    <div className="flex gap-2 divide-x divide-hairline rounded-xl bg-sidebar-accent p-2.5 [&>*+*]:pl-2">
+    <div className="flex min-h-0 flex-1 gap-2 divide-x divide-hairline rounded-xl bg-sidebar-accent p-2.5 [&>*+*]:pl-2">
       <MiniStrip
         label="Mikrofon"
         color="var(--ch-mic)"
