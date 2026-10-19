@@ -1,4 +1,4 @@
-import { ArrowsClockwise, Broadcast } from "@phosphor-icons/react";
+import { AppWindow, ArrowsClockwise, Broadcast } from "@phosphor-icons/react";
 import { useEffect } from "react";
 import { PageChannel } from "~/components/mixer/PageChannel";
 import { Meter } from "~/components/mixer/Meter";
@@ -11,14 +11,27 @@ import { cn } from "~/lib/utils";
 /** Wie oft die Liste der Programme neu gelesen wird, damit „spielt“ stimmt. */
 const REFRESH_MS = 4000;
 
+/** Programm-Icon (32 px, transparent) oder ein neutraler Platzhalter. */
+function AppIcon({ source, size }: { source: AppSource; size: "sm" | "lg" }) {
+  const box = size === "lg" ? "size-12" : "size-8";
+  return source.icon ? (
+    <img src={source.icon} alt="" draggable={false} className={cn(box, "shrink-0 object-contain")} />
+  ) : (
+    <span className={cn(box, "flex shrink-0 items-center justify-center text-muted-foreground [&_svg]:size-6")}>
+      <AppWindow />
+    </span>
+  );
+}
+
 function SourceRow({ source, active }: { source: AppSource; active: boolean }) {
   return (
     <div
       className={cn(
-        "grid h-14 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 rounded-xl px-3 transition-colors",
+        "grid h-14 grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-xl px-3 transition-colors",
         active ? "bg-[color-mix(in_oklch,var(--ch-live)_12%,transparent)]" : "hover:bg-accent",
       )}
     >
+      <AppIcon source={source} size="sm" />
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold">{source.name}</div>
         <div className="truncate font-mono text-3xs text-muted-foreground">{source.exe}</div>
@@ -49,6 +62,7 @@ function ActiveSource({ source }: { source: AppSource }) {
   const muted = useStore((s) => s.channels.live.muted);
   return (
     <Card className="flex items-center gap-5 p-5 [--ch:var(--ch-live)]">
+      <AppIcon source={source} size="lg" />
       <div className="min-w-0 flex-1">
         <div className="font-mono text-3xs font-semibold tracking-[0.16em] text-[var(--ch-live)] uppercase">Live</div>
         <div className="mt-1 truncate font-display text-2xl font-semibold tracking-tight">{source.name}</div>
