@@ -1,5 +1,35 @@
-/** Texte für den Bereich „common“. Schlüssel ohne Präfix; aufgerufen als t("common.<schlüssel>"). */
+/** Texte, die auf mehreren Seiten vorkommen. */
 export default {
-  de: {} as Record<string, string>,
-  en: {} as Record<string, string>,
+  de: {
+    previousPage: "Vorherige Seite",
+    nextPage: "Nächste Seite",
+    page: "Seite {current} / {pages}",
+    play: "Abspielen",
+    pause: "Pause",
+    stop: "Stoppen",
+    edit: "Bearbeiten",
+    delete: "Löschen",
+    starting: "Startet …",
+    loadingCount: "Lade {count} …",
+    resetDefault: "Auf Standard zurücksetzen",
+    off: "Aus",
+    default: "Standard",
+    choose: "Auswählen",
+  },
+  en: {
+    previousPage: "Previous page",
+    nextPage: "Next page",
+    page: "Page {current} / {pages}",
+    play: "Play",
+    pause: "Pause",
+    stop: "Stop",
+    edit: "Edit",
+    delete: "Delete",
+    starting: "Starting …",
+    loadingCount: "Loading {count} …",
+    resetDefault: "Reset to default",
+    off: "Off",
+    default: "Default",
+    choose: "Choose",
+  },
 };

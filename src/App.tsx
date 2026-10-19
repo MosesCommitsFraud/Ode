@@ -3,6 +3,7 @@ import { MusicBar } from "~/components/shell/MusicBar";
 import { SETTINGS, Sidebar, VIEWS, type View } from "~/components/shell/Sidebar";
 import { TopBar } from "~/components/shell/TopBar";
 import { actions } from "~/lib/store";
+import { useLang } from "~/lib/i18n";
 import { updater } from "~/lib/updater";
 import { LiveView } from "~/views/LiveView";
 import { MixerView } from "~/views/MixerView";
@@ -40,15 +41,27 @@ function useTheme() {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.style.colorScheme = dark ? "dark" : "light";
   }, [dark]);
-  const toggle = () =>
-    setDark((d) => {
-      writeStorage(THEME_KEY, d ? "light" : "dark");
-      return !d;
-    });
+  // Weich überblenden: Der Browser hält das alte Bild fest und blendet zum neuen über.
+  const toggle = () => {
+    const next = !dark;
+    writeStorage(THEME_KEY, next ? "dark" : "light");
+    const apply = () => {
+      document.documentElement.classList.toggle("dark", next);
+      document.documentElement.style.colorScheme = next ? "dark" : "light";
+      setDark(next);
+    };
+    if (document.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.startViewTransition(apply);
+    } else {
+      apply();
+    }
+  };
   return { dark, toggle };
 }
 
 export default function App() {
+  // Beim Sprachwechsel zeichnet sich die ganze Oberfläche neu.
+  useLang();
   const { dark, toggle } = useTheme();
   const [view, setView] = useState<View>(() => {
     const stored = readStorage(VIEW_KEY);

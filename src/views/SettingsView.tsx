@@ -3,11 +3,12 @@ import { GeneralSettings } from "~/components/setup/GeneralSettings";
 import { UpdateCard } from "~/components/setup/UpdateCard";
 import { Badge, Card, Segmented } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
+import { t } from "~/lib/i18n";
 
 const PARTS = [
-  { key: "in", label: "Eingangspuffer", color: "var(--ch-mic)" },
-  { key: "mid", label: "Zwischenpuffer B", color: "var(--ch-soundboard)" },
-  { key: "out", label: "Ausgangspuffer B", color: "var(--ch-music)" },
+  { key: "in", label: "settings.inputBuffer", color: "var(--ch-mic)" },
+  { key: "mid", label: "settings.middleBuffer", color: "var(--ch-soundboard)" },
+  { key: "out", label: "settings.outputBuffer", color: "var(--ch-music)" },
 ] as const;
 
 const TARGET_MS = 30;
@@ -26,8 +27,8 @@ function LatencyCard() {
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between">
-        <h2 className="font-display text-lg font-semibold tracking-tight">Latenz</h2>
-        {running && <Badge tone={tone}>Ziel &lt; {TARGET_MS} ms</Badge>}
+        <h2 className="font-display text-lg font-semibold tracking-tight">{t("settings.latency")}</h2>
+        {running && <Badge tone={tone}>{t("settings.target", { ms: TARGET_MS })}</Badge>}
       </div>
 
       {running && meters ? (
@@ -51,13 +52,13 @@ function LatencyCard() {
               <div key={p.key} className="flex items-center justify-between gap-4">
                 <dt className="flex items-center gap-2 text-muted-foreground">
                   <span className="h-1.5 w-3 rounded-full" style={{ background: p.color }} />
-                  {p.label}
+                  {t(p.label)}
                 </dt>
                 <dd className="font-mono tabular-nums">{parts[p.key].toFixed(1)} ms</dd>
               </div>
             ))}
             <div className="flex justify-between gap-4 border-t border-hairline pt-1.5">
-              <dt className="pl-5 text-muted-foreground">Aussetzer · Korrekturen</dt>
+              <dt className="pl-5 text-muted-foreground">{t("settings.dropouts")}</dt>
               <dd className="font-mono tabular-nums">
                 {meters.outA.underruns + meters.outB.underruns} · {meters.outA.overruns + meters.outB.overruns}
               </dd>
@@ -65,7 +66,7 @@ function LatencyCard() {
           </dl>
         </>
       ) : (
-        <p className="mt-3 text-sm text-muted-foreground">Engine aus</p>
+        <p className="mt-3 text-sm text-muted-foreground">{t("settings.engineOff")}</p>
       )}
     </Card>
   );
@@ -77,9 +78,9 @@ function BufferCard() {
     <Card className="p-5">
       <h2
         className="mb-3 font-display text-lg font-semibold tracking-tight"
-        title="Kleiner = weniger Verzögerung, größer = robuster gegen Knackser"
+        title={t("settings.bufferHint")}
       >
-        Puffer
+        {t("settings.buffer")}
       </h2>
       <Segmented
         value={bufferMs}

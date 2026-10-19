@@ -3,6 +3,7 @@ import { ArrowCounterClockwise as RotateCcw, Headphones, MicrophoneStage } from 
 import { cn, formatDb } from "~/lib/utils";
 import { Fader } from "./Fader";
 import { Meter } from "./Meter";
+import { t } from "~/lib/i18n";
 
 /**
  * Schalter im Stil der übrigen Auswahlen der App: in einer Mulde, eingeschaltet
@@ -95,7 +96,7 @@ export function ChannelStrip({
   const reset = (
     <button
       type="button"
-      title="Auf Standard zurücksetzen"
+      title={t("common.resetDefault")}
       disabled={isDefault}
       onClick={onReset}
       className="flex size-7 shrink-0 cursor-default items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground [&_svg]:size-4"
@@ -122,7 +123,7 @@ export function ChannelStrip({
       <div className="flex items-center gap-1.5">
         <button
           type="button"
-          title={gainDb === 0 ? "Grundlautstärke 0 dB" : "Auf 0 dB zurücksetzen"}
+          title={gainDb === 0 ? t("mixer.unityGain") : t("mixer.resetGain")}
           disabled={disabled || gainDb === 0}
           onClick={() => onGain(0)}
           className={cn(
@@ -141,7 +142,7 @@ export function ChannelStrip({
 
       <div className="flex min-h-0 flex-1 justify-center">
         <Fader
-          label={`${name} Lautstärke`}
+          label={t("mixer.volumeOf", { name })}
           value={gainDb}
           onChange={onGain}
           disabled={disabled}
@@ -153,7 +154,7 @@ export function ChannelStrip({
         {routing && (
           <>
             <StripToggle
-              title="Auf Kopfhörer (A)"
+              title={t("mixer.toHeadphones")}
               on={routing.a}
               onClick={() => routing.onA(!routing.a)}
               disabled={disabled}
@@ -161,7 +162,7 @@ export function ChannelStrip({
               <Headphones />
             </StripToggle>
             <StripToggle
-              title="Ins virtuelle Mikrofon (B)"
+              title={t("mixer.toCable")}
               on={routing.b}
               onClick={() => routing.onB(!routing.b)}
               disabled={disabled}
@@ -171,7 +172,7 @@ export function ChannelStrip({
           </>
         )}
         <StripToggle
-          title={muted ? "Stummschaltung aufheben" : "Stummschalten"}
+          title={muted ? t("mixer.unmute") : t("mixer.mute")}
           on={muted}
           tone="error"
           onClick={() => onMute(!muted)}

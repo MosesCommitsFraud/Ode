@@ -1,6 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { EmptyArtwork, type EmptyArt } from "./empty";
 
 export function Kbd({ className, ...props }: ComponentProps<"kbd">) {
   return (
@@ -118,19 +117,19 @@ export function Segmented<T extends string | number>({
   );
 }
 
-/** Leere Seite: kleine Zeichnung, ein lockerer Satz, darunter optional ein Hinweis. */
+/** Leere Seite: großes Icon, ein lockerer Satz, darunter optional ein Hinweis. */
 export function EmptyState({
-  art,
+  icon,
   title,
   children,
 }: {
-  art: EmptyArt;
+  icon: ReactNode;
   title: string;
   children?: ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-5 px-6 text-center">
-      <EmptyArtwork art={art} />
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <div className="text-muted-foreground/50 [&_svg]:size-14">{icon}</div>
       <div className="space-y-1">
         <p className="font-display text-xl font-semibold tracking-tight">{title}</p>
         {children && <p className="max-w-sm text-sm text-muted-foreground">{children}</p>}

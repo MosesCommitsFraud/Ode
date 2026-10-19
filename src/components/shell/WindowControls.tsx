@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
+import { t } from "~/lib/i18n";
 
 /* Eigene Fenstersteuerung statt der Windows-Titelleiste (decorations: false).
    Gezogen wird über alle Flächen mit data-tauri-drag-region. */
@@ -57,16 +58,16 @@ export function WindowControls() {
 
   return (
     <div className="panel flex h-9 items-center gap-0.5 rounded-full px-1">
-      <ControlButton title="Minimieren" onClick={() => void appWindow.minimize()}>
+      <ControlButton title={t("shell.minimize")} onClick={() => void appWindow.minimize()}>
         <Minus />
       </ControlButton>
       <ControlButton
-        title={maximized ? "Verkleinern" : "Maximieren"}
+        title={maximized ? t("shell.restore") : t("shell.maximize")}
         onClick={() => void appWindow.toggleMaximize()}
       >
         {maximized ? <Copy className="-scale-x-100 !size-3" /> : <Square className="!size-3" />}
       </ControlButton>
-      <ControlButton title="Schließen" danger onClick={() => void appWindow.close()}>
+      <ControlButton title={t("shell.close")} danger onClick={() => void appWindow.close()}>
         <X />
       </ControlButton>
     </div>

@@ -1,5 +1,17 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ArrowDown, Waveform as AudioWaveform, CaretLeft as ChevronLeft, CaretRight as ChevronRight, VinylRecord as Disc3, DownloadSimple as Download, Stack as Layers, LinkSimple as Link2, CircleNotch as Loader2, X } from "@phosphor-icons/react";
+import {
+  ArrowDown,
+  CaretLeft as ChevronLeft,
+  CaretRight as ChevronRight,
+  CircleNotch as Loader2,
+  DownloadSimple as Download,
+  LinkSimple as Link2,
+  Package,
+  Stack as Layers,
+  VinylRecord as Disc3,
+  Waveform as AudioWaveform,
+  X,
+} from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type WheelEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, EmptyState, Kbd } from "~/components/ui/misc";
@@ -9,21 +21,13 @@ import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { music } from "~/lib/music";
 import { cn } from "~/lib/utils";
 import { ActionGroup, ActionPill } from "~/components/ui/pills";
+import { t } from "~/lib/i18n";
 
 const ROW_HEIGHT = 60;
 
-const STATUS: Record<Job["status"], string> = {
-  queued: "Wartet",
-  info: "Infos",
-  downloading: "Lädt",
-  converting: "Wandelt",
-  importing: "Importiert",
-  done: "Fertig",
-  failed: "Fehler",
-  cancelled: "Abgebrochen",
-};
+const status = (s: Job["status"]) => t(`downloads.${s}`);
 
-const CHOICE_LABEL: Record<Target, string> = { soundboard: "Soundboard", music: "Musik", both: "Beides" };
+const choiceLabel = (target: Target) => t(`downloads.${target}`);
 
 function isLink(text: string) {
   return /^https?:\/\/\S+$/i.test(text.trim());
@@ -49,11 +53,11 @@ function ToolsSetup() {
   return (
     <Card className="flex items-center gap-4 p-5">
       <div className="min-w-0 flex-1">
-        <h2 className="font-display text-lg font-semibold tracking-tight">yt-dlp und FFmpeg fehlen</h2>
+        <h2 className="font-display text-lg font-semibold tracking-tight">{t("downloads.toolsMissing")}</h2>
         {tools.installing ? (
           <div className="mt-3 space-y-1.5">
             <div className="flex justify-between font-mono text-3xs text-muted-foreground uppercase">
-              <span>{tools.step ?? "Startet …"}</span>
+              <span>{tools.step ?? t("common.starting")}</span>
               <span className="tabular-nums">{Math.round(tools.progress * 100)} %</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-[var(--meter-track)]">
@@ -67,7 +71,7 @@ function ToolsSetup() {
       <ActionGroup>
         <ActionPill primary disabled={tools.installing} onClick={() => downloads.installTools()}>
           {tools.installing && <Loader2 className="animate-spin" />}
-          Installieren · 100 MB
+          {t("downloads.install")}
         </ActionPill>
       </ActionGroup>
     </Card>
@@ -75,9 +79,9 @@ function ToolsSetup() {
 }
 
 const TARGET_OPTIONS: { value: Target; label: string; icon: ReactNode; color: string }[] = [
-  { value: "soundboard", label: "Sound", icon: <AudioWaveform />, color: "var(--ch-soundboard)" },
-  { value: "music", label: "Musik", icon: <Disc3 />, color: "var(--ch-music)" },
-  { value: "both", label: "Beides", icon: <Layers />, color: "var(--primary)" },
+  { value: "soundboard", get label() { return t("downloads.sound"); }, icon: <AudioWaveform />, color: "var(--ch-soundboard)" },
+  { value: "music", get label() { return t("downloads.music"); }, icon: <Disc3 />, color: "var(--ch-music)" },
+  { value: "both", get label() { return t("downloads.both"); }, icon: <Layers />, color: "var(--primary)" },
 ];
 
 /** Ziel als kleiner Umschalter mit gleitender Markierung in der Farbe des Ziels. */
@@ -87,7 +91,7 @@ function TargetPicker({ value, onChange }: { value: Target; onChange: (t: Target
   return (
     <div
       role="radiogroup"
-      aria-label="Ziel"
+      aria-label={t("downloads.target")}
       style={{ "--pick": current.color } as CSSProperties}
       className="well relative grid h-10 shrink-0 grid-cols-3 rounded-xl p-1"
     >
@@ -143,9 +147,9 @@ function AddForm() {
     try {
       const text = (isTauri ? await readText() : await navigator.clipboard.readText()).trim();
       if (isLink(text)) setUrl(text);
-      else setHint("In der Zwischenablage ist kein Link.");
+      else setHint(t("downloads.noLink"));
     } catch {
-      setHint("Zwischenablage nicht lesbar – Strg V geht auch.");
+      setHint(t("downloads.clipboardFailed"));
     }
     input.current?.focus();
   };
@@ -162,14 +166,14 @@ function AddForm() {
             setHint(null);
           }}
           onKeyDown={(e) => e.key === "Enter" && void submit()}
-          placeholder="Link von YouTube, SoundCloud, …"
+          placeholder={t("downloads.placeholder")}
           spellCheck={false}
           className="h-full min-w-0 flex-1 bg-transparent px-1 text-[15px] outline-none placeholder:text-muted-foreground"
         />
         {url ? (
           <button
             type="button"
-            title="Leeren"
+            title={t("downloads.clear")}
             onClick={() => {
               setUrl("");
               input.current?.focus();
@@ -184,14 +188,14 @@ function AddForm() {
             onClick={() => void paste()}
             className="flex h-8 cursor-default items-center gap-2 rounded-full px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            Einfügen <Kbd>Strg V</Kbd>
+            {t("downloads.paste")} <Kbd>{t("downloads.pasteKey")}</Kbd>
           </button>
         )}
         <span className="mx-1.5 h-6 w-px bg-border" />
         <TargetPicker value={target} onChange={setTarget} />
         <button
           type="button"
-          title="Laden"
+          title={t("downloads.load")}
           disabled={!valid}
           onClick={() => void submit()}
           className="ml-1 flex size-11 shrink-0 cursor-default items-center justify-center rounded-xl bg-primary text-primary-foreground transition-all active:scale-95 disabled:bg-muted disabled:text-muted-foreground [&_svg]:size-5"
@@ -208,33 +212,33 @@ function AddForm() {
 function TargetToggle({ job }: { job: Job }) {
   const editable = job.status === "done";
   const current = job.target;
-  const has = (t: Target) => current === t || current === "both";
-  const toggle = (t: Target) => {
-    const other: Target = t === "soundboard" ? "music" : "soundboard";
-    const next: Target = has(t) ? (has(other) ? other : current) : has(other) ? "both" : t;
+  const has = (tg: Target) => current === tg || current === "both";
+  const toggle = (tg: Target) => {
+    const other: Target = tg === "soundboard" ? "music" : "soundboard";
+    const next: Target = has(tg) ? (has(other) ? other : current) : has(other) ? "both" : tg;
     if (next !== current) void downloads.setTarget(job.id, next);
   };
 
   return (
     <div className="flex gap-1">
-      {(["soundboard", "music"] as const).map((t) => (
+      {(["soundboard", "music"] as const).map((tg) => (
         <button
-          key={t}
+          key={tg}
           type="button"
           disabled={!editable}
-          title={editable ? (has(t) ? `Aus ${CHOICE_LABEL[t]} entfernen` : `Zu ${CHOICE_LABEL[t]} hinzufügen`) : undefined}
-          onClick={() => toggle(t)}
+          title={editable ? (has(tg) ? t("downloads.removeFrom", { target: choiceLabel(tg) }) : t("downloads.addTo", { target: choiceLabel(tg) })) : undefined}
+          onClick={() => toggle(tg)}
           className={cn(
             "h-6 cursor-default rounded-full px-2.5 font-mono text-3xs font-semibold uppercase transition-colors",
-            has(t)
-              ? t === "music"
+            has(tg)
+              ? tg === "music"
                 ? "bg-[color-mix(in_oklch,var(--ch-music)_16%,transparent)] text-[var(--ch-music)]"
                 : "bg-[color-mix(in_oklch,var(--ch-soundboard)_16%,transparent)] text-[var(--ch-soundboard)]"
               : "text-muted-foreground/60",
-            editable && !has(t) && "hover:bg-accent hover:text-foreground",
+            editable && !has(tg) && "hover:bg-accent hover:text-foreground",
           )}
         >
-          {CHOICE_LABEL[t]}
+          {choiceLabel(tg)}
         </button>
       ))}
     </div>
@@ -258,8 +262,8 @@ function Thumb({ job }: { job: Job }) {
 function JobRow({ job }: { job: Job }) {
   const active = ACTIVE.includes(job.status);
   const label = job.status === "downloading" || job.status === "converting"
-    ? `${STATUS[job.status]} ${Math.round(job.progress * 100)} %`
-    : STATUS[job.status];
+    ? `${status(job.status)} ${Math.round(job.progress * 100)} %`
+    : status(job.status);
 
   return (
     <div className="grid h-full grid-cols-[2.5rem_1fr_auto_9rem_2rem] items-center gap-4 rounded-xl px-3 hover:bg-accent">
@@ -292,7 +296,7 @@ function JobRow({ job }: { job: Job }) {
         )}
       </div>
       {active ? (
-        <Button variant="ghost" size="icon-sm" title="Abbrechen" onClick={() => downloads.cancel(job.id)}>
+        <Button variant="ghost" size="icon-sm" title={t("downloads.cancel")} onClick={() => downloads.cancel(job.id)}>
           <X />
         </Button>
       ) : (
@@ -330,17 +334,17 @@ export function DownloadsView() {
 
       <Card className="flex min-h-0 flex-1 flex-col p-3">
         <div className="flex h-9 items-center justify-between px-2 pb-1">
-          <span className="font-mono text-3xs text-muted-foreground uppercase">Warteschlange · {jobs.length}</span>
+          <span className="font-mono text-3xs text-muted-foreground uppercase">{t("downloads.queue", { count: jobs.length })}</span>
           {finished && (
             <ActionGroup>
-              <ActionPill onClick={() => downloads.clearFinished()}>Erledigte entfernen</ActionPill>
+              <ActionPill onClick={() => downloads.clearFinished()}>{t("downloads.clearFinished")}</ActionPill>
             </ActionGroup>
           )}
         </div>
         <div ref={ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden">
           {jobs.length === 0 ? (
-            <EmptyState art="downloads" title="Die Kiste ist leer">
-              Link oben rein, den Rest macht Ode.
+            <EmptyState icon={<Package weight="duotone" />} title={t("downloads.emptyTitle")}>
+              {t("downloads.emptyHint")}
             </EmptyState>
           ) : (
             <div className="grid" style={{ gridAutoRows: ROW_HEIGHT }}>
@@ -352,13 +356,13 @@ export function DownloadsView() {
         </div>
         {pages > 1 && (
           <div className="flex h-9 shrink-0 items-center justify-center gap-3">
-            <Button variant="ghost" size="icon-sm" title="Vorherige Seite" disabled={current === 0} onClick={() => turn(-1)}>
+            <Button variant="ghost" size="icon-sm" title={t("common.previousPage")} disabled={current === 0} onClick={() => turn(-1)}>
               <ChevronLeft />
             </Button>
             <span className="font-mono text-2xs text-muted-foreground tabular-nums">
-              Seite {current + 1} / {pages}
+              {t("common.page", { current: current + 1, pages })}
             </span>
-            <Button variant="ghost" size="icon-sm" title="Nächste Seite" disabled={current === pages - 1} onClick={() => turn(1)}>
+            <Button variant="ghost" size="icon-sm" title={t("common.nextPage")} disabled={current === pages - 1} onClick={() => turn(1)}>
               <ChevronRight />
             </Button>
           </div>

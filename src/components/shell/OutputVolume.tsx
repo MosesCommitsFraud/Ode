@@ -5,6 +5,7 @@ import { Meter } from "~/components/mixer/Meter";
 import type { ChannelId } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
 import { cn, formatDb } from "~/lib/utils";
+import { t } from "~/lib/i18n";
 
 /** Ein Kanalzug wie im Mischpult, nur kleiner. */
 function MiniStrip({
@@ -39,7 +40,7 @@ function MiniStrip({
       </div>
       <div className="flex min-h-0 flex-1 justify-center">
         <Fader
-          label={`${label} Lautstärke`}
+          label={t("shell.volumeOf", { name: label })}
           value={gainDb}
           onChange={onGain}
           meter={<Meter peak={muted ? 0 : peak} />}
@@ -49,7 +50,7 @@ function MiniStrip({
       </div>
       <ToggleGroup>
         <StripToggle
-          title={muted ? `${label} einschalten` : `${label} stummschalten`}
+          title={muted ? t("shell.unmuteOf", { name: label }) : t("shell.muteOf", { name: label })}
           on={muted}
           tone="error"
           onClick={() => onMute(!muted)}
@@ -80,7 +81,7 @@ export function OutputVolume() {
   return (
     <div className="flex min-h-0 flex-1 gap-2 divide-x divide-hairline rounded-xl bg-sidebar-accent p-2.5 [&>*+*]:pl-2">
       <MiniStrip
-        label="Mikrofon"
+        label={t("shell.microphone")}
         color="var(--ch-mic)"
         gainDb={mic.gainDb}
         muted={mic.muted}
@@ -89,7 +90,7 @@ export function OutputVolume() {
         onMute={(muted) => actions.setChannel("mic", { muted })}
       />
       <MiniStrip
-        label="Sounds"
+        label={t("shell.sounds")}
         color="var(--ch-soundboard)"
         gainDb={soundsGain}
         muted={soundsMuted}

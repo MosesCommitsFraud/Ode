@@ -3,6 +3,7 @@ import { Bars, LedBar, cssColor } from "~/components/ui/canvas";
 import { Badge, Card, Switch } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
 import { cn, formatDb, gainToDb } from "~/lib/utils";
+import { t } from "~/lib/i18n";
 
 /* Die Mikrofon-Kette als Rack: fünf Module nebeneinander, jedes mit einer
    Anzeige, die zeigt, was der Effekt gerade tut, und den Reglern darunter. */
@@ -357,12 +358,12 @@ export function EffectsView() {
     <div className="grid h-full grid-cols-6 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden pl-6 pr-3 pt-3 pb-3">
       <Module
         className="col-span-2"
-        title="Noise Gate"
+        title={t("effects.gate")}
         enabled={fx.gate.enabled}
         onToggle={(enabled) => actions.setEffect("gate", { enabled })}
         status={
           fx.gate.enabled &&
-          running && <Reading tone={live?.gateOpen ? "success" : "default"}>{live?.gateOpen ? "Offen" : "Zu"}</Reading>
+          running && <Reading tone={live?.gateOpen ? "success" : "default"}>{live?.gateOpen ? t("effects.open") : t("effects.closed")}</Reading>
         }
         display={
           <GateDisplay
@@ -373,7 +374,7 @@ export function EffectsView() {
         }
       >
         <Range
-          label="Schwelle"
+          label={t("effects.threshold")}
           value={fx.gate.thresholdDb}
           min={-80}
           max={-10}
@@ -387,13 +388,13 @@ export function EffectsView() {
 
       <Module
         className="col-span-2"
-        title="Rauschfilter"
+        title={t("effects.denoise")}
         enabled={fx.denoise.enabled}
         onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
         status={
           fx.denoise.enabled &&
           running && (
-            <Reading tone={voiceOpen ? "success" : "default"}>{voiceOpen ? "Sprache" : fx.denoise.voiceGate ? "Gesperrt" : "Ruhe"}</Reading>
+            <Reading tone={voiceOpen ? "success" : "default"}>{voiceOpen ? t("effects.voice") : fx.denoise.voiceGate ? t("effects.blocked") : t("effects.quiet")}</Reading>
           )
         }
         display={<VoiceDisplay voice={voice} enabled={fx.denoise.enabled} />}
@@ -404,9 +405,9 @@ export function EffectsView() {
             !fx.denoise.enabled && "opacity-45",
           )}
         >
-          <span className="text-muted-foreground">Klicks zwischen Wörtern unterdrücken</span>
+          <span className="text-muted-foreground">{t("effects.voiceGate")}</span>
           <Switch
-            label="Sprach-Gate"
+            label={t("effects.voiceGateLabel")}
             checked={fx.denoise.voiceGate}
             disabled={!fx.denoise.enabled}
             onCheckedChange={(voiceGate) => actions.setEffect("denoise", { voiceGate })}
@@ -416,7 +417,7 @@ export function EffectsView() {
 
       <Module
         className="col-span-2"
-        title="Equalizer"
+        title={t("effects.eq")}
         inline
         enabled={fx.eq.enabled}
         onToggle={(enabled) => actions.setEffect("eq", { enabled })}
@@ -424,9 +425,9 @@ export function EffectsView() {
       >
         {(
           [
-            ["lowDb", "Bass"],
-            ["midDb", "Präsenz"],
-            ["highDb", "Höhen"],
+            ["lowDb", t("effects.bass")],
+            ["midDb", t("effects.presence")],
+            ["highDb", t("effects.treble")],
           ] as const
         ).map(([key, label]) => (
           <Range
@@ -445,7 +446,7 @@ export function EffectsView() {
 
       <Module
         className="col-span-2"
-        title="Auto-Lautstärke"
+        title={t("effects.agc")}
         enabled={fx.agc.enabled}
         onToggle={(enabled) => actions.setEffect("agc", { enabled })}
         status={
@@ -459,7 +460,7 @@ export function EffectsView() {
         display={<AgcDisplay gainDb={agcGainDb} maxGainDb={fx.agc.maxGainDb} />}
       >
         <Range
-          label="Ziel"
+          label={t("effects.target")}
           value={fx.agc.targetDb}
           min={-30}
           max={-10}
@@ -470,7 +471,7 @@ export function EffectsView() {
           onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
         />
         <Range
-          label="Höchstens anheben"
+          label={t("effects.maxGain")}
           value={fx.agc.maxGainDb}
           min={0}
           max={30}
@@ -484,7 +485,7 @@ export function EffectsView() {
 
       <Module
         className="col-span-2"
-        title="Kompressor"
+        title={t("effects.compressor")}
         inline
         enabled={fx.compressor.enabled}
         onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
@@ -505,7 +506,7 @@ export function EffectsView() {
         }
       >
         <Range
-          label="Schwelle"
+          label={t("effects.threshold")}
           value={fx.compressor.thresholdDb}
           min={-50}
           max={0}
@@ -516,7 +517,7 @@ export function EffectsView() {
           onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
         />
         <Range
-          label="Verhältnis"
+          label={t("effects.ratio")}
           value={fx.compressor.ratio}
           min={1}
           max={10}
@@ -527,7 +528,7 @@ export function EffectsView() {
           onChange={(ratio) => actions.setEffect("compressor", { ratio })}
         />
         <Range
-          label="Aufholen"
+          label={t("effects.makeup")}
           value={fx.compressor.makeupDb}
           min={0}
           max={18}
@@ -541,7 +542,7 @@ export function EffectsView() {
 
       <Module
         className="col-span-2"
-        title="Limiter"
+        title={t("effects.limiter")}
         enabled={fx.limiter.enabled}
         onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
         status={
@@ -555,7 +556,7 @@ export function EffectsView() {
         display={<ReductionDisplay db={limiterDb} max={12} />}
       >
         <Range
-          label="Obergrenze"
+          label={t("effects.ceiling")}
           value={fx.limiter.ceilingDb}
           min={-20}
           max={0}

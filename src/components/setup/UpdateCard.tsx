@@ -4,11 +4,13 @@ import { ActionGroup, ActionPill } from "~/components/ui/pills";
 import { Card } from "~/components/ui/misc";
 import { updater, useUpdater } from "~/lib/updater";
 import { cn } from "~/lib/utils";
+import { locale, t } from "~/lib/i18n";
 
 function since(time: number | null) {
   if (!time) return null;
   const minutes = Math.round((Date.now() - time) / 60000);
-  return minutes < 1 ? "gerade eben" : minutes === 1 ? "vor 1 Minute" : `vor ${minutes} Minuten`;
+  if (minutes < 1) return t("settings.justNow");
+  return new Intl.RelativeTimeFormat(locale(), { numeric: "auto" }).format(-minutes, "minute");
 }
 
 /** Version und Updates aus den GitHub-Releases. */
@@ -29,20 +31,20 @@ export function UpdateCard() {
   return (
     <Card className="p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold tracking-tight">Version</h2>
+        <h2 className="font-display text-lg font-semibold tracking-tight">{t("settings.version")}</h2>
         <span className="font-mono text-sm tabular-nums">{version ?? "–"}</span>
       </div>
 
       {available && status !== "current" ? (
         <div className="mt-3 rounded-xl bg-primary/10 p-3">
-          <div className="text-sm font-semibold">Version {available.version} ist da</div>
+          <div className="text-sm font-semibold">{t("settings.updateAvailable", { version: available.version })}</div>
           {available.notes && (
             <p className="mt-1 line-clamp-3 text-xs whitespace-pre-line text-muted-foreground">{available.notes}</p>
           )}
           {status === "downloading" || status === "ready" ? (
             <div className="mt-3 space-y-1.5">
               <div className="flex justify-between text-2xs text-muted-foreground">
-                <span>{status === "ready" ? "Startet neu …" : "Lädt herunter …"}</span>
+                <span>{status === "ready" ? t("settings.restarting") : t("settings.downloading")}</span>
                 {progress !== null && <span className="font-mono tabular-nums">{Math.round(progress * 100)} %</span>}
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-[var(--meter-track)]">
@@ -55,7 +57,7 @@ export function UpdateCard() {
           ) : (
             <ActionGroup className="mt-3 w-fit">
               <ActionPill primary onClick={() => void updater.install()}>
-                <DownloadSimple /> Jetzt aktualisieren
+                <DownloadSimple /> {t("settings.updateNow")}
               </ActionPill>
             </ActionGroup>
           )}
@@ -63,9 +65,9 @@ export function UpdateCard() {
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">
           {status === "checking"
-            ? "Sucht nach Updates …"
+            ? t("settings.checking")
             : status === "current"
-              ? `Aktuell · geprüft ${since(checkedAt)}`
+              ? t("settings.upToDate", { when: since(checkedAt) ?? "" })
               : status === "error"
                 ? null
                 : null}
@@ -77,7 +79,7 @@ export function UpdateCard() {
       <ActionGroup className="mt-3 w-fit">
         <ActionPill disabled={busy} onClick={() => void updater.check()}>
           {status === "checking" ? <CircleNotch className="animate-spin" /> : <ArrowsClockwise />}
-          Nach Updates suchen
+          {t("settings.checkUpdates")}
         </ActionPill>
       </ActionGroup>
     </Card>

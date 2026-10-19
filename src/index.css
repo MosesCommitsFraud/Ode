@@ -242,3 +242,10 @@
     transform: translateY(6px) scale(0.985);
   }
 }
+
+/* Hell/Dunkel-Wechsel als ruhige Überblendung (siehe App.tsx). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 450ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}

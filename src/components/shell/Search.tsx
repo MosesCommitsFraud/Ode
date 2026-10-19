@@ -5,6 +5,7 @@ import { library, useLibrary, type Sound } from "~/lib/library";
 import { formatTime, music, useMusic, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
 import { PlayGlyph } from "~/components/ui/transport";
+import { t } from "~/lib/i18n";
 
 const LIMIT = 6;
 
@@ -122,14 +123,14 @@ export function Search() {
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          placeholder="Sounds und Titel suchen …"
+          placeholder={t("shell.searchPlaceholder")}
           spellCheck={false}
           className="h-full min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
         />
         {query ? (
           <button
             type="button"
-            title="Leeren"
+            title={t("shell.clear")}
             onClick={() => {
               setQuery("");
               input.current?.focus();
@@ -139,14 +140,14 @@ export function Search() {
             <X />
           </button>
         ) : (
-          <Kbd className="rounded-full px-2">Strg K</Kbd>
+          <Kbd className="rounded-full px-2">{t("shell.searchKey")}</Kbd>
         )}
       </div>
 
       {showPanel && (
         <div className="absolute top-full right-0 left-0 z-50 mt-2 animate-[pop-in_140ms_var(--ease-drawer)] overflow-hidden rounded-2xl border border-hairline bg-popover p-1.5 shadow-pop">
           {hits.length === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-muted-foreground">Nichts gefunden.</div>
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">{t("shell.nothingFound")}</div>
           ) : (
             hits.map((hit, i) => {
               const sound = hit.kind === "sound" ? hit.sound : null;
@@ -156,7 +157,7 @@ export function Search() {
                 <div key={key(hit)}>
                   {(i === 0 || i === firstTrack) && (
                     <div className="px-2.5 pt-1.5 pb-1 font-mono text-3xs tracking-[0.16em] text-muted-foreground uppercase">
-                      {sound ? "Sounds" : "Musik"}
+                      {sound ? t("shell.sounds") : t("shell.music")}
                     </div>
                   )}
                   <button

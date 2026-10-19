@@ -6,6 +6,7 @@ import { cn } from "~/lib/utils";
 import { hotkeyLabel } from "./hotkey";
 import { Waveform } from "./Waveform";
 import { PlayGlyph, StopGlyph } from "~/components/ui/transport";
+import { t } from "~/lib/i18n";
 
 function formatDuration(ms: number) {
   const s = ms / 1000;
@@ -64,12 +65,12 @@ function Actions({ sound, onEdit }: { sound: Sound; onEdit: () => void }) {
   return (
     <>
       <ActionButton
-        title={sound.favorite ? "Aus Favoriten entfernen" : "Zu Favoriten"}
+        title={sound.favorite ? t("soundboard.removeFavorite") : t("soundboard.addFavorite")}
         onClick={() => void library.update(sound.id, { favorite: !sound.favorite })}
       >
         <Star weight={sound.favorite ? "fill" : "bold"} className={cn(sound.favorite && "text-[var(--tile)]")} />
       </ActionButton>
-      <ActionButton title="Bearbeiten" onClick={onEdit}>
+      <ActionButton title={t("common.edit")} onClick={onEdit}>
         <PencilSimple />
       </ActionButton>
     </>
@@ -130,7 +131,7 @@ export function SoundTile({ sound, progress, onEdit }: ItemProps) {
         {playing && (
           <button
             type="button"
-            title="Stoppen"
+            title={t("common.stop")}
             onClick={stop(() => void library.stop(sound.id))}
             className="ml-auto flex size-6 cursor-default items-center justify-center rounded-full bg-[var(--tile)] text-black/80 [&_svg]:size-3"
           >
@@ -159,7 +160,7 @@ export function SoundRow({ sound, progress, onEdit }: ItemProps) {
     >
       <button
         type="button"
-        title={playing ? "Stoppen" : "Abspielen"}
+        title={playing ? t("common.stop") : t("common.play")}
         onClick={stop(() => void (playing ? library.stop(sound.id) : library.play(sound.id)))}
         className={cn(
           "flex size-7 cursor-default items-center justify-center rounded-lg transition-colors [&_svg]:size-3.5",

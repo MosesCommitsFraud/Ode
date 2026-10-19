@@ -7,12 +7,13 @@ import { isTauri } from "~/lib/engine";
 import { formatTime, music, useMusic, type Repeat as RepeatMode, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
 import { PauseGlyph, PlayGlyph } from "~/components/ui/transport";
+import { t } from "~/lib/i18n";
 
 const NEXT_REPEAT: Record<RepeatMode, RepeatMode> = { off: "all", all: "one", one: "off" };
 const REPEAT_TITLE: Record<RepeatMode, string> = {
-  off: "Wiederholen: aus",
-  all: "Wiederholen: alle",
-  one: "Wiederholen: dieser Titel",
+  off: "shell.repeatOff",
+  all: "shell.repeatAll",
+  one: "shell.repeatOne",
 };
 
 /** Waagerechter Regler mit Ziehen, Klicken und Pfeiltasten. Wert 0–1. */
@@ -100,7 +101,7 @@ function VolumeSlider({ value, onChange }: { value: number; onChange: (v: number
       ref={ref}
       role="slider"
       tabIndex={0}
-      aria-label="Player-Lautstärke"
+      aria-label={t("shell.playerVolume")}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(value * 100)}
@@ -201,10 +202,10 @@ export function MusicBar() {
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Cover track={track} loading={state.loading} />
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">{track?.title ?? "Nichts in der Wiedergabe"}</div>
+            <div className="truncate text-sm font-semibold">{track?.title ?? t("shell.nothingPlaying")}</div>
             {(hasTrack || state.error) && (
               <div className={cn("truncate text-2xs", state.error ? "text-error-foreground" : "text-muted-foreground")}>
-                {state.error ?? (state.loading ? "Lädt …" : (track?.artist ?? "Unbekannt"))}
+                {state.error ?? (state.loading ? t("shell.loading") : (track?.artist ?? t("shell.unknownArtist")))}
               </div>
             )}
           </div>
@@ -213,29 +214,29 @@ export function MusicBar() {
         <div className="flex flex-[1.4] flex-col items-center gap-0.5">
           <div className="flex items-center gap-1">
             <ControlButton
-              title={state.shuffle ? "Zufall: an" : "Zufall: aus"}
+              title={state.shuffle ? t("shell.shuffleOn") : t("shell.shuffleOff")}
               active={state.shuffle}
               onClick={() => music.setShuffle(!state.shuffle)}
             >
               <Shuffle />
             </ControlButton>
-            <ControlButton title="Zurück" disabled={!hasTrack} onClick={() => music.previous()}>
+            <ControlButton title={t("shell.previous")} disabled={!hasTrack} onClick={() => music.previous()}>
               <SkipBack weight="fill" />
             </ControlButton>
             <button
               type="button"
               disabled={!hasTrack}
-              title={state.playing ? "Pause" : "Abspielen"}
+              title={state.playing ? t("shell.pause") : t("shell.play")}
               onClick={() => music.toggle()}
               className="mx-1 flex size-8 cursor-default items-center justify-center rounded-full bg-foreground text-background transition-transform active:scale-95 disabled:opacity-35 [&_svg]:size-4 [&_svg]:fill-current"
             >
               {state.playing ? <PauseGlyph /> : <PlayGlyph />}
             </button>
-            <ControlButton title="Weiter" disabled={!hasTrack} onClick={() => music.next()}>
+            <ControlButton title={t("shell.next")} disabled={!hasTrack} onClick={() => music.next()}>
               <SkipForward weight="fill" />
             </ControlButton>
             <ControlButton
-              title={REPEAT_TITLE[state.repeat]}
+              title={t(REPEAT_TITLE[state.repeat])}
               active={state.repeat !== "off"}
               onClick={() => music.setRepeat(NEXT_REPEAT[state.repeat])}
             >
@@ -247,7 +248,7 @@ export function MusicBar() {
 
         <div className="flex flex-1 items-center justify-end gap-1.5 pr-1.5">
           <ControlButton
-            title={volume === 0 ? "Ton an" : "Stumm"}
+            title={volume === 0 ? t("shell.unmute") : t("shell.mute")}
             onClick={() => music.setVolume(volume === 0 ? lastVolume.current : 0)}
           >
             <VolumeIcon />

@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "~/lib/utils";
+import { t } from "~/lib/i18n";
 
 export interface SelectOption {
   value: string;
@@ -168,7 +169,7 @@ export function Select({
       >
         {icon && <span className="shrink-0 text-muted-foreground [&_svg]:size-4">{icon}</span>}
         <span className={cn("min-w-0 flex-1 truncate", empty && "text-muted-foreground")}>
-          {selected?.label ?? placeholder ?? "Auswählen"}
+          {selected?.label ?? placeholder ?? t("common.choose")}
         </span>
         {selected?.hint && (
           <span className="shrink-0 rounded-full bg-primary/12 px-2 py-0.5 font-mono text-3xs text-primary">

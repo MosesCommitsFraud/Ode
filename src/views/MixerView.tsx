@@ -14,17 +14,18 @@ import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
 import type { ChannelId, Meters, OutputId } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
+import { t } from "~/lib/i18n";
 
 const CHANNELS: { id: ChannelId; name: string; icon: ReactNode; color: string; ready: boolean }[] = [
-  { id: "mic", name: "Mikrofon", icon: <Mic />, color: "var(--ch-mic)", ready: true },
-  { id: "soundboard", name: "Soundboard", icon: <AudioWaveform />, color: "var(--ch-soundboard)", ready: true },
-  { id: "music", name: "Musik", icon: <Disc3 />, color: "var(--ch-music)", ready: true },
-  { id: "live", name: "Live", icon: <Broadcast />, color: "var(--ch-live)", ready: true },
+  { id: "mic", get name() { return t("mixer.microphone"); }, icon: <Mic />, color: "var(--ch-mic)", ready: true },
+  { id: "soundboard", get name() { return t("mixer.soundboard"); }, icon: <AudioWaveform />, color: "var(--ch-soundboard)", ready: true },
+  { id: "music", get name() { return t("mixer.music"); }, icon: <Disc3 />, color: "var(--ch-music)", ready: true },
+  { id: "live", get name() { return t("mixer.live"); }, icon: <Broadcast />, color: "var(--ch-live)", ready: true },
 ];
 
 const OUTPUTS: { id: OutputId; name: string; icon: ReactNode }[] = [
-  { id: "a", name: "Kopfhörer", icon: <Headphones /> },
-  { id: "b", name: "Kabel", icon: <Cable /> },
+  { id: "a", get name() { return t("mixer.headphones"); }, icon: <Headphones /> },
+  { id: "b", get name() { return t("mixer.cable"); }, icon: <Cable /> },
 ];
 
 function channelPeak(meters: Meters | null, id: ChannelId) {
@@ -43,10 +44,10 @@ function Console() {
     <Card className="flex min-h-0 flex-1 p-1.5">
       <section className="flex flex-col">
         <div className="flex items-center justify-between pt-1.5 pr-1.5 pl-3">
-          <SectionLabel>Eingänge</SectionLabel>
+          <SectionLabel>{t("mixer.inputs")}</SectionLabel>
           <button
             type="button"
-            title="Alle Fader auf 0 dB"
+            title={t("mixer.resetAll")}
             disabled={!changed}
             onClick={() => actions.resetLevels()}
             className="flex h-6 cursor-default items-center gap-1.5 rounded-full bg-muted px-2.5 font-mono text-3xs font-semibold text-muted-foreground uppercase transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 [&_svg]:size-3"
@@ -86,7 +87,7 @@ function Console() {
       <div className="min-w-3 flex-1" />
 
       <section className="well flex flex-col rounded-xl">
-        <SectionLabel className="flex h-[30px] items-center px-3 pt-1.5">Ausgänge</SectionLabel>
+        <SectionLabel className="flex h-[30px] items-center px-3 pt-1.5">{t("mixer.outputs")}</SectionLabel>
         <div className="flex flex-1 divide-x divide-hairline">
           {OUTPUTS.map(({ id, name, icon }) => {
             const params = outputs[id];
@@ -107,11 +108,11 @@ function Console() {
                 onReset={() => actions.setOutput(id, OUTPUT_DEFAULTS[id])}
                 extra={
                   <StripToggle
-                    title={reducing ? "Limiter greift gerade" : "Limiter: harte Obergrenze für diesen Ausgang"}
+                    title={reducing ? t("mixer.limiterActive") : t("mixer.limiterHint")}
                     on={params.limiter}
                     onClick={() => actions.setOutput(id, { limiter: !params.limiter })}
                   >
-                    <span className={cn(reducing && "text-warning-foreground")}>Lim</span>
+                    <span className={cn(reducing && "text-warning-foreground")}>{t("mixer.limiterShort")}</span>
                   </StripToggle>
                 }
               />
@@ -125,9 +126,9 @@ function Console() {
 
 const AMOUNTS = [6, 12, 18, 24];
 const SENSITIVITY: { db: number; label: string }[] = [
-  { db: -50, label: "Hoch" },
-  { db: -40, label: "Mittel" },
-  { db: -30, label: "Niedrig" },
+  { db: -50, label: "mixer.high" },
+  { db: -40, label: "mixer.medium" },
+  { db: -30, label: "mixer.low" },
 ];
 
 /** Ducking als schmale Leiste unter dem Pult. */
@@ -140,18 +141,18 @@ function DuckingBar() {
     <Card className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
       <div className="flex items-center gap-3">
         <Switch
-          label="Ducking"
+          label={t("mixer.ducking")}
           checked={ducking.enabled}
           onCheckedChange={(enabled) => actions.setDucking({ enabled })}
         />
-        <div className="text-sm font-semibold" title="Soundboard und Musik werden leiser, während du sprichst">
-          Ducking
+        <div className="text-sm font-semibold" title={t("mixer.duckingHint")}>
+          {t("mixer.ducking")}
         </div>
       </div>
 
       <div className={cn("ml-auto flex items-center gap-4", !ducking.enabled && "pointer-events-none opacity-45")}>
         <div className="flex items-center gap-2">
-          <SectionLabel>Absenkung</SectionLabel>
+          <SectionLabel>{t("mixer.reduction")}</SectionLabel>
           <div className="w-56">
             <Segmented
               value={ducking.amountDb}
@@ -162,13 +163,16 @@ function DuckingBar() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <SectionLabel>Empfindlich</SectionLabel>
+          <SectionLabel>{t("mixer.sensitivity")}</SectionLabel>
           <div className="w-56">
             <Segmented
               value={ducking.thresholdDb}
               options={SENSITIVITY.map((s) => s.db)}
               onChange={(thresholdDb) => actions.setDucking({ thresholdDb })}
-              format={(db) => SENSITIVITY.find((s) => s.db === db)?.label ?? `${db} dB`}
+              format={(db) => {
+                const key = SENSITIVITY.find((s) => s.db === db)?.label;
+                return key ? t(key) : `${db} dB`;
+              }}
             />
           </div>
         </div>
@@ -178,7 +182,7 @@ function DuckingBar() {
             active && "text-[var(--ch-soundboard)]",
           )}
         >
-          {active ? `${duckingDb.toFixed(1)} dB` : "ruht"}
+          {active ? `${duckingDb.toFixed(1)} dB` : t("mixer.resting")}
         </span>
       </div>
     </Card>

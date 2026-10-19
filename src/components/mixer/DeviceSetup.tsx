@@ -6,12 +6,13 @@ import { Select } from "~/components/ui/select";
 import type { DeviceInfo } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
 import { PlayGlyph } from "~/components/ui/transport";
+import { t } from "~/lib/i18n";
 
 function options(devices: DeviceInfo[]) {
   return devices.map((d) => ({
     value: d.id,
     label: d.name,
-    hint: d.isDefault ? "Standard" : undefined,
+    hint: d.isDefault ? t("common.default") : undefined,
   }));
 }
 
@@ -40,50 +41,49 @@ export function DeviceSetup() {
   return (
     <Card className="p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold tracking-tight">Geräte</h2>
+        <h2 className="font-display text-lg font-semibold tracking-tight">{t("settings.devices")}</h2>
         <div className="flex items-center gap-1.5">
-          <Button variant="ghost" size="icon" title="Geräte neu laden" onClick={() => actions.refreshDevices()}>
+          <Button variant="ghost" size="icon" title={t("settings.reloadDevices")} onClick={() => actions.refreshDevices()}>
             <RefreshCw />
           </Button>
           {!running && (
             <Button disabled={starting || !config.inputId} onClick={() => actions.start()}>
-              <PlayGlyph /> {starting ? "Startet …" : "Erneut starten"}
+              <PlayGlyph /> {starting ? t("common.starting") : t("settings.restartEngine")}
             </Button>
           )}
         </div>
       </div>
 
       <div className="space-y-2.5">
-        <Row icon={<Mic />} label="Mikrofon">
+        <Row icon={<Mic />} label={t("settings.microphone")}>
           <Select
             value={config.inputId}
             onChange={(inputId) => actions.setConfig({ inputId })}
             options={options(devices.inputs.filter((d) => !d.isVirtualCable))}
-            placeholder="Mikrofon wählen"
+            placeholder={t("settings.chooseMicrophone")}
           />
         </Row>
-        <Row icon={<Headphones />} label="Kopfhörer">
+        <Row icon={<Headphones />} label={t("settings.headphones")}>
           <Select
             value={config.monitorId ?? ""}
             onChange={(id) => actions.setConfig({ monitorId: id || null })}
             options={options(devices.outputs.filter((d) => !d.isVirtualCable))}
-            placeholder="Aus"
+            placeholder={t("common.off")}
           />
         </Row>
-        <Row icon={<Cable />} label="Virtuelles Kabel">
+        <Row icon={<Cable />} label={t("settings.virtualCable")}>
           <Select
             value={config.cableId ?? ""}
             onChange={(id) => actions.setConfig({ cableId: id || null })}
             options={options(cables.length > 0 ? cables : devices.outputs)}
-            placeholder="Aus"
+            placeholder={t("common.off")}
           />
         </Row>
       </div>
 
       {noCable && (
         <p className="mt-4 rounded-xl bg-warning/12 px-3 py-2.5 text-xs text-warning-foreground">
-          Kein virtuelles Kabel gefunden. Installiere VB-Cable (vb-audio.com/Cable) und lade die
-          Geräte neu.
+          {t("settings.noCable")}
         </p>
       )}
       {error && (

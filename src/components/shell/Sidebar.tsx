@@ -5,21 +5,24 @@ import { music, useMusic } from "~/lib/music";
 import { useUpdater } from "~/lib/updater";
 import { cn } from "~/lib/utils";
 import { OutputVolume } from "./OutputVolume";
+import { t } from "~/lib/i18n";
 
 export type View = "soundboard" | "music" | "live" | "mixer" | "effects" | "downloads" | "settings";
 
 export const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
-  { id: "soundboard", label: "Soundboard", icon: <Waveform /> },
-  { id: "music", label: "Musik", icon: <VinylRecord /> },
-  { id: "live", label: "Live", icon: <Broadcast /> },
-  { id: "mixer", label: "Mischpult", icon: <Sliders /> },
-  { id: "effects", label: "Effekte", icon: <Waves /> },
-  { id: "downloads", label: "Downloads", icon: <DownloadSimple /> },
+  { id: "soundboard", get label() { return t("shell.soundboard"); }, icon: <Waveform /> },
+  { id: "music", get label() { return t("shell.music"); }, icon: <VinylRecord /> },
+  { id: "live", get label() { return t("shell.live"); }, icon: <Broadcast /> },
+  { id: "mixer", get label() { return t("shell.mixer"); }, icon: <Sliders /> },
+  { id: "effects", get label() { return t("shell.effects"); }, icon: <Waves /> },
+  { id: "downloads", get label() { return t("shell.downloads"); }, icon: <DownloadSimple /> },
 ];
 
 export const SETTINGS = {
   id: "settings" as const,
-  label: "Einstellungen",
+  get label() {
+    return t("shell.settings");
+  },
   icon: <GearSix />,
 };
 
@@ -72,7 +75,7 @@ function Section({ title, onAdd, children }: { title: string; onAdd?: () => void
         {onAdd && (
           <button
             type="button"
-            title={`${title} hinzufügen`}
+            title={t("shell.add", { section: title })}
             onClick={onAdd}
             className="flex size-5 cursor-default items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-sidebar-accent hover:text-foreground [&_svg]:size-3.5"
           >
@@ -147,15 +150,15 @@ function Playlists({ view, onView }: { view: View; onView: (view: View) => void 
   };
 
   const create = async () => {
-    await music.createPlaylist("Neue Playlist");
+    await music.createPlaylist(t("shell.newPlaylist"));
     onView("music");
   };
 
   return (
-    <Section title="Playlists" onAdd={() => void create()}>
+    <Section title={t("shell.playlists")} onAdd={() => void create()}>
       <ListItem
         swatch={<Cover seed={null} />}
-        label="Alle Titel"
+        label={t("shell.allTracks")}
         count={total}
         active={view === "music" && selected === null}
         onClick={() => open(null)}
@@ -184,8 +187,8 @@ function ThemeToggle({ dark, onToggle }: { dark: boolean; onToggle: () => void }
         )}
       />
       {[
-        { on: !dark, icon: <Sun />, label: "Heller Modus" },
-        { on: dark, icon: <Moon />, label: "Dunkler Modus" },
+        { on: !dark, icon: <Sun />, label: t("shell.lightMode") },
+        { on: dark, icon: <Moon />, label: t("shell.darkMode") },
       ].map(({ on, icon, label }) => (
         <button
           key={label}
@@ -235,10 +238,10 @@ export function Sidebar({
           ))}
         </div>
 
-        <Section title="Kategorien">
+        <Section title={t("shell.categories")}>
           <ListItem
             swatch={<Star weight="fill" className="size-3.5 text-primary" />}
-            label="Favoriten"
+            label={t("shell.favorites")}
             count={favoriteCount}
             active={view === "soundboard" && soundFilter.kind === "favorites"}
             onClick={() => {
@@ -260,7 +263,7 @@ export function Sidebar({
               label={SETTINGS.label}
               active={view === SETTINGS.id}
               onClick={() => onView(SETTINGS.id)}
-              badge={updateReady ? "Neu" : undefined}
+              badge={updateReady ? t("shell.updateBadge") : undefined}
             />
           </div>
           <div className="w-[4.5rem] shrink-0">

@@ -9,6 +9,7 @@ import {
   Trash as Trash2,
   VinylRecord,
   X,
+  Playlist,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
@@ -20,6 +21,7 @@ import { formatTime, music, tracksOf, useMusic, type Track } from "~/lib/music";
 import { cn } from "~/lib/utils";
 import { PauseGlyph, PlayGlyph } from "~/components/ui/transport";
 import { ActionGroup, ActionPill } from "~/components/ui/pills";
+import { t } from "~/lib/i18n";
 
 const ROW_HEIGHT = 44;
 
@@ -88,9 +90,9 @@ function AddToPlaylist({ track, anchor, onClose }: { track: Track; anchor: DOMRe
       className="fixed z-50 w-56 rounded-xl bg-popover p-1 shadow-[var(--shadow-pop)]"
       style={{ top: anchor.bottom + 6, left: Math.max(8, anchor.right - 224) }}
     >
-      <div className="px-2.5 pt-1.5 pb-1 font-mono text-3xs text-muted-foreground uppercase">Zu Playlist</div>
+      <div className="px-2.5 pt-1.5 pb-1 font-mono text-3xs text-muted-foreground uppercase">{t("music.toPlaylist")}</div>
       {playlists.length === 0 && (
-        <p className="px-2.5 py-2 text-xs text-muted-foreground">Noch keine Playlists.</p>
+        <p className="px-2.5 py-2 text-xs text-muted-foreground">{t("music.noPlaylists")}</p>
       )}
       {playlists.map((p) => {
         const has = p.trackIds.includes(track.id);
@@ -106,7 +108,7 @@ function AddToPlaylist({ track, anchor, onClose }: { track: Track; anchor: DOMRe
             className="flex h-8 w-full cursor-default items-center justify-between gap-2 rounded-lg px-2.5 text-left text-sm hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent"
           >
             <span className="truncate">{p.name}</span>
-            {has && <span className="font-mono text-3xs text-muted-foreground">drin</span>}
+            {has && <span className="font-mono text-3xs text-muted-foreground">{t("music.inPlaylist")}</span>}
           </button>
         );
       })}
@@ -157,7 +159,7 @@ function TrackRow({
       </span>
       <button
         type="button"
-        title={current && playing ? "Pause" : "Abspielen"}
+        title={current && playing ? t("common.pause") : t("common.play")}
         onClick={() => (current ? music.toggle() : onPlay())}
         className="relative flex size-8 cursor-default items-center justify-center overflow-hidden rounded-md bg-muted text-muted-foreground shadow-[0_0_0_1px_var(--hairline)] [&_svg]:size-4"
       >
@@ -185,7 +187,7 @@ function TrackRow({
         <Button
           variant="ghost"
           size="icon-sm"
-          title="Zu Playlist hinzufügen"
+          title={t("music.addToPlaylist")}
           onClick={(e) => setMenu(e.currentTarget.getBoundingClientRect())}
         >
           <ListPlus />
@@ -194,7 +196,7 @@ function TrackRow({
           <Button
             variant="ghost"
             size="icon-sm"
-            title="Aus Playlist entfernen"
+            title={t("music.removeFromPlaylist")}
             onClick={() =>
               music.setPlaylistTracks(
                 playlist.id,
@@ -209,11 +211,11 @@ function TrackRow({
             <Button
               variant={confirm ? "destructive" : "ghost"}
               size={confirm ? "sm" : "icon-sm"}
-              title="Titel löschen"
+              title={t("music.deleteTrack")}
               onClick={() => (confirm ? music.deleteTrack(track.id) : setConfirm(true))}
             >
               <Trash2 />
-              {confirm && "Löschen?"}
+              {confirm && t("music.confirmDelete")}
             </Button>
           )
         )}
@@ -276,15 +278,15 @@ export function MusicView() {
                   if (name && name !== playlist.name) void music.renamePlaylist(playlist.id, name);
                 }}
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                aria-label="Name der Playlist (klicken zum Umbenennen)"
-                title="Klicken zum Umbenennen"
+                aria-label={t("music.renameLabel")}
+                title={t("music.renameHint")}
                 className="w-full truncate bg-transparent font-display text-2xl font-semibold tracking-tight outline-none"
               />
             ) : (
-              <h2 className="font-display text-2xl font-semibold tracking-tight">Alle Titel</h2>
+              <h2 className="font-display text-2xl font-semibold tracking-tight">{t("music.allTracks")}</h2>
             )}
             <p className="font-mono text-3xs text-muted-foreground uppercase">
-              {list.length} Titel · {formatTime(total)}
+              {t("music.summary", { count: list.length, time: formatTime(total) })}
             </p>
           </div>
           <ActionGroup>
@@ -294,25 +296,25 @@ export function MusicView() {
               onClick={() => (listPlaying ? music.toggle() : music.play(ids, 0))}
             >
               {listPlaying ? <PauseGlyph /> : <PlayGlyph />}
-              {listPlaying ? "Pause" : "Abspielen"}
+              {listPlaying ? t("common.pause") : t("common.play")}
             </ActionPill>
             <ActionPill
               disabled={list.length === 0}
-              title="Zufällig abspielen"
+              title={t("music.shufflePlay")}
               onClick={async () => {
                 await music.setShuffle(true);
                 await music.play(ids, Math.floor(Math.random() * ids.length));
               }}
             >
-              <Shuffle /> Zufällig
+              <Shuffle /> {t("music.shuffle")}
             </ActionPill>
             <ActionPill onClick={() => music.pickFiles()}>
               {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
-              {importing > 0 ? `Lade ${importing} …` : "Musik hinzufügen"}
+              {importing > 0 ? t("common.loadingCount", { count: importing }) : t("music.add")}
             </ActionPill>
             {playlist && (
               <ActionPill
-                title="Playlist löschen (Titel bleiben erhalten)"
+                title={t("music.deletePlaylist")}
                 className="px-2.5"
                 onClick={() => music.deletePlaylist(playlist.id)}
               >
@@ -338,8 +340,8 @@ export function MusicView() {
         <div ref={ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden">
           {loaded && list.length === 0 ? (
             <EmptyState
-              art={playlist ? "playlist" : "music"}
-              title={playlist ? "Diese Playlist hat Lampenfieber" : "Hier herrscht Funkstille"}
+              icon={playlist ? <Playlist weight="duotone" /> : <VinylRecord weight="duotone" />}
+              title={playlist ? t("music.emptyPlaylist") : t("music.emptyLibrary")}
             />
           ) : (
             <div className="grid" style={{ gridAutoRows: ROW_HEIGHT }}>
@@ -361,13 +363,13 @@ export function MusicView() {
         <div className="flex h-9 shrink-0 items-center justify-center gap-3">
           {pages > 1 && (
             <>
-              <Button variant="ghost" size="icon-sm" title="Vorherige Seite" disabled={current === 0} onClick={() => turn(-1)}>
+              <Button variant="ghost" size="icon-sm" title={t("common.previousPage")} disabled={current === 0} onClick={() => turn(-1)}>
                 <ChevronLeft />
               </Button>
               <span className="font-mono text-2xs text-muted-foreground tabular-nums">
-                Seite {current + 1} / {pages}
+                {t("common.page", { current: current + 1, pages })}
               </span>
-              <Button variant="ghost" size="icon-sm" title="Nächste Seite" disabled={current === pages - 1} onClick={() => turn(1)}>
+              <Button variant="ghost" size="icon-sm" title={t("common.nextPage")} disabled={current === pages - 1} onClick={() => turn(1)}>
                 <ChevronRight />
               </Button>
             </>
@@ -375,12 +377,12 @@ export function MusicView() {
         </div>
       </section>
 
-      <PageChannel id="music" name="Musik" icon={<VinylRecord />} color="var(--ch-music)" />
+      <PageChannel id="music" name={t("shell.music")} icon={<VinylRecord />} color="var(--ch-music)" />
 
       {dragOver && (
         <div className="pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-[var(--ch-music)] bg-[color-mix(in_oklch,var(--ch-music)_10%,transparent)] backdrop-blur-sm">
           <p className="font-display text-lg font-semibold">
-            {playlist ? `Loslassen fügt zu „${playlist.name}“ hinzu` : "Loslassen zum Hinzufügen"}
+            {playlist ? t("music.dropToPlaylist", { name: playlist.name }) : t("music.dropToAdd")}
           </p>
         </div>
       )}

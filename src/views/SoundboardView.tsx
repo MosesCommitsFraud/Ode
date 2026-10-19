@@ -23,6 +23,7 @@ import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 import { ActionGroup, ActionPill, Pill, PillGroup } from "~/components/ui/pills";
 import { PlayGlyph, StopGlyph } from "~/components/ui/transport";
+import { t } from "~/lib/i18n";
 
 
 /** Kachelmaße für die Seitenaufteilung; die Seite scrollt nie. */
@@ -128,11 +129,11 @@ function FilterBar({ categories }: { categories: { name: string; count: number }
     <div ref={root} className="relative">
       <PillGroup>
         <Pill active={filter.kind === "all"} onClick={() => pick({ kind: "all" })}>
-          Alle <span className="font-mono opacity-60">{total}</span>
+          {t("soundboard.all")} <span className="font-mono opacity-60">{total}</span>
         </Pill>
         <Pill active={filter.kind === "favorites"} onClick={() => pick({ kind: "favorites" })}>
           <Star weight={filter.kind === "favorites" ? "fill" : "bold"} />
-          Favoriten <span className="font-mono opacity-60">{favorites}</span>
+          {t("soundboard.favorites")} <span className="font-mono opacity-60">{favorites}</span>
         </Pill>
         {categories.length > 0 && (
           <Pill
@@ -141,7 +142,7 @@ function FilterBar({ categories }: { categories: { name: string; count: number }
             className="max-w-48"
             onClick={() => setOpen((o) => !o)}
           >
-            <span className="truncate">{category ?? "Kategorie"}</span>
+            <span className="truncate">{category ?? t("soundboard.category")}</span>
             <CaretDown className={cn("transition-transform", open && "rotate-180")} />
           </Pill>
         )}
@@ -159,13 +160,13 @@ function FilterBar({ categories }: { categories: { name: string; count: number }
                 if (e.key === "Escape") setOpen(false);
                 if (e.key === "Enter" && found[0]) pick({ kind: "category", name: found[0].name });
               }}
-              placeholder="Kategorie suchen"
+              placeholder={t("soundboard.searchCategory")}
               className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
             />
           </div>
           <div className="max-h-64 overflow-y-auto">
             {found.length === 0 ? (
-              <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">Keine Kategorie gefunden.</p>
+              <p className="px-2.5 py-3 text-center text-xs text-muted-foreground">{t("soundboard.noCategory")}</p>
             ) : (
               found.map((c) => (
                 <button
@@ -256,7 +257,7 @@ export function SoundboardView() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Sound suchen"
+            placeholder={t("soundboard.searchSound")}
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           {query && (
@@ -268,29 +269,29 @@ export function SoundboardView() {
         <FilterBar categories={categoryCounts} />
         <div className="flex-1" />
         <PillGroup>
-          <Pill active={layout === "grid"} title="Kacheln" className="px-2.5" onClick={() => setLayout("grid")}>
+          <Pill active={layout === "grid"} title={t("soundboard.tiles")} className="px-2.5" onClick={() => setLayout("grid")}>
             <SquaresFour className="!size-4" />
           </Pill>
-          <Pill active={layout === "list"} title="Liste" className="px-2.5" onClick={() => setLayout("list")}>
+          <Pill active={layout === "list"} title={t("soundboard.list")} className="px-2.5" onClick={() => setLayout("list")}>
             <Rows className="!size-4" />
           </Pill>
         </PillGroup>
         <ActionGroup>
           <ActionPill disabled={!playing?.length} onClick={() => library.stopAll()}>
-            <StopGlyph /> Alle stoppen
+            <StopGlyph /> {t("soundboard.stopAll")}
           </ActionPill>
           <ActionPill primary onClick={() => library.pickFiles()}>
             {importing > 0 ? <Loader2 className="animate-spin" /> : <Plus />}
-            {importing > 0 ? `Lade ${importing} …` : "Hinzufügen"}
+            {importing > 0 ? t("common.loadingCount", { count: importing }) : t("soundboard.add")}
           </ActionPill>
         </ActionGroup>
       </div>
 
       {!running && sounds.length > 0 && (
         <div className="mr-3 ml-6 mb-4 flex items-center gap-3 rounded-2xl bg-warning/12 px-4 py-2.5 text-sm text-warning-foreground">
-          <span className="flex-1">Die Engine ist aus – Sounds sind erst zu hören, wenn sie läuft.</span>
+          <span className="flex-1">{t("soundboard.engineOff")}</span>
           <Button size="sm" disabled={starting} onClick={() => actions.start()}>
-            <PlayGlyph /> {starting ? "Startet …" : "Engine starten"}
+            <PlayGlyph /> {starting ? t("common.starting") : t("soundboard.startEngine")}
           </Button>
         </div>
       )}
@@ -310,11 +311,11 @@ export function SoundboardView() {
 
       <div ref={grid.ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden pr-3 pl-6">
         {sounds.length === 0 && loaded ? (
-          <EmptyState art="sounds" title="Noch kein einziges Airhorn">
-            Zieh Audiodateien hier rein.
+          <EmptyState icon={<Waveform weight="duotone" />} title={t("soundboard.emptyTitle")}>
+            {t("soundboard.emptyHint")}
           </EmptyState>
         ) : visible.length === 0 && loaded ? (
-          <p className="pt-16 text-center text-sm text-muted-foreground">Keine Sounds für diese Auswahl.</p>
+          <p className="pt-16 text-center text-sm text-muted-foreground">{t("soundboard.noMatch")}</p>
         ) : layout === "list" ? (
           <div
             key="list"
@@ -355,13 +356,13 @@ export function SoundboardView() {
       <div className="flex h-12 shrink-0 items-center justify-center gap-3 pr-3 pl-6">
         {pages > 1 && (
           <>
-            <Button variant="ghost" size="icon-sm" title="Vorherige Seite" disabled={current === 0} onClick={() => turn(-1)}>
+            <Button variant="ghost" size="icon-sm" title={t("common.previousPage")} disabled={current === 0} onClick={() => turn(-1)}>
               <ChevronLeft />
             </Button>
             <span className="font-mono text-2xs text-muted-foreground tabular-nums">
-              Seite {current + 1} / {pages}
+              {t("common.page", { current: current + 1, pages })}
             </span>
-            <Button variant="ghost" size="icon-sm" title="Nächste Seite" disabled={current === pages - 1} onClick={() => turn(1)}>
+            <Button variant="ghost" size="icon-sm" title={t("common.nextPage")} disabled={current === pages - 1} onClick={() => turn(1)}>
               <ChevronRight />
             </Button>
           </>
@@ -371,12 +372,12 @@ export function SoundboardView() {
       </div>
 
       <div className="flex shrink-0 py-3 pr-3">
-        <PageChannel id="soundboard" name="Soundboard" icon={<Waveform />} color="var(--ch-soundboard)" />
+        <PageChannel id="soundboard" name={t("shell.soundboard")} icon={<Waveform />} color="var(--ch-soundboard)" />
       </div>
 
       {dragOver && (
         <div className="pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center gap-3 rounded-3xl border-2 border-dashed border-primary bg-primary/10 backdrop-blur-sm">
-          <p className="font-display text-lg font-semibold">Loslassen zum Hinzufügen</p>
+          <p className="font-display text-lg font-semibold">{t("soundboard.dropToAdd")}</p>
         </div>
       )}
 
