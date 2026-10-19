@@ -1,0 +1,46 @@
+# Öffnet wöchentlich Pull Requests für neue Versionen der Abhängigkeiten.
+# Kleine Updates (patch, minor) kommen gebündelt in einem PR je Ökosystem,
+# große Sprünge (major) einzeln, damit man sie gezielt prüfen kann.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "Abhängigkeiten (npm)"
+    groups:
+      npm-klein:
+        update-types: [minor, patch]
+      tauri:
+        patterns: ["@tauri-apps/*"]
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "Abhängigkeiten (Rust)"
+    groups:
+      tauri:
+        patterns: ["tauri", "tauri-*"]
+      cargo-klein:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "Workflows"
+    groups:
+      actions:
+        patterns: ["*"]

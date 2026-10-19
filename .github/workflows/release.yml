@@ -2,9 +2,12 @@
 # Veröffentlicht wird nie automatisch: Erst wenn der Entwurf auf GitHub von Hand
 # veröffentlicht ist, liefert releases/latest/download/latest.json das Update aus.
 #
-# Start: Tag "v*" pushen (z. B. v0.2.0) oder von Hand unter Actions.
-# Benötigte Secrets: TAURI_SIGNING_PRIVATE_KEY (Inhalt von ~/.tauri/ode.key),
-# TAURI_SIGNING_PRIVATE_KEY_PASSWORD (leer lassen, wenn der Schlüssel kein Passwort hat).
+# Start von Hand unter Actions → Release → „Run workflow“ mit einer Version
+# (z. B. 0.2.0): setzt die Version, committet sie, legt den Tag an und baut.
+# Alternativ einen Tag „v*“ pushen, dann wird die Version im Code verwendet.
+#
+# Secrets: TAURI_SIGNING_PRIVATE_KEY (Inhalt von ~/.tauri/ode.key),
+# optional TAURI_SIGNING_PRIVATE_KEY_PASSWORD.
 name: Release
 
 on:
@@ -12,15 +15,25 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Neue Version ohne v, z. B. 0.2.0"
+        required: true
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         with:
@@ -37,6 +50,39 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Version setzen, committen und taggen
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          version="${{ inputs.version }}"
+          version="${version#v}"
+          if git rev-parse "v$version" >/dev/null 2>&1; then
+            echo "::error::Tag v$version gibt es schon"
+            exit 1
+          fi
+          node .github/scripts/set-version.mjs "$version"
+          cargo update --manifest-path src-tauri/Cargo.toml -p ode --offline || cargo update --manifest-path src-tauri/Cargo.toml -p ode
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git commit -m "Version $version"
+          git tag "v$version"
+          git push origin HEAD "v$version"
+
+      - name: Änderungen seit dem letzten Release
+        id: notes
+        shell: bash
+        run: |
+          current=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          previous=$(git describe --tags --abbrev=0 "${current}^" 2>/dev/null || true)
+          range="${previous:+$previous..}HEAD"
+          {
+            echo "body<<NOTES"
+            echo "## Änderungen"
+            git log "$range" --no-merges --pretty='- %s' | grep -v '^- Version ' | head -50
+            echo "NOTES"
+          } >> "$GITHUB_OUTPUT"
+
       - run: pnpm install --frozen-lockfile
 
       - uses: tauri-apps/tauri-action@v0
@@ -47,7 +93,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Ode v__VERSION__
-          releaseBody: Neue Version von Ode.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
