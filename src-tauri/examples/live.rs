@@ -78,6 +78,14 @@ fn main() -> anyhow::Result<()> {
     }
     if arg.as_deref() == Some("list") {
         for s in list_sources()? {
+            // ODE_ICONS=<Ordner> speichert die Programm-Icons als PNG.
+            if let (Ok(dir), Some(icon)) = (std::env::var("ODE_ICONS"), &s.icon) {
+                use base64::Engine as _;
+                let data = icon.trim_start_matches("data:image/png;base64,");
+                if let Ok(png) = base64::engine::general_purpose::STANDARD.decode(data) {
+                    let _ = std::fs::write(format!("{dir}/{}.png", s.name), png);
+                }
+            }
             println!(
                 "{:>6}  {:<20} {:<24} {}",
                 s.pid,

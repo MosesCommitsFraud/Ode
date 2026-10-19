@@ -9,6 +9,8 @@ export interface AppSource {
   exe: string;
   /** Spielt gerade hörbar etwas ab. */
   playing: boolean;
+  /** Programm-Icon als PNG-Data-URL (32 × 32), direkt als <img src> nutzbar. */
+  icon: string | null;
 }
 
 interface LiveState {
@@ -42,9 +44,9 @@ function message(e: unknown) {
 }
 
 const DEMO: AppSource[] = [
-  { pid: 1, name: "Spotify", exe: "Spotify.exe", playing: true },
-  { pid: 2, name: "Chrome", exe: "chrome.exe", playing: false },
-  { pid: 3, name: "Discord", exe: "Discord.exe", playing: false },
+  { pid: 1, name: "Spotify", exe: "Spotify.exe", playing: true, icon: null },
+  { pid: 2, name: "Chrome", exe: "chrome.exe", playing: false, icon: null },
+  { pid: 3, name: "Discord", exe: "Discord.exe", playing: false, icon: null },
 ];
 
 export const live = {

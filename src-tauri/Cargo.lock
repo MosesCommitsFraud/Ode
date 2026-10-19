@@ -2950,10 +2950,12 @@ name = "ode"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "cpal",
  "crossbeam-channel",
  "nnnoiseless",
  "parking_lot",
+ "png 0.18.1",
  "ringbuf",
  "rusqlite",
  "serde",

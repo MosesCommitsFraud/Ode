@@ -48,6 +48,9 @@ pub struct AppSource {
     pub exe: String,
     /// Spielt gerade hörbar etwas ab.
     pub playing: bool,
+    /// Programm-Icon als PNG-Data-URL, falls vorhanden.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 /// Bekannte Programme schöner benennen.
@@ -73,7 +76,8 @@ fn pretty_name(exe: &str) -> String {
     }
 }
 
-fn exe_name(pid: u32) -> Option<String> {
+/// Voller Pfad der Programmdatei eines Prozesses.
+fn exe_path(pid: u32) -> Option<String> {
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = [0u16; 1024];
@@ -86,8 +90,7 @@ fn exe_name(pid: u32) -> Option<String> {
         );
         let _ = CloseHandle(handle);
         ok.ok()?;
-        let path = String::from_utf16_lossy(&buf[..len as usize]);
-        path.rsplit(['\\', '/']).next().map(str::to_string)
+        Some(String::from_utf16_lossy(&buf[..len as usize]))
     }
 }
 
@@ -130,12 +133,14 @@ pub fn list_sources() -> anyhow::Result<Vec<AppSource>> {
                     existing.playing |= playing;
                     continue;
                 }
-                let Some(exe) = exe_name(pid) else { continue };
+                let Some(path) = exe_path(pid) else { continue };
+                let exe = path.rsplit(['\\', '/']).next().unwrap_or(&path).to_string();
                 sources.push(AppSource {
                     pid,
                     name: pretty_name(&exe),
                     exe,
                     playing,
+                    icon: super::app_icon::icon_data_url(&path),
                 });
             }
         }
