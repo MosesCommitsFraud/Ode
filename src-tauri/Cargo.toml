@@ -1,6 +1,6 @@
 [package]
 name = "ode"
-version = "0.1.0"
+version = "1.0.0"
 description = "Soundboard mit Mischpult und virtuellem Mikrofon"
 authors = ["Moritz Schäfer"]
 edition = "2024"
