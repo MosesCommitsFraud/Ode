@@ -166,12 +166,20 @@ impl Tools {
 
     fn install_files(&self) -> anyhow::Result<()> {
         if !self.yt_dlp().is_file() {
-            self.download(YT_DLP_URL, &self.yt_dlp(), "yt-dlp wird geladen")?;
+            self.download(
+                YT_DLP_URL,
+                &self.yt_dlp(),
+                &crate::tr!("yt-dlp wird geladen", "Downloading yt-dlp"),
+            )?;
         }
         if !self.ffmpeg().is_file() {
             let zip_path = self.dir.join("ffmpeg.zip");
-            self.download(FFMPEG_URL, &zip_path, "FFmpeg wird geladen")?;
-            self.set_step("FFmpeg wird entpackt", 1.0);
+            self.download(
+                FFMPEG_URL,
+                &zip_path,
+                &crate::tr!("FFmpeg wird geladen", "Downloading FFmpeg"),
+            )?;
+            self.set_step(&crate::tr!("FFmpeg wird entpackt", "Unpacking FFmpeg"), 1.0);
             let result = (|| -> anyhow::Result<()> {
                 // ffmpeg.exe und die DLLs aus bin/ übernehmen, ffprobe/ffplay nicht.
                 let mut archive = zip::ZipArchive::new(File::open(&zip_path)?)?;
@@ -219,9 +227,12 @@ impl Tools {
             state.installing = false;
             state.step = None;
             state.progress = 0.0;
-            state.error = result
-                .err()
-                .map(|e| format!("Installation fehlgeschlagen: {e}"));
+            state.error = result.err().map(|e| {
+                crate::tr!(
+                    "Installation fehlgeschlagen: {e}",
+                    "Installation failed: {e}"
+                )
+            });
         }
         self.emit();
     }
@@ -563,7 +574,12 @@ impl Downloads {
             .iter()
             .find(|p| !is_image(p) && p.extension().is_some_and(|e| e != "part"))
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Download lieferte keine Datei"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!(crate::tr!(
+                    "Download lieferte keine Datei",
+                    "Download produced no file"
+                ))
+            })?;
         // Vorschaubild quadratisch als Cover.
         if let Some(thumbnail) = files.iter().find(|p| is_image(p)) {
             let _ = covers::square(&tools.ffmpeg(), thumbnail, &dir.join("cover.jpg"));
@@ -586,7 +602,10 @@ impl Downloads {
         }
         anyhow::ensure!(
             tools.ready(),
-            "yt-dlp und FFmpeg fehlen – bitte zuerst installieren"
+            crate::tr!(
+                "yt-dlp und FFmpeg fehlen – bitte zuerst installieren",
+                "yt-dlp and FFmpeg are missing – please install them first"
+            )
         );
         tools.update_if_stale(false);
 
@@ -722,10 +741,15 @@ impl Downloads {
             .jobs()
             .into_iter()
             .find(|j| j.id == id)
-            .ok_or_else(|| anyhow::anyhow!("Download nicht gefunden"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!(crate::tr!("Download nicht gefunden", "Download not found"))
+            })?;
         anyhow::ensure!(
             job.status == JobStatus::Done,
-            "Download ist noch nicht fertig"
+            crate::tr!(
+                "Download ist noch nicht fertig",
+                "Download is not finished yet"
+            )
         );
 
         // Quelle für eine neue Kopie: die vorhandene Datei in einer der Bibliotheken.
@@ -735,7 +759,12 @@ impl Downloads {
             .as_ref()
             .map(|s| library.file_path(s))
             .or_else(|| track.as_ref().map(|t| music.file_path(t)))
-            .ok_or_else(|| anyhow::anyhow!("Datei ist nicht mehr in der Bibliothek"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!(crate::tr!(
+                    "Datei ist nicht mehr in der Bibliothek",
+                    "File is no longer in the library"
+                ))
+            })?;
         let meta = ImportMeta {
             name: job.title.clone(),
             artist: job.artist.clone(),
@@ -864,7 +893,10 @@ pub fn download_add(
 ) -> Result<u64, String> {
     let url = url.trim().to_string();
     if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return Err("Bitte einen vollständigen Link (https://…) einfügen".into());
+        return Err(crate::tr!(
+            "Bitte einen vollständigen Link (https://…) einfügen",
+            "Please paste a complete link (https://…)"
+        ));
     }
     Ok(downloads.add(url, target))
 }

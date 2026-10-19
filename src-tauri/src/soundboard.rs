@@ -58,20 +58,29 @@ pub fn sync_hotkeys<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
         let shortcut: Shortcut = match hotkey.parse() {
             Ok(s) => s,
             Err(_) => {
-                errors.push(format!("{}: Hotkey „{hotkey}“ ist ungültig", sound.name));
+                errors.push(crate::tr!(
+                    "{}: Hotkey „{hotkey}“ ist ungültig",
+                    "{}: hotkey “{hotkey}” is invalid",
+                    sound.name
+                ));
                 continue;
             }
         };
         if map.contains_key(&shortcut.id()) {
-            errors.push(format!("{}: „{hotkey}“ ist schon vergeben", sound.name));
+            errors.push(crate::tr!(
+                "{}: „{hotkey}“ ist schon vergeben",
+                "{}: “{hotkey}” is already in use",
+                sound.name
+            ));
             continue;
         }
         match shortcuts.register(shortcut) {
             Ok(()) => {
                 map.insert(shortcut.id(), sound.id);
             }
-            Err(_) => errors.push(format!(
+            Err(_) => errors.push(crate::tr!(
                 "{}: „{hotkey}“ wird von einem anderen Programm benutzt",
+                "{}: “{hotkey}” is used by another program",
                 sound.name
             )),
         }

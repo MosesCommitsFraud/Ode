@@ -146,7 +146,10 @@ impl Engine {
     pub fn deck(&self, command: DeckCommand) -> Result<(), String> {
         let decks = self.decks.lock();
         if decks.is_empty() {
-            return Err("Engine ist nicht gestartet".into());
+            return Err(crate::tr!(
+                "Engine ist nicht gestartet",
+                "Engine is not running"
+            ));
         }
         for deck in decks.iter() {
             let _ = deck.send(command.clone());
@@ -158,7 +161,10 @@ impl Engine {
     pub fn sampler(&self, command: SamplerCommand) -> Result<(), String> {
         let samplers = self.samplers.lock();
         if samplers.is_empty() {
-            return Err("Engine ist nicht gestartet".into());
+            return Err(crate::tr!(
+                "Engine ist nicht gestartet",
+                "Engine is not running"
+            ));
         }
         for sampler in samplers.iter() {
             let _ = sampler.send(command.clone());
@@ -173,8 +179,14 @@ impl Engine {
                 let _ = preview.send(command);
                 Ok(())
             }
-            None if self.samplers.lock().is_empty() => Err("Engine ist nicht gestartet".into()),
-            None => Err("Zum Vorhören einen Kopfhörer in den Einstellungen wählen".into()),
+            None if self.samplers.lock().is_empty() => Err(crate::tr!(
+                "Engine ist nicht gestartet",
+                "Engine is not running"
+            )),
+            None => Err(crate::tr!(
+                "Zum Vorhören einen Kopfhörer in den Einstellungen wählen",
+                "Pick headphones in the settings to preview"
+            )),
         }
     }
 
@@ -182,10 +194,10 @@ impl Engine {
         let (reply, response) = bounded(1);
         self.commands
             .send(Command::Start(config, reply))
-            .map_err(|_| "Engine läuft nicht".to_string())?;
+            .map_err(|_| crate::tr!("Engine läuft nicht", "Engine is not running"))?;
         response
             .recv()
-            .map_err(|_| "Engine antwortet nicht".to_string())?
+            .map_err(|_| crate::tr!("Engine antwortet nicht", "Engine does not respond"))?
     }
 
     pub fn stop(&self) {
@@ -404,7 +416,7 @@ macro_rules! dispatch_format {
             SampleFormat::I16 => $build::<i16>($($arg),*),
             SampleFormat::I32 => $build::<i32>($($arg),*),
             SampleFormat::U16 => $build::<u16>($($arg),*),
-            other => anyhow::bail!("Nicht unterstütztes Sample-Format: {other}"),
+            other => anyhow::bail!(crate::tr!("Nicht unterstütztes Sample-Format: {other}", "Unsupported sample format: {other}")),
         }
     };
 }

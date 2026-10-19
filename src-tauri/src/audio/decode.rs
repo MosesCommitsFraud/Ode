@@ -28,7 +28,12 @@ pub fn decode_file(path: &Path) -> anyhow::Result<Vec<f32>> {
             FormatOptions::default(),
             MetadataOptions::default(),
         )
-        .map_err(|e| anyhow::anyhow!("Format nicht erkannt: {e}"))?;
+        .map_err(|e| {
+            anyhow::anyhow!(crate::tr!(
+                "Format nicht erkannt: {e}",
+                "Unknown format: {e}"
+            ))
+        })?;
     let track = format
         .default_track(TrackType::Audio)
         .ok_or_else(|| anyhow::anyhow!("Keine Tonspur gefunden"))?;
@@ -40,7 +45,12 @@ pub fn decode_file(path: &Path) -> anyhow::Result<Vec<f32>> {
         .ok_or_else(|| anyhow::anyhow!("Keine Tonspur gefunden"))?;
     let mut decoder = symphonia::default::get_codecs()
         .make_audio_decoder(params, &AudioDecoderOptions::default())
-        .map_err(|e| anyhow::anyhow!("Codec nicht unterstützt: {e}"))?;
+        .map_err(|e| {
+            anyhow::anyhow!(crate::tr!(
+                "Codec nicht unterstützt: {e}",
+                "Codec not supported: {e}"
+            ))
+        })?;
 
     let mut mono = Vec::new();
     let mut interleaved: Vec<f32> = Vec::new();
@@ -83,7 +93,10 @@ pub fn decode_file(path: &Path) -> anyhow::Result<Vec<f32>> {
         }
     }
 
-    anyhow::ensure!(!mono.is_empty(), "Datei enthält keinen Ton");
+    anyhow::ensure!(
+        !mono.is_empty(),
+        crate::tr!("Datei enthält keinen Ton", "File contains no audio")
+    );
     Ok(mono)
 }
 

@@ -2,6 +2,7 @@ pub mod audio;
 mod cable;
 pub mod covers;
 pub mod downloader;
+pub mod i18n;
 pub mod library;
 pub mod music;
 mod shell;

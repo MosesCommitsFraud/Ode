@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useSyncExternalStore } from "react";
 import { isTauri } from "./engine";
+import { t } from "./i18n";
 import { demoNow, demoStarts } from "./store";
 
 export type PlayMode = "restart" | "overlap" | "toggle";
@@ -147,7 +148,7 @@ export const library = {
       AUDIO_EXTENSIONS.includes(p.split(".").pop()?.toLowerCase() ?? ""),
     );
     const skipped = paths.length - audio.length;
-    if (skipped > 0) notify([`${skipped} Datei(en) übersprungen – kein unterstütztes Audioformat`]);
+    if (skipped > 0) notify([t("messages.skippedFiles", { count: skipped })]);
     if (!isTauri || audio.length === 0) return;
     set({ importing: state.importing + audio.length });
     try {

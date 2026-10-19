@@ -43,7 +43,10 @@ pub fn square(ffmpeg: &Path, source: &Path, target: &Path) -> anyhow::Result<()>
         .status()?;
     anyhow::ensure!(
         status.success() && target.is_file(),
-        "Cover konnte nicht zugeschnitten werden"
+        crate::tr!(
+            "Cover konnte nicht zugeschnitten werden",
+            "Could not crop cover"
+        )
     );
     Ok(())
 }

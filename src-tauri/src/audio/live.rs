@@ -206,13 +206,18 @@ unsafe fn open_loopback(pid: u32) -> anyhow::Result<(IAudioClient, IAudioCapture
             &handler,
         )?;
         rx.recv_timeout(std::time::Duration::from_secs(5))
-            .map_err(|_| anyhow::anyhow!("Windows hat den Mitschnitt nicht freigegeben"))?;
+            .map_err(|_| {
+                anyhow::anyhow!(crate::tr!(
+                    "Windows hat den Mitschnitt nicht freigegeben",
+                    "Windows did not allow capturing this app"
+                ))
+            })?;
         let mut result = windows::core::HRESULT(0);
         let mut unknown = None;
         operation.GetActivateResult(&mut result, &mut unknown)?;
         result.ok()?;
         let client: IAudioClient = unknown
-            .ok_or_else(|| anyhow::anyhow!("Kein Audio-Client"))?
+            .ok_or_else(|| anyhow::anyhow!(crate::tr!("Kein Audio-Client", "No audio client")))?
             .cast()?;
 
         let format = WAVEFORMATEX {
@@ -354,7 +359,12 @@ impl Live {
         };
         let result = rx
             .recv_timeout(std::time::Duration::from_secs(8))
-            .unwrap_or_else(|_| Err("Keine Antwort von Windows".into()));
+            .unwrap_or_else(|_| {
+                Err(crate::tr!(
+                    "Keine Antwort von Windows",
+                    "No response from Windows"
+                ))
+            });
         let running = Running {
             stop,
             thread: Some(thread),

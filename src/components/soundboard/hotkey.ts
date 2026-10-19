@@ -1,3 +1,5 @@
+import { t } from "~/lib/i18n";
+
 /**
  * Hotkeys. Gespeichert wird der Name, den die Hotkey-Bibliothek in Windows'
  * Tastencode übersetzt („Ctrl+Equal“, „Numpad1“, „F13“). Damit das auf jedem
@@ -66,12 +68,9 @@ function keyName(e: KeyboardEvent): string | null {
 }
 
 const KEY_LABELS: Record<string, string> = {
-  Ctrl: "Strg",
   Alt: "Alt",
   Shift: "⇧",
   Super: "Win",
-  " ": "Leertaste",
-  Space: "Leertaste",
   Enter: "Enter",
   Escape: "Esc",
   Backspace: "⌫",
@@ -113,7 +112,7 @@ export function hotkeyFromEvent(e: KeyboardEvent): RecordedHotkey | null {
   const mods = heldModifiers(e);
   // Beschriftung: Ziffernblock und Sondertasten mit festem Namen, sonst das Zeichen.
   const glyph =
-    name.startsWith("Numpad") || name.startsWith("F") || KEY_LABELS[name] || e.key.length !== 1
+    name.startsWith("Numpad") || name.startsWith("F") || name === "Space" || KEY_LABELS[name] || e.key.length !== 1
       ? name
       : e.key.toUpperCase();
   return {
@@ -124,6 +123,9 @@ export function hotkeyFromEvent(e: KeyboardEvent): RecordedHotkey | null {
 }
 
 function partLabel(part: string): string {
+  // Sprachabhängig: „Strg“/„Ctrl“, „Leertaste“/„Space“.
+  if (part === "Ctrl") return t("editor.keyCtrl");
+  if (part === "Space" || part === " ") return t("editor.keySpace");
   if (KEY_LABELS[part]) return KEY_LABELS[part];
   if (part.startsWith("Key") && part.length === 4) return part.slice(3);
   if (part.startsWith("Digit")) return part.slice(5);

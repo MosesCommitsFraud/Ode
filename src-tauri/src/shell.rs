@@ -16,9 +16,11 @@ const SETTINGS_KEY: &str = "app";
 /// Mit diesem Argument startet Ode per Autostart unsichtbar im Tray.
 pub const MINIMIZED_ARG: &str = "--minimized";
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
+    /// "de" oder "en"; leer, solange die Oberfläche noch keine gewählt hat.
+    pub language: Option<String>,
     /// Schließen versteckt das Fenster nur; Ode läuft im Tray weiter.
     pub close_to_tray: bool,
     /// Mit Windows starten (im Tray).
@@ -30,6 +32,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            language: None,
             close_to_tray: true,
             autostart: false,
             setup_done: false,
@@ -44,6 +47,9 @@ pub fn load<R: Runtime>(app: &AppHandle<R>) -> AppSettings {
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
     settings.autostart = app.autolaunch().is_enabled().unwrap_or(false);
+    if let Some(language) = &settings.language {
+        crate::i18n::set_language(language);
+    }
     settings
 }
 
@@ -60,14 +66,45 @@ pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Tray-Menü in der eingestellten Sprache.
+fn tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let open = MenuItem::with_id(
+        app,
+        "open",
+        crate::tr!("Ode öffnen", "Open Ode"),
+        true,
+        None::<&str>,
+    )?;
+    let stop = MenuItem::with_id(
+        app,
+        "stop",
+        crate::tr!("Alle Sounds stoppen", "Stop all sounds"),
+        true,
+        None::<&str>,
+    )?;
+    let music = MenuItem::with_id(
+        app,
+        "music",
+        crate::tr!("Musik Pause/Weiter", "Music play/pause"),
+        true,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(
+        app,
+        "quit",
+        crate::tr!("Beenden", "Quit"),
+        true,
+        None::<&str>,
+    )?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    Menu::with_items(app, &[&open, &stop, &music, &separator, &quit])
+}
+
 /// Tray-Symbol mit Menü; Linksklick öffnet das Fenster.
 pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Ode öffnen", true, None::<&str>)?;
-    let stop = MenuItem::with_id(app, "stop", "Alle Sounds stoppen", true, None::<&str>)?;
-    let music = MenuItem::with_id(app, "music", "Musik Pause/Weiter", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Beenden", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &stop, &music, &separator, &quit])?;
+    // Sprache aus den Einstellungen übernehmen, bevor das Menü entsteht.
+    load(app);
+    let menu = tray_menu(app)?;
 
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("Ode")
@@ -132,7 +169,14 @@ pub fn set_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSett
     };
     result.map_err(|e| format!("Autostart: {e}"))?;
     save(&app, &settings).map_err(|e| e.to_string())?;
-    Ok(load(&app))
+    let settings = load(&app);
+    // Tray-Menü in der neuen Sprache.
+    if let Some(tray) = app.tray_by_id("main")
+        && let Ok(menu) = tray_menu(&app)
+    {
+        let _ = tray.set_menu(Some(menu));
+    }
+    Ok(settings)
 }
 
 #[tauri::command]

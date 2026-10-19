@@ -123,20 +123,41 @@ impl Cable {
 
     fn install_blocking<R: Runtime>(&self, app: &AppHandle<R>) -> anyhow::Result<()> {
         fs::create_dir_all(&self.dir)?;
-        self.set_step(app, "Treiberpaket wird geladen", 0.0);
+        self.set_step(
+            app,
+            &crate::tr!("Treiberpaket wird geladen", "Downloading driver package"),
+            0.0,
+        );
         let zip_path = self.dir.with_extension("zip");
         download_file(&latest_pack_url(), &zip_path, |p| {
-            self.set_step(app, "Treiberpaket wird geladen", p)
+            self.set_step(
+                app,
+                &crate::tr!("Treiberpaket wird geladen", "Downloading driver package"),
+                p,
+            )
         })?;
-        self.set_step(app, "Wird entpackt", 1.0);
+        self.set_step(app, &crate::tr!("Wird entpackt", "Unpacking"), 1.0);
         extract(&zip_path, &self.dir)?;
         let _ = fs::remove_file(&zip_path);
 
         let setup = self.dir.join("VBCABLE_Setup_x64.exe");
-        anyhow::ensure!(setup.is_file(), "VBCABLE_Setup_x64.exe nicht im Paket");
+        anyhow::ensure!(
+            setup.is_file(),
+            crate::tr!(
+                "VBCABLE_Setup_x64.exe nicht im Paket",
+                "VBCABLE_Setup_x64.exe missing from package"
+            )
+        );
 
         // Setup still (-i -h) mit Adminrechten; Windows zeigt die Abfrage.
-        self.set_step(app, "Windows fragt nach Administratorrechten", 1.0);
+        self.set_step(
+            app,
+            &crate::tr!(
+                "Windows fragt nach Administratorrechten",
+                "Windows asks for administrator rights"
+            ),
+            1.0,
+        );
         let script = format!(
             "$p = Start-Process -FilePath '{}' -ArgumentList '-i','-h' -Verb RunAs -Wait -PassThru; exit $p.ExitCode",
             setup.display().to_string().replace('\'', "''")
@@ -148,15 +169,23 @@ impl Cable {
             let message = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!(
                 if message.contains("abgebrochen") || message.contains("canceled") {
-                    "Installation abgebrochen".to_string()
+                    crate::tr!("Installation abgebrochen", "Installation cancelled")
                 } else {
-                    format!("Setup fehlgeschlagen: {}", message.trim())
+                    crate::tr!(
+                        "Setup fehlgeschlagen: {}",
+                        "Setup failed: {}",
+                        message.trim()
+                    )
                 }
             );
         }
 
         // Windows braucht einen Moment, bis die neuen Geräte auftauchen.
-        self.set_step(app, "Warte auf das neue Gerät", 1.0);
+        self.set_step(
+            app,
+            &crate::tr!("Warte auf das neue Gerät", "Waiting for the new device"),
+            1.0,
+        );
         for _ in 0..20 {
             if self.status().installed {
                 return Ok(());

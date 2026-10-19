@@ -2,9 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useSyncExternalStore } from "react";
 import { isTauri } from "./engine";
+import { getLang, setLang, t, type Lang } from "./i18n";
 import { actions } from "./store";
 
 export interface AppSettings {
+  /** Sprache der Oberfläche und von Tray, Meldungen usw. im Backend. */
+  language: Lang;
   closeToTray: boolean;
   autostart: boolean;
   setupDone: boolean;
@@ -29,7 +32,7 @@ interface SetupState {
 
 let state: SetupState = {
   loaded: false,
-  settings: { closeToTray: true, autostart: false, setupDone: true },
+  settings: { language: getLang(), closeToTray: true, autostart: false, setupDone: true },
   cable: {
     installed: true,
     defaultOutputIsCable: false,
@@ -84,6 +87,9 @@ export const setup = {
       invoke<CableStatus>("cable_status"),
     ]);
     set({ loaded: true, settings, cable });
+    // Gespeicherte Sprache gilt; beim ersten Start die erkannte ans Backend geben.
+    if (settings.language === "de" || settings.language === "en") setLang(settings.language);
+    else void setup.update({ language: getLang() });
   },
 
   async refreshCable() {
@@ -93,7 +99,7 @@ export const setup = {
 
   async installCable() {
     if (!isTauri) {
-      set({ cable: { ...state.cable, installing: true, step: "Treiberpaket wird geladen" } });
+      set({ cable: { ...state.cable, installing: true, step: t("messages.loadingDriver") } });
       setTimeout(() => set({ cable: { ...state.cable, installing: false, installed: true, defaultOutputIsCable: true } }), 1500);
       return;
     }
@@ -107,6 +113,7 @@ export const setup = {
 
   async update(patch: Partial<AppSettings>) {
     const settings = { ...state.settings, ...patch };
+    if (patch.language) setLang(patch.language);
     set({ settings, error: null });
     if (!isTauri) return;
     try {

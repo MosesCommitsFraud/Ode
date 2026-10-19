@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { t } from "./i18n";
 import {
   engine,
   isTauri,
@@ -164,7 +165,7 @@ export const actions = {
   async start() {
     if (!isTauri) return;
     if (!state.config.inputId) {
-      set({ error: "Kein Mikrofon ausgewählt." });
+      set({ error: t("messages.noMicrophone") });
       return;
     }
     set({ starting: true, error: null });

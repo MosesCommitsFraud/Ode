@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useSyncExternalStore } from "react";
 import { isTauri } from "./engine";
+import { t } from "./i18n";
 import { AUDIO_EXTENSIONS } from "./library";
 
 export interface Track {
@@ -158,7 +159,7 @@ export const music = {
   async importFiles(paths: string[]) {
     const audio = paths.filter((p) => AUDIO_EXTENSIONS.includes(p.split(".").pop()?.toLowerCase() ?? ""));
     if (audio.length < paths.length) {
-      notify([`${paths.length - audio.length} Datei(en) übersprungen – kein unterstütztes Audioformat`]);
+      notify([t("messages.skippedFiles", { count: paths.length - audio.length })]);
     }
     if (!isTauri || audio.length === 0) return;
     set({ importing: state.importing + audio.length });

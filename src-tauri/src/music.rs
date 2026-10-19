@@ -413,7 +413,12 @@ impl Player {
                         state.error = Some(e);
                     }
                 }
-                Err(e) => state.error = Some(format!("Titel konnte nicht geladen werden: {e}")),
+                Err(e) => {
+                    state.error = Some(crate::tr!(
+                        "Titel konnte nicht geladen werden: {e}",
+                        "Could not load track: {e}"
+                    ))
+                }
             }
         });
     }

@@ -29,7 +29,7 @@ fn device_name(device: &Device) -> String {
     device
         .description()
         .map(|d| d.name().to_string())
-        .unwrap_or_else(|_| "Unbekanntes Gerät".into())
+        .unwrap_or_else(|_| crate::tr!("Unbekanntes Gerät", "Unknown device"))
 }
 
 fn device_id(device: &Device) -> Option<String> {
@@ -64,11 +64,18 @@ pub fn list(host: &Host) -> anyhow::Result<DeviceList> {
 }
 
 pub fn find(host: &Host, id: &str) -> anyhow::Result<Device> {
-    let parsed: cpal::DeviceId = id
-        .parse()
-        .map_err(|_| anyhow::anyhow!("Ungültige Geräte-ID: {id}"))?;
-    host.device_by_id(&parsed)
-        .ok_or_else(|| anyhow::anyhow!("Gerät nicht gefunden: {id}"))
+    let parsed: cpal::DeviceId = id.parse().map_err(|_| {
+        anyhow::anyhow!(crate::tr!(
+            "Ungültige Geräte-ID: {id}",
+            "Invalid device ID: {id}"
+        ))
+    })?;
+    host.device_by_id(&parsed).ok_or_else(|| {
+        anyhow::anyhow!(crate::tr!(
+            "Gerät nicht gefunden: {id}",
+            "Device not found: {id}"
+        ))
+    })
 }
 
 pub fn name_of(device: &Device) -> String {

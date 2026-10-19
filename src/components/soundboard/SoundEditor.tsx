@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
 import { Kbd, SectionLabel, Segmented } from "~/components/ui/misc";
 import { library, SOUND_COLORS, soundColor, type PlayMode, type Sound } from "~/lib/library";
+import { useT } from "~/lib/i18n";
 import { useStore } from "~/lib/store";
 import { cn, formatDb } from "~/lib/utils";
 import { heldModifiers, hotkeyFromEvent, hotkeyLabel } from "./hotkey";
@@ -12,9 +13,9 @@ import { PlayGlyph, StopGlyph } from "~/components/ui/transport";
 
 const MODES: PlayMode[] = ["restart", "overlap", "toggle"];
 const MODE_LABELS: Record<PlayMode, string> = {
-  restart: "Neustart",
-  overlap: "Überlagern",
-  toggle: "Stopp",
+  restart: "editor.modeRestart",
+  overlap: "editor.modeOverlap",
+  toggle: "editor.modeToggle",
 };
 
 function Field({ label, aside, children }: { label: string; aside?: ReactNode; children: ReactNode }) {
@@ -69,6 +70,7 @@ function HotkeyRecorder({
   label: string | null;
   onChange: (hotkey: string | null, label: string | null) => void;
 }) {
+  const t = useT();
   const [recording, setRecording] = useState(false);
   // Gerade gehaltene Modifier, damit man sieht, dass die Kombination ankommt.
   const [held, setHeld] = useState<string[]>([]);
@@ -131,7 +133,7 @@ function HotkeyRecorder({
         )}
       </button>
       {value && !recording && (
-        <Button variant="ghost" size="icon-sm" title="Hotkey entfernen" onClick={() => onChange(null, null)}>
+        <Button variant="ghost" size="icon-sm" title={t("editor.removeHotkey")} onClick={() => onChange(null, null)}>
           <X />
         </Button>
       )}
@@ -173,6 +175,7 @@ export function SoundEditor({
   categories: string[];
   onClose: () => void;
 }) {
+  const t = useT();
   const [draft, setDraft] = useState(sound);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const color = soundColor(draft.color);
@@ -219,7 +222,7 @@ export function SoundEditor({
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => void close()} />
       <div
         role="dialog"
-        aria-label={`${sound.name} bearbeiten`}
+        aria-label={t("editor.edit", { name: sound.name })}
         className="relative flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-popover shadow-[var(--shadow-pop)]"
       >
         <div className="flex items-center gap-3 px-6 pt-5 pb-4">
@@ -227,16 +230,16 @@ export function SoundEditor({
             value={draft.name}
             onChange={(e) => patch({ name: e.target.value })}
             className="min-w-0 flex-1 bg-transparent font-display text-xl font-semibold tracking-tight outline-none"
-            aria-label="Name"
+            aria-label={t("editor.name")}
           />
-          <Button variant="ghost" size="icon-sm" title="Schließen" onClick={() => void close()}>
+          <Button variant="ghost" size="icon-sm" title={t("editor.close")} onClick={() => void close()}>
             <X />
           </Button>
         </div>
 
         <div className="space-y-5 overflow-y-auto px-6 pb-5">
           <Field
-            label="Trimmen"
+            label={t("editor.trim")}
             aside={
               positionMs !== undefined
                 ? `▶ ${(positionMs / 1000).toFixed(2)} s`
@@ -268,7 +271,7 @@ export function SoundEditor({
               {/* Vorhören auf der Vorschau, nur auf dem Kopfhörer (nicht im virtuellen Mikrofon). */}
               <button
                 type="button"
-                title={progress !== undefined ? "Stoppen" : "Anhören (nur Kopfhörer)"}
+                title={progress !== undefined ? t("editor.stop") : t("editor.preview")}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={async () => {
                   if (progress !== undefined) return void library.stop(sound.id);
@@ -287,19 +290,19 @@ export function SoundEditor({
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Einblenden" aside={`${draft.fadeInMs} ms`}>
+            <Field label={t("editor.fadeIn")} aside={`${draft.fadeInMs} ms`}>
               <Range value={draft.fadeInMs} min={0} max={2000} step={10} color={color} onChange={(v) => patch({ fadeInMs: v })} />
             </Field>
-            <Field label="Ausblenden" aside={`${draft.fadeOutMs} ms`}>
+            <Field label={t("editor.fadeOut")} aside={`${draft.fadeOutMs} ms`}>
               <Range value={draft.fadeOutMs} min={0} max={2000} step={10} color={color} onChange={(v) => patch({ fadeOutMs: v })} />
             </Field>
           </div>
 
-          <Field label="Lautstärke" aside={`${formatDb(draft.volumeDb)} dB`}>
+          <Field label={t("editor.volume")} aside={`${formatDb(draft.volumeDb)} dB`}>
             <Range value={draft.volumeDb} min={-30} max={12} step={0.5} color={color} onChange={(v) => patch({ volumeDb: v })} />
           </Field>
 
-          <Field label="Hotkey">
+          <Field label={t("editor.hotkey")}>
             <HotkeyRecorder
               value={draft.hotkey}
               label={draft.hotkeyLabel}
@@ -307,17 +310,17 @@ export function SoundEditor({
             />
           </Field>
 
-          <Field label="Erneut drücken">
-            <Segmented value={draft.playMode} onChange={(playMode) => patch({ playMode })} options={MODES} format={(m) => MODE_LABELS[m]} />
+          <Field label={t("editor.pressAgain")}>
+            <Segmented value={draft.playMode} onChange={(playMode) => patch({ playMode })} options={MODES} format={(m) => t(MODE_LABELS[m])} />
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Kategorie">
+            <Field label={t("editor.category")}>
               <input
                 value={draft.category ?? ""}
                 onChange={(e) => patch({ category: e.target.value })}
                 list="ode-categories"
-                placeholder="Keine"
+                placeholder={t("editor.none")}
                 className="well h-10 w-full rounded-xl px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
               />
               <datalist id="ode-categories">
@@ -326,7 +329,7 @@ export function SoundEditor({
                 ))}
               </datalist>
             </Field>
-            <Field label="Farbe">
+            <Field label={t("editor.color")}>
               <div className="flex h-10 flex-wrap items-center gap-1.5">
                 {Object.entries(SOUND_COLORS).map(([name, value]) => (
                   <button
@@ -356,11 +359,11 @@ export function SoundEditor({
               onClose();
             }}
           >
-            {confirmDelete ? "Wirklich löschen?" : "Löschen"}
+            {confirmDelete ? t("editor.confirmDelete") : t("editor.delete")}
           </Button>
           <div className="flex-1" />
           <Button size="sm" onClick={() => void close()}>
-            Fertig
+            {t("editor.done")}
           </Button>
         </div>
       </div>
