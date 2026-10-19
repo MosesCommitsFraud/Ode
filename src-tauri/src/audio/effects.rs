@@ -1,5 +1,6 @@
 //! Mikrofon-Effektkette in fester Reihenfolge: Noise Gate → Rauschunterdrückung
-//! (RNNoise) → Equalizer → Kompressor → Limiter. Jeder Effekt ist einzeln
+//! (RNNoise mit Sprach-Gate) → Equalizer → automatische Lautstärke (AGC) →
+//! Kompressor → Limiter. Jeder Effekt ist einzeln
 //! schaltbar. Die Kette läuft im Eingangs-Callback in Engine-Rate.
 
 use std::collections::VecDeque;
@@ -41,10 +42,42 @@ impl Default for GateParams {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DenoiseParams {
     pub enabled: bool,
+    /// Senkt alles ab, was RNNoise nicht als Sprache erkennt (Klicks, Tippen
+    /// zwischen den Wörtern).
+    pub voice_gate: bool,
+}
+
+impl Default for DenoiseParams {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            voice_gate: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AgcParams {
+    pub enabled: bool,
+    /// Ziel-Lautheit der Sprache (RMS in dBFS).
+    pub target_db: f32,
+    /// Höchstens so viel wird angehoben.
+    pub max_gain_db: f32,
+}
+
+impl Default for AgcParams {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            target_db: -20.0,
+            max_gain_db: 18.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
@@ -101,6 +134,7 @@ pub struct EffectsParams {
     pub gate: GateParams,
     pub denoise: DenoiseParams,
     pub eq: EqParams,
+    pub agc: AgcParams,
     pub compressor: CompressorParams,
     pub limiter: LimiterParams,
 }
@@ -115,6 +149,8 @@ impl EffectsParams {
         ] {
             *db = db.clamp(-12.0, 12.0);
         }
+        self.agc.target_db = self.agc.target_db.clamp(-30.0, -10.0);
+        self.agc.max_gain_db = self.agc.max_gain_db.clamp(0.0, 30.0);
         self.compressor.threshold_db = self.compressor.threshold_db.clamp(-50.0, 0.0);
         self.compressor.ratio = self.compressor.ratio.clamp(1.0, 20.0);
         self.compressor.makeup_db = self.compressor.makeup_db.clamp(0.0, 24.0);
@@ -131,6 +167,10 @@ pub struct EffectsShared {
     pub gate_open: AtomicBool,
     /// Sprachwahrscheinlichkeit laut RNNoise, 0–1.
     pub voice: AtomicF32,
+    /// Sprach-Gate lässt gerade durch.
+    pub voice_open: AtomicBool,
+    /// Aktuelle Verstärkung der AGC in dB.
+    pub agc_gain_db: AtomicF32,
     pub compressor_reduction_db: AtomicF32,
     pub limiter_reduction_db: AtomicF32,
 }
@@ -200,7 +240,18 @@ struct Denoiser {
     frame_in: [f32; DenoiseState::FRAME_SIZE],
     frame_out: [f32; DenoiseState::FRAME_SIZE],
     voice: f32,
+    /// Sprach-Gate: aktuelle Verstärkung und Haltezeit in Rahmen.
+    gate_gain: f32,
+    hold: usize,
 }
+
+/// Ab dieser Sprachwahrscheinlichkeit gilt ein Rahmen als Sprache. Echte
+/// Sprache liegt meist über 0,9; Rauschen und Klicks schwanken bis etwa 0,7.
+const VOICE_THRESHOLD: f32 = 0.8;
+/// So lange (in 10-ms-Rahmen) bleibt das Sprach-Gate nach Sprache offen.
+const VOICE_HOLD: usize = 30;
+/// Absenkung außerhalb von Sprache: −40 dB.
+const VOICE_CLOSED: f32 = 0.01;
 
 impl Denoiser {
     fn new() -> Self {
@@ -211,6 +262,8 @@ impl Denoiser {
             frame_in: [0.0; DenoiseState::FRAME_SIZE],
             frame_out: [0.0; DenoiseState::FRAME_SIZE],
             voice: 0.0,
+            gate_gain: 1.0,
+            hold: VOICE_HOLD,
         };
         d.reset();
         d
@@ -223,7 +276,8 @@ impl Denoiser {
             .extend(std::iter::repeat_n(0.0, DenoiseState::FRAME_SIZE));
     }
 
-    fn process(&mut self, buf: &mut [f32]) {
+    /// Gibt zurück, ob das Sprach-Gate gerade offen ist.
+    fn process(&mut self, buf: &mut [f32], voice_gate: bool) -> bool {
         self.input.extend(buf.iter().map(|s| s * 32_768.0));
         while self.input.len() >= DenoiseState::FRAME_SIZE {
             for (dst, src) in self
@@ -236,12 +290,35 @@ impl Denoiser {
             self.voice = self
                 .state
                 .process_frame(&mut self.frame_out, &self.frame_in);
-            self.output
-                .extend(self.frame_out.iter().map(|s| s / 32_768.0));
+
+            // Sprach-Gate: sofort auf, nach der Haltezeit sanft zu (~40 ms).
+            if self.voice >= VOICE_THRESHOLD {
+                self.hold = VOICE_HOLD;
+            } else {
+                self.hold = self.hold.saturating_sub(1);
+            }
+            let target = if !voice_gate || self.hold > 0 {
+                1.0
+            } else {
+                VOICE_CLOSED
+            };
+            let end = if target > self.gate_gain {
+                target
+            } else {
+                self.gate_gain + (target - self.gate_gain) * 0.25
+            };
+            let step = (end - self.gate_gain) / DenoiseState::FRAME_SIZE as f32;
+            let mut gain = self.gate_gain;
+            for s in self.frame_out.iter() {
+                gain += step;
+                self.output.push_back(s / 32_768.0 * gain);
+            }
+            self.gate_gain = end;
         }
         for s in buf.iter_mut() {
             *s = self.output.pop_front().unwrap_or(0.0);
         }
+        !voice_gate || self.hold > 0
     }
 }
 
@@ -347,6 +424,50 @@ impl Equalizer {
     }
 }
 
+/// Automatische Lautstärke: gleicht die Sprechlautstärke langsam auf einen
+/// Zielwert an und passt sich nur an, solange gesprochen wird.
+struct Agc {
+    loudness_db: f32,
+    gain_db: f32,
+}
+
+impl Agc {
+    fn new() -> Self {
+        Self {
+            loudness_db: AgcParams::default().target_db,
+            gain_db: 0.0,
+        }
+    }
+
+    fn process(&mut self, buf: &mut [f32], p: &AgcParams, speaking: bool) -> f32 {
+        if buf.is_empty() {
+            return self.gain_db;
+        }
+        let seconds = buf.len() as f32 / RATE;
+        let rms = (buf.iter().map(|x| x * x).sum::<f32>() / buf.len() as f32).sqrt();
+        let level = to_db(rms);
+        if speaking && level > -50.0 {
+            // Lautheit über etwa 1,5 s mitteln.
+            let alpha = (seconds / 1.5).min(1.0);
+            self.loudness_db += (level - self.loudness_db) * alpha;
+        }
+        let desired = (p.target_db - self.loudness_db).clamp(-12.0, p.max_gain_db);
+        // Anheben langsam (6 dB/s), absenken schneller (18 dB/s).
+        let rate = if desired > self.gain_db { 6.0 } else { 18.0 };
+        let max_step = rate * seconds;
+        let next = self.gain_db + (desired - self.gain_db).clamp(-max_step, max_step);
+        let (from, to) = (db_to_gain(self.gain_db), db_to_gain(next));
+        let step = (to - from) / buf.len() as f32;
+        let mut gain = from;
+        for s in buf.iter_mut() {
+            gain += step;
+            *s *= gain;
+        }
+        self.gain_db = next;
+        next
+    }
+}
+
 struct Compressor {
     envelope_db: f32,
     attack: f32,
@@ -396,6 +517,7 @@ pub struct EffectChain {
     denoise: Denoiser,
     denoise_active: bool,
     eq: Equalizer,
+    agc: Agc,
     compressor: Compressor,
     limiter: Limiter,
 }
@@ -417,6 +539,7 @@ impl EffectChain {
             denoise: Denoiser::new(),
             denoise_active: false,
             eq: Equalizer::new(),
+            agc: Agc::new(),
             compressor: Compressor::new(),
         }
     }
@@ -451,20 +574,36 @@ impl EffectChain {
         };
         shared.gate_open.store(open, Ordering::Relaxed);
 
+        let mut voice_open = true;
         if p.denoise.enabled {
             if !self.denoise_active {
                 self.denoise.reset();
                 self.denoise_active = true;
             }
-            self.denoise.process(buf);
+            voice_open = self.denoise.process(buf, p.denoise.voice_gate);
             shared.voice.store(self.denoise.voice);
         } else {
             self.denoise_active = false;
             shared.voice.store(0.0);
         }
+        shared.voice_open.store(voice_open, Ordering::Relaxed);
 
         if p.eq.enabled {
             self.eq.process(buf);
+        }
+
+        if p.agc.enabled {
+            // Sprache: laut RNNoise, sonst grob am Pegel erkannt.
+            let speaking = if p.denoise.enabled {
+                self.denoise.voice >= VOICE_THRESHOLD
+            } else {
+                let rms = (buf.iter().map(|x| x * x).sum::<f32>() / buf.len().max(1) as f32).sqrt();
+                to_db(rms) > -45.0
+            };
+            let gain = self.agc.process(buf, &p.agc, speaking);
+            shared.agc_gain_db.store(gain);
+        } else {
+            shared.agc_gain_db.store(0.0);
         }
 
         let reduction = if p.compressor.enabled {
@@ -552,6 +691,60 @@ mod tests {
         let input = sine(440.0, 0.5, 48_000);
         let out = run(p, &input);
         assert!(rms(&out[24_000..]) < rms(&input[24_000..]) * 0.5);
+    }
+
+    #[test]
+    fn agc_lifts_quiet_speech_towards_target() {
+        let p = EffectsParams {
+            agc: AgcParams {
+                enabled: true,
+                target_db: -20.0,
+                max_gain_db: 18.0,
+            },
+            ..Default::default()
+        };
+        // Leise „Sprache“: −36 dB RMS, liegt über der Sprech-Schwelle von −45 dB.
+        let input = sine(300.0, 0.0225, 48_000 * 6);
+        let out = run(p, &input);
+        let level = to_db(rms(&out[out.len() - 48_000..]));
+        assert!((level + 20.0).abs() < 2.0, "{level}");
+    }
+
+    #[test]
+    fn agc_never_exceeds_max_gain() {
+        let p = EffectsParams {
+            agc: AgcParams {
+                enabled: true,
+                target_db: -10.0,
+                max_gain_db: 6.0,
+            },
+            ..Default::default()
+        };
+        let input = sine(300.0, 0.0225, 48_000 * 6);
+        let out = run(p, &input);
+        let gain = to_db(rms(&out[out.len() - 48_000..]) / rms(&input[..48_000]));
+        assert!(gain <= 6.1, "{gain}");
+    }
+
+    #[test]
+    fn voice_gate_mutes_noise_without_speech() {
+        let mut p = EffectsParams::default();
+        p.denoise.enabled = true;
+        // Breitbandiges Rauschen statt Sprache.
+        let mut seed: u32 = 1;
+        let noise: Vec<f32> = (0..48_000 * 2)
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                (seed as f32 / u32::MAX as f32 - 0.5) * 0.2
+            })
+            .collect();
+        let with_gate = run(p, &noise);
+        p.denoise.voice_gate = false;
+        let without = run(p, &noise);
+        let tail = |v: &[f32]| rms(&v[v.len() - 24_000..]);
+        assert!(tail(&with_gate) < tail(&without) * 0.05 + 1e-6);
     }
 
     #[test]

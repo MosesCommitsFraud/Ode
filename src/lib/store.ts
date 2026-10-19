@@ -63,8 +63,9 @@ let state: State = {
   ducking: { enabled: false, amountDb: 12, thresholdDb: -40 },
   effects: {
     gate: { enabled: false, thresholdDb: -50 },
-    denoise: { enabled: false },
+    denoise: { enabled: false, voiceGate: true },
     eq: { enabled: false, lowDb: 0, midDb: 0, highDb: 0 },
+    agc: { enabled: false, targetDb: -20, maxGainDb: 18 },
     compressor: { enabled: false, thresholdDb: -20, ratio: 3, makeupDb: 4 },
     limiter: { enabled: false, ceilingDb: -3 },
   },
@@ -289,6 +290,8 @@ function startDemo() {
         effects: {
           gateOpen: !state.effects.gate.enabled || voice > 0.05,
           voice: state.effects.denoise.enabled ? Math.min(1, voice * 2) : 0,
+          voiceOpen: !state.effects.denoise.voiceGate || voice > 0.4,
+          agcGainDb: state.effects.agc.enabled ? 6 + Math.sin(t * 0.3) * 2 : 0,
           compressorDb: state.effects.compressor.enabled ? -Math.max(0, voice * 12 - 3) : 0,
           limiterDb: state.effects.limiter.enabled && voice > 0.6 ? -1.2 : 0,
         },

@@ -59,8 +59,11 @@ export interface DuckingParams {
 
 export interface EffectsParams {
   gate: { enabled: boolean; thresholdDb: number };
-  denoise: { enabled: boolean };
+  /** voiceGate: senkt alles ab, was RNNoise nicht als Sprache erkennt (Klicks, Tippen). */
+  denoise: { enabled: boolean; voiceGate: boolean };
   eq: { enabled: boolean; lowDb: number; midDb: number; highDb: number };
+  /** Automatische Lautstärke: Ziel −30…−10 dBFS, Anhebung höchstens 0…30 dB. */
+  agc: { enabled: boolean; targetDb: number; maxGainDb: number };
   compressor: { enabled: boolean; thresholdDb: number; ratio: number; makeupDb: number };
   limiter: { enabled: boolean; ceilingDb: number };
 }
@@ -94,7 +97,16 @@ export interface Meters {
   playing: { id: number; progress: number }[];
   /** Aktuelle Absenkung durch Ducking in dB, 0 = keine. */
   duckingDb: number;
-  effects: { gateOpen: boolean; voice: number; compressorDb: number; limiterDb: number };
+  effects: {
+    gateOpen: boolean;
+    voice: number;
+    /** Sprach-Gate lässt gerade durch. */
+    voiceOpen: boolean;
+    /** Aktuelle Verstärkung der AGC in dB. */
+    agcGainDb: number;
+    compressorDb: number;
+    limiterDb: number;
+  };
 }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

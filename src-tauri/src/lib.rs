@@ -97,6 +97,8 @@ struct Meters {
 struct EffectMeters {
     gate_open: bool,
     voice: f32,
+    voice_open: bool,
+    agc_gain_db: f32,
     compressor_db: f32,
     limiter_db: f32,
 }
@@ -162,6 +164,8 @@ fn snapshot(engine: &Engine) -> Meters {
         effects: EffectMeters {
             gate_open: mixer.effects.gate_open.load(Ordering::Relaxed),
             voice: mixer.effects.voice.load(),
+            voice_open: mixer.effects.voice_open.load(Ordering::Relaxed),
+            agc_gain_db: mixer.effects.agc_gain_db.load(),
             compressor_db: mixer.effects.compressor_reduction_db.load(),
             limiter_db: mixer.effects.limiter_reduction_db.load(),
         },
