@@ -42,7 +42,7 @@ windows-core = "0.62"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 png = "0.18.1"
-base64 = "0.22.1"
+base64 = "0.23.1"
 
 
 # Audio-Bibliotheken auch im Debug-Build optimieren, sonst dekodiert symphonia
