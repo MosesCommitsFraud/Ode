@@ -1,4 +1,4 @@
-import { Play, Stop, X } from "@phosphor-icons/react";
+import { Stop, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
@@ -138,6 +138,18 @@ function HotkeyRecorder({
   );
 }
 
+/**
+ * Play-Dreieck mit dem Schwerpunkt in der Mitte; ein Dreieck in mittiger Box
+ * wirkt sonst nach links versetzt (wie PlayTriangle in der MusicBar).
+ */
+function PlayGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden>
+      <path d="M5.2 3.1v9.8c0 .6.6.9 1.1.6l7.4-4.9c.4-.3.4-.9 0-1.2L6.3 2.5c-.5-.3-1.1 0-1.1.6Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 /** Ein- und Ausblenden als Rampen über der Wellenform (Anteile 0–1 der ganzen Länge). */
 function FadeOverlay({ start, end, fadeIn, fadeOut, color }: { start: number; end: number; fadeIn: number; fadeOut: number; color: string }) {
   const length = Math.max(0, end - start);
@@ -242,22 +254,8 @@ export function SoundEditor({
                 : `${(draft.trimStartMs / 1000).toFixed(2)} – ${(trimEnd / 1000).toFixed(2)} s`
             }
           >
-            <div className="well flex items-center gap-3 rounded-xl p-3">
-              {/* Vorhören nur auf dem Kopfhörer, nicht im virtuellen Mikrofon. */}
-              <button
-                type="button"
-                title={progress !== undefined ? "Stoppen" : "Anhören (nur Kopfhörer)"}
-                onClick={async () => {
-                  if (progress !== undefined) return void library.stop(sound.id);
-                  await save();
-                  void library.preview(sound.id);
-                }}
-                className="flex size-10 shrink-0 cursor-default items-center justify-center rounded-full text-black/80 transition-transform active:scale-95 [&_svg]:size-4"
-                style={{ background: color }}
-              >
-                {progress !== undefined ? <Stop weight="fill" /> : <Play weight="fill" className="translate-x-px" />}
-              </button>
-              <div className="relative h-20 min-w-0 flex-1">
+            <div className="well group/preview relative h-[104px] rounded-xl p-3">
+              <div className="relative size-full">
                 <Waveform
                   peaks={draft.waveform}
                   color={color}
@@ -278,6 +276,24 @@ export function SoundEditor({
                   color={color}
                 />
               </div>
+              {/* Vorhören auf der Vorschau, nur auf dem Kopfhörer (nicht im virtuellen Mikrofon). */}
+              <button
+                type="button"
+                title={progress !== undefined ? "Stoppen" : "Anhören (nur Kopfhörer)"}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={async () => {
+                  if (progress !== undefined) return void library.stop(sound.id);
+                  await save();
+                  void library.preview(sound.id);
+                }}
+                className={cn(
+                  "absolute top-1/2 left-1/2 flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-default items-center justify-center rounded-full text-black/80 shadow-[0_6px_18px_-6px_oklch(0%_0_0/60%)] transition-[opacity,transform] duration-200 active:scale-95 [&_svg]:size-[18px]",
+                  progress !== undefined && "opacity-0 group-hover/preview:opacity-100",
+                )}
+                style={{ background: color }}
+              >
+                {progress !== undefined ? <Stop weight="fill" /> : <PlayGlyph />}
+              </button>
             </div>
           </Field>
 
