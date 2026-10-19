@@ -11,6 +11,8 @@ export interface Sound {
   file: string;
   color: string;
   hotkey: string | null;
+  /** Beschriftung wie auf der eigenen Tastatur, Teile mit „␣“ getrennt. */
+  hotkeyLabel: string | null;
   volumeDb: number;
   category: string | null;
   favorite: boolean;
@@ -33,6 +35,7 @@ export type SoundPatch = Partial<
     | "name"
     | "color"
     | "hotkey"
+    | "hotkeyLabel"
     | "volumeDb"
     | "category"
     | "favorite"
@@ -62,15 +65,27 @@ export function soundColor(name: string) {
   return SOUND_COLORS[name] ?? SOUND_COLORS.orange;
 }
 
+/** Filter fürs Soundboard: alle, Favoriten oder eine Kategorie. Geteilt, damit
+ *  Sidebar und Soundboard dieselbe Auswahl zeigen. */
+export type SoundFilter = { kind: "all" } | { kind: "favorites" } | { kind: "category"; name: string };
+
+/** Passt ein Sound zum Filter? */
+export function matchesFilter(sound: Sound, filter: SoundFilter) {
+  if (filter.kind === "favorites") return sound.favorite;
+  if (filter.kind === "category") return sound.category === filter.name;
+  return true;
+}
+
 interface LibraryState {
   sounds: Sound[];
+  filter: SoundFilter;
   loaded: boolean;
   importing: number;
   /** Letzte Meldungen (Importfehler, belegte Hotkeys). */
   notices: string[];
 }
 
-let state: LibraryState = { sounds: [], loaded: false, importing: 0, notices: [] };
+let state: LibraryState = { sounds: [], filter: { kind: "all" }, loaded: false, importing: 0, notices: [] };
 const listeners = new Set<() => void>();
 
 function set(patch: Partial<LibraryState>) {
@@ -198,6 +213,10 @@ export const library = {
     await invoke("sound_stop_all").catch(() => {});
   },
 
+  setFilter(filter: SoundFilter) {
+    set({ filter });
+  },
+
   dismissNotice(index: number) {
     set({ notices: state.notices.filter((_, i) => i !== index) });
   },
@@ -221,6 +240,7 @@ function demoSounds(): Sound[] {
     file: "",
     color,
     hotkey,
+    hotkeyLabel: null,
     volumeDb: 0,
     category,
     favorite,

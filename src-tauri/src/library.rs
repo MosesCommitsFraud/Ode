@@ -28,7 +28,10 @@ pub struct Sound {
     pub name: String,
     pub file: String,
     pub color: String,
+    /// Für die Anmeldung bei Windows, z. B. „Ctrl+Equal“.
     pub hotkey: Option<String>,
+    /// Beschriftung wie auf der eigenen Tastatur, z. B. „Strg+Plus“.
+    pub hotkey_label: Option<String>,
     pub volume_db: f32,
     pub category: Option<String>,
     pub favorite: bool,
@@ -53,6 +56,8 @@ pub struct SoundPatch {
     /// `Some(None)` entfernt den Hotkey.
     #[serde(default, with = "double_option")]
     pub hotkey: Option<Option<String>>,
+    #[serde(default, with = "double_option")]
+    pub hotkey_label: Option<Option<String>>,
     pub volume_db: Option<f32>,
     #[serde(default, with = "double_option")]
     pub category: Option<Option<String>>,
@@ -106,6 +111,7 @@ fn sound_from_row(row: &Row) -> rusqlite::Result<Sound> {
         file: row.get("file")?,
         color: row.get("color")?,
         hotkey: row.get("hotkey")?,
+        hotkey_label: row.get("hotkey_label")?,
         volume_db: row.get("volume_db")?,
         category: row.get("category")?,
         favorite: row.get("favorite")?,
@@ -165,6 +171,7 @@ impl Library {
              );",
         )?;
         covers::ensure_column(&db, "sounds", "cover", "TEXT")?;
+        covers::ensure_column(&db, "sounds", "hotkey_label", "TEXT")?;
         Ok(Self {
             db: Mutex::new(db),
             covers_dir: data_dir.join("covers"),
@@ -261,6 +268,12 @@ impl Library {
         }
         if let Some(v) = patch.hotkey {
             sound.hotkey = v.filter(|h| !h.is_empty());
+            if sound.hotkey.is_none() {
+                sound.hotkey_label = None;
+            }
+        }
+        if let Some(v) = patch.hotkey_label {
+            sound.hotkey_label = v.filter(|h| !h.is_empty() && sound.hotkey.is_some());
         }
         if let Some(v) = patch.volume_db {
             sound.volume_db = v.clamp(-60.0, 12.0);
@@ -290,7 +303,7 @@ impl Library {
         self.db.lock().execute(
             "UPDATE sounds SET name = ?2, color = ?3, hotkey = ?4, volume_db = ?5,
                  category = ?6, favorite = ?7, play_mode = ?8, trim_start_ms = ?9,
-                 trim_end_ms = ?10, fade_in_ms = ?11, fade_out_ms = ?12
+                 trim_end_ms = ?10, fade_in_ms = ?11, fade_out_ms = ?12, hotkey_label = ?13
              WHERE id = ?1",
             params![
                 id,
@@ -305,6 +318,7 @@ impl Library {
                 sound.trim_end_ms,
                 sound.fade_in_ms,
                 sound.fade_out_ms,
+                sound.hotkey_label,
             ],
         )?;
         Ok(sound)

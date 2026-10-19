@@ -1,4 +1,4 @@
-import { X } from "@phosphor-icons/react";
+import { Play, Stop, X } from "@phosphor-icons/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
@@ -6,7 +6,7 @@ import { Kbd, SectionLabel, Segmented } from "~/components/ui/misc";
 import { library, SOUND_COLORS, soundColor, type PlayMode, type Sound } from "~/lib/library";
 import { useStore } from "~/lib/store";
 import { cn, formatDb } from "~/lib/utils";
-import { hotkeyFromEvent, hotkeyLabel } from "./hotkey";
+import { heldModifiers, hotkeyFromEvent, hotkeyLabel } from "./hotkey";
 import { Waveform } from "./Waveform";
 
 const MODES: PlayMode[] = ["restart", "overlap", "toggle"];
@@ -59,23 +59,44 @@ function Range({
   );
 }
 
-function HotkeyRecorder({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+function HotkeyRecorder({
+  value,
+  label,
+  onChange,
+}: {
+  value: string | null;
+  label: string | null;
+  onChange: (hotkey: string | null, label: string | null) => void;
+}) {
   const [recording, setRecording] = useState(false);
+  // Gerade gehaltene Modifier, damit man sieht, dass die Kombination ankommt.
+  const [held, setHeld] = useState<string[]>([]);
 
   useEffect(() => {
     if (!recording) return;
-    const onKey = (e: KeyboardEvent) => {
+    const onDown = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.code === "Escape") return setRecording(false);
-      const hotkey = hotkeyFromEvent(e);
-      if (hotkey) {
-        onChange(hotkey);
+      if (e.code === "Escape" && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         setRecording(false);
+        return;
+      }
+      const recorded = hotkeyFromEvent(e);
+      if (recorded) {
+        onChange(recorded.hotkey, recorded.label);
+        setRecording(false);
+      } else {
+        setHeld(heldModifiers(e));
       }
     };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    const onUp = (e: KeyboardEvent) => setHeld(heldModifiers(e));
+    window.addEventListener("keydown", onDown, true);
+    window.addEventListener("keyup", onUp, true);
+    return () => {
+      window.removeEventListener("keydown", onDown, true);
+      window.removeEventListener("keyup", onUp, true);
+      setHeld([]);
+    };
   }, [recording, onChange]);
 
   return (
@@ -84,28 +105,57 @@ function HotkeyRecorder({ value, onChange }: { value: string | null; onChange: (
         type="button"
         onClick={() => setRecording((r) => !r)}
         className={cn(
-          "well flex h-10 flex-1 cursor-default items-center gap-2 rounded-xl px-3 text-left text-sm transition-shadow",
+          "well flex h-10 flex-1 cursor-default items-center gap-1.5 rounded-xl px-3 text-left text-sm transition-shadow",
           recording && "shadow-[0_0_0_2px_var(--primary)]",
         )}
       >
         {recording ? (
-          <span className="text-primary">Tastenkombination drücken … (Esc bricht ab)</span>
-        ) : value ? (
-          <span className="flex gap-1">
-            {hotkeyLabel(value).map((k) => (
+          <>
+            {hotkeyLabel(held.join("+")).filter(Boolean).map((k) => (
               <Kbd key={k}>{k}</Kbd>
             ))}
-          </span>
+            <Kbd className="animate-pulse">…</Kbd>
+            <span className="ml-auto text-2xs text-muted-foreground">
+              <Kbd>Esc</Kbd>
+            </span>
+          </>
+        ) : value ? (
+          hotkeyLabel(value, label).map((k, i) => <Kbd key={`${i}-${k}`}>{k}</Kbd>)
         ) : (
-          <span className="text-muted-foreground">Klicken und Taste drücken</span>
+          <Kbd className="opacity-60">…</Kbd>
         )}
       </button>
       {value && !recording && (
-        <Button variant="ghost" size="icon-sm" title="Hotkey entfernen" onClick={() => onChange(null)}>
+        <Button variant="ghost" size="icon-sm" title="Hotkey entfernen" onClick={() => onChange(null, null)}>
           <X />
         </Button>
       )}
     </div>
+  );
+}
+
+/** Ein- und Ausblenden als Rampen über der Wellenform (Anteile 0–1 der ganzen Länge). */
+function FadeOverlay({ start, end, fadeIn, fadeOut, color }: { start: number; end: number; fadeIn: number; fadeOut: number; color: string }) {
+  const length = Math.max(0, end - start);
+  const fi = Math.min(fadeIn, length) * 100;
+  const fo = Math.min(fadeOut, length) * 100;
+  const s = start * 100;
+  const e = end * 100;
+  return (
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 size-full">
+      {fi > 0 && (
+        <>
+          <polygon points={`${s},0 ${s + fi},0 ${s},100`} fill="var(--popover)" opacity="0.7" />
+          <line x1={s} y1={100} x2={s + fi} y2={0} stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        </>
+      )}
+      {fo > 0 && (
+        <>
+          <polygon points={`${e - fo},0 ${e},0 ${e},100`} fill="var(--popover)" opacity="0.7" />
+          <line x1={e - fo} y1={0} x2={e} y2={100} stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -135,6 +185,7 @@ export function SoundEditor({
       name: draft.name.trim() || sound.name,
       color: draft.color,
       hotkey: draft.hotkey,
+      hotkeyLabel: draft.hotkeyLabel,
       volumeDb: draft.volumeDb,
       category: draft.category?.trim() || null,
       playMode: draft.playMode,
@@ -187,19 +238,42 @@ export function SoundEditor({
                 : `${(draft.trimStartMs / 1000).toFixed(2)} – ${(trimEnd / 1000).toFixed(2)} s`
             }
           >
-            <div className="well rounded-xl p-3">
-              <Waveform
-                peaks={draft.waveform}
-                color={color}
-                progress={progress}
-                className="h-20"
-                trim={{
-                  start: draft.trimStartMs / duration,
-                  end: trimEnd / duration,
-                  onChange: (s, e) =>
-                    patch({ trimStartMs: Math.round(s * duration), trimEndMs: Math.round(e * duration) }),
+            <div className="well flex items-center gap-3 rounded-xl p-3">
+              {/* Vorhören nur auf dem Kopfhörer, nicht im virtuellen Mikrofon. */}
+              <button
+                type="button"
+                title={progress !== undefined ? "Stoppen" : "Anhören (nur Kopfhörer)"}
+                onClick={async () => {
+                  if (progress !== undefined) return void library.stop(sound.id);
+                  await save();
+                  void library.preview(sound.id);
                 }}
-              />
+                className="flex size-10 shrink-0 cursor-default items-center justify-center rounded-full text-black/80 transition-transform active:scale-95 [&_svg]:size-4"
+                style={{ background: color }}
+              >
+                {progress !== undefined ? <Stop weight="fill" /> : <Play weight="fill" className="translate-x-px" />}
+              </button>
+              <div className="relative h-20 min-w-0 flex-1">
+                <Waveform
+                  peaks={draft.waveform}
+                  color={color}
+                  progress={progress}
+                  className="absolute inset-0"
+                  trim={{
+                    start: draft.trimStartMs / duration,
+                    end: trimEnd / duration,
+                    onChange: (s, e) =>
+                      patch({ trimStartMs: Math.round(s * duration), trimEndMs: Math.round(e * duration) }),
+                  }}
+                />
+                <FadeOverlay
+                  start={draft.trimStartMs / duration}
+                  end={trimEnd / duration}
+                  fadeIn={draft.fadeInMs / duration}
+                  fadeOut={draft.fadeOutMs / duration}
+                  color={color}
+                />
+              </div>
             </div>
           </Field>
 
@@ -217,7 +291,11 @@ export function SoundEditor({
           </Field>
 
           <Field label="Hotkey">
-            <HotkeyRecorder value={draft.hotkey} onChange={(hotkey) => patch({ hotkey })} />
+            <HotkeyRecorder
+              value={draft.hotkey}
+              label={draft.hotkeyLabel}
+              onChange={(hotkey, hotkeyLabel) => patch({ hotkey, hotkeyLabel })}
+            />
           </Field>
 
           <Field label="Erneut drücken">
@@ -272,17 +350,6 @@ export function SoundEditor({
             {confirmDelete ? "Wirklich löschen?" : "Löschen"}
           </Button>
           <div className="flex-1" />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              await save();
-              void library.preview(sound.id);
-            }}
-            title="Nur auf deinem Kopfhörer – nicht im virtuellen Mikrofon"
-          >
-            Anhören
-          </Button>
           <Button size="sm" onClick={() => void close()}>
             Fertig
           </Button>
