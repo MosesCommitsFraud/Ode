@@ -277,8 +277,9 @@ export function SoundEditor({
             size="sm"
             onClick={async () => {
               await save();
-              void library.play(sound.id);
+              void library.preview(sound.id);
             }}
+            title="Nur auf deinem Kopfhörer – nicht im virtuellen Mikrofon"
           >
             Anhören
           </Button>

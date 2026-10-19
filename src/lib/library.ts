@@ -179,6 +179,15 @@ export const library = {
     await invoke("sound_play", { id }).catch((e) => notify([message(e)]));
   },
 
+  /** Nur auf dem Kopfhörer abspielen, z. B. beim Zuschneiden im Editor. */
+  async preview(id: number) {
+    if (!isTauri) {
+      demoStarts.set(id, demoNow());
+      return;
+    }
+    await invoke("sound_preview", { id }).catch((e) => notify([message(e)]));
+  },
+
   async stop(id: number) {
     if (!isTauri) return void demoStarts.delete(id);
     await invoke("sound_stop", { id }).catch(() => {});

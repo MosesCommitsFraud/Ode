@@ -73,6 +73,8 @@ struct Running {
     _streams: Vec<Stream>,
     info: EngineInfo,
     samplers: Vec<Sender<SamplerCommand>>,
+    /// Vorhören im Editor: nur auf dem Kopfhörer.
+    preview: Option<Sender<SamplerCommand>>,
     decks: Vec<Sender<DeckCommand>>,
 }
 
@@ -82,8 +84,11 @@ pub struct Engine {
     pub errors: Arc<Mutex<Vec<String>>>,
     info: Arc<Mutex<Option<EngineInfo>>>,
     samplers: Arc<Mutex<Vec<Sender<SamplerCommand>>>>,
+    preview: Arc<Mutex<Option<Sender<SamplerCommand>>>>,
     /// Laufende Sounds für die Oberfläche.
     pub playing: Arc<Mutex<Vec<PlayingSound>>>,
+    /// Laufende Vorhör-Sounds (nur Kopfhörer).
+    pub preview_playing: Arc<Mutex<Vec<PlayingSound>>>,
     decks: Arc<Mutex<Vec<Sender<DeckCommand>>>>,
     /// Stand des Musik-Decks.
     pub deck_status: Arc<Mutex<DeckStatus>>,
@@ -98,7 +103,9 @@ impl Engine {
         let errors = Arc::new(Mutex::new(Vec::new()));
         let info = Arc::new(Mutex::new(None));
         let samplers = Arc::new(Mutex::new(Vec::new()));
+        let preview = Arc::new(Mutex::new(None));
         let playing = Arc::new(Mutex::new(Vec::new()));
+        let preview_playing = Arc::new(Mutex::new(Vec::new()));
         let decks = Arc::new(Mutex::new(Vec::new()));
         let deck_status = Arc::new(Mutex::new(DeckStatus::default()));
         let live_producers = Arc::new(Mutex::new(Vec::new()));
@@ -108,7 +115,9 @@ impl Engine {
             errors: errors.clone(),
             info: info.clone(),
             samplers: samplers.clone(),
+            preview: preview.clone(),
             playing: playing.clone(),
+            preview_playing: preview_playing.clone(),
             decks: decks.clone(),
             deck_status: deck_status.clone(),
             live_producers: live_producers.clone(),
@@ -124,7 +133,9 @@ impl Engine {
             errors,
             info,
             samplers,
+            preview,
             playing,
+            preview_playing,
             decks,
             deck_status,
             live_producers,
@@ -155,6 +166,18 @@ impl Engine {
         Ok(())
     }
 
+    /// Schickt einen Befehl an den Vorhör-Sampler des Kopfhörers.
+    pub fn preview(&self, command: SamplerCommand) -> Result<(), String> {
+        match self.preview.lock().as_ref() {
+            Some(preview) => {
+                let _ = preview.send(command);
+                Ok(())
+            }
+            None if self.samplers.lock().is_empty() => Err("Engine ist nicht gestartet".into()),
+            None => Err("Zum Vorhören einen Kopfhörer in den Einstellungen wählen".into()),
+        }
+    }
+
     pub fn start(&self, config: EngineConfig) -> Result<EngineInfo, String> {
         let (reply, response) = bounded(1);
         self.commands
@@ -182,7 +205,9 @@ struct Shared {
     errors: Arc<Mutex<Vec<String>>>,
     info: Arc<Mutex<Option<EngineInfo>>>,
     samplers: Arc<Mutex<Vec<Sender<SamplerCommand>>>>,
+    preview: Arc<Mutex<Option<Sender<SamplerCommand>>>>,
     playing: Arc<Mutex<Vec<PlayingSound>>>,
+    preview_playing: Arc<Mutex<Vec<PlayingSound>>>,
     decks: Arc<Mutex<Vec<Sender<DeckCommand>>>>,
     deck_status: Arc<Mutex<DeckStatus>>,
     live_producers: Arc<Mutex<Vec<HeapProd<f32>>>>,
@@ -192,7 +217,9 @@ impl Shared {
     fn clear(&self) {
         *self.info.lock() = None;
         self.samplers.lock().clear();
+        *self.preview.lock() = None;
         self.playing.lock().clear();
+        self.preview_playing.lock().clear();
         self.decks.lock().clear();
         *self.deck_status.lock() = DeckStatus::default();
         self.live_producers.lock().clear();
@@ -215,6 +242,7 @@ fn run(commands: Receiver<Command>, shared: Shared) {
                         let engine_info = state.info.clone();
                         *shared.info.lock() = Some(engine_info.clone());
                         *shared.samplers.lock() = state.samplers.clone();
+                        *shared.preview.lock() = state.preview.clone();
                         *shared.decks.lock() = state.decks.clone();
                         running = Some(state);
                         Ok(engine_info)
@@ -246,6 +274,7 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
     let mut producers = Vec::new();
     let mut streams = Vec::new();
     let mut samplers = Vec::new();
+    let mut preview = None;
     let mut decks = Vec::new();
     let mut live_producers = Vec::new();
     let mut monitor = None;
@@ -266,13 +295,18 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
         let deck = Deck::new(deck_rx, reports.then(|| shared.deck_status.clone()));
         let (live_producer, live_consumer) = HeapRb::<f32>::new(RING_FRAMES).split();
         live_producers.push(live_producer);
+        let preview_sampler = (output == OutputId::A).then(|| {
+            let (tx, rx) = unbounded();
+            preview = Some(tx);
+            Sampler::new(rx, Some(shared.preview_playing.clone()))
+        });
         let (stream, stream_info) = build_output(
             &device,
             mixer.clone(),
             errors.clone(),
             output,
             consumer,
-            (sampler, deck, live_consumer),
+            (sampler, preview_sampler, deck, live_consumer),
             target_frames,
         )?;
         samplers.push(sampler_tx);
@@ -305,6 +339,7 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
             cable,
         },
         samplers,
+        preview,
         decks,
     })
 }
@@ -504,6 +539,8 @@ struct OutputProcessor {
     output: OutputId,
     consumer: HeapCons<f32>,
     sampler: Sampler,
+    /// Vorhören im Editor; nur beim Kopfhörer vorhanden, ohne Fader und Routing.
+    preview: Option<Sampler>,
     deck: Deck,
     /// Ton der Live-Quelle (Programm-Mitschnitt), Engine-Rate, mono.
     live: HeapCons<f32>,
@@ -556,6 +593,9 @@ impl OutputProcessor {
             .store(self.consumer.occupied_len() as u32, Ordering::Relaxed);
 
         self.sampler.poll();
+        if let Some(preview) = &mut self.preview {
+            preview.poll();
+        }
         self.deck.poll();
 
         // Kanäle in Engine-Rate mischen; Routing und Fader gleiten weich.
@@ -583,6 +623,7 @@ impl OutputProcessor {
         let mut starved = false;
         let consumer = &mut self.consumer;
         let sampler = &mut self.sampler;
+        let preview = &mut self.preview;
         let deck = &mut self.deck;
 
         // Live-Quelle: Vorlauf abwarten, bei Überlauf auf den Zielwert kürzen.
@@ -619,6 +660,11 @@ impl OutputProcessor {
                 soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
                 sum += sound * *soundboard_send;
             }
+            if let Some(preview) = preview.as_mut() {
+                if !preview.is_idle() {
+                    sum += preview.next_sample();
+                }
+            }
             if !deck.is_idle() {
                 let song = deck.next_sample() * *player * duck;
                 music_peak = music_peak.max((song * music_fader).abs());
@@ -650,6 +696,9 @@ impl OutputProcessor {
         music.meter.fetch_max(music_peak);
         live_channel.meter.fetch_max(live_peak);
         self.sampler.report();
+        if let Some(preview) = &self.preview {
+            preview.report();
+        }
         self.deck.report();
         if self.output == OutputId::B || !self.mixer.out_b.is_active() {
             let db = if duck_min < 1.0 {
@@ -684,7 +733,7 @@ fn build_output(
     errors: Arc<Mutex<Vec<String>>>,
     output: OutputId,
     consumer: HeapCons<f32>,
-    (sampler, deck, live): (Sampler, Deck, HeapCons<f32>),
+    (sampler, preview, deck, live): (Sampler, Option<Sampler>, Deck, HeapCons<f32>),
     target_frames: usize,
 ) -> anyhow::Result<(Stream, StreamInfo)> {
     let supported = pick_config(
@@ -703,6 +752,7 @@ fn build_output(
         output,
         consumer,
         sampler,
+        preview,
         deck,
         live,
         live_primed: false,

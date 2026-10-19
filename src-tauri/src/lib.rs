@@ -152,7 +152,13 @@ fn snapshot(engine: &Engine) -> Meters {
         input_callback_ms,
         latency_ms,
         errors: engine.errors.lock().clone(),
-        playing: engine.playing.lock().clone(),
+        playing: engine
+            .playing
+            .lock()
+            .iter()
+            .chain(engine.preview_playing.lock().iter())
+            .cloned()
+            .collect(),
         effects: EffectMeters {
             gate_open: mixer.effects.gate_open.load(Ordering::Relaxed),
             voice: mixer.effects.voice.load(),
@@ -347,6 +353,7 @@ pub fn run() {
             soundboard::library_delete,
             soundboard::hotkey_errors,
             soundboard::sound_play,
+            soundboard::sound_preview,
             soundboard::sound_stop,
             soundboard::sound_stop_all,
             music::music_state,

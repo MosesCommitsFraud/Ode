@@ -161,12 +161,26 @@ pub fn sound_play(app: AppHandle, id: i64) -> Result<(), String> {
     play(&app, id)
 }
 
+/// Spielt einen Sound nur auf dem Kopfhörer, z. B. beim Zuschneiden im Editor.
+#[tauri::command]
+pub fn sound_preview(app: AppHandle, id: i64) -> Result<(), String> {
+    let library = app.state::<Library>();
+    let sound = library.get(id).map_err(err)?;
+    let request = library.play_request(&sound).map_err(err)?;
+    let engine = app.state::<Engine>();
+    // Ein Vorhören ersetzt das vorige.
+    let _ = engine.preview(SamplerCommand::StopAll);
+    engine.preview(SamplerCommand::Play(request))
+}
+
 #[tauri::command]
 pub fn sound_stop(engine: State<Engine>, id: i64) -> Result<(), String> {
+    let _ = engine.preview(SamplerCommand::Stop(id));
     engine.sampler(SamplerCommand::Stop(id))
 }
 
 #[tauri::command]
 pub fn sound_stop_all(engine: State<Engine>) -> Result<(), String> {
+    let _ = engine.preview(SamplerCommand::StopAll);
     engine.sampler(SamplerCommand::StopAll)
 }
