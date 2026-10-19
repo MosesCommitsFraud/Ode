@@ -1,0 +1,53 @@
+# Baut den Windows-Installer und legt einen GitHub-Release als ENTWURF an.
+# Veröffentlicht wird nie automatisch: Erst wenn der Entwurf auf GitHub von Hand
+# veröffentlicht ist, liefert releases/latest/download/latest.json das Update aus.
+#
+# Start: Tag "v*" pushen (z. B. v0.2.0) oder von Hand unter Actions.
+# Benötigte Secrets: TAURI_SIGNING_PRIVATE_KEY (Inhalt von ~/.tauri/ode.key),
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD (leer lassen, wenn der Schlüssel kein Passwort hat).
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Ode v__VERSION__
+          releaseBody: Neue Version von Ode.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true

@@ -1,6 +1,7 @@
 import { Broadcast, DownloadSimple, GearSix, Moon, Plus, Sliders, Star, Sun, VinylRecord, Waveform, Waves } from "@phosphor-icons/react";
 import { useEffect, type ReactNode } from "react";
 import { music, useMusic } from "~/lib/music";
+import { useUpdater } from "~/lib/updater";
 import { cn } from "~/lib/utils";
 import { OutputVolume } from "./OutputVolume";
 
@@ -31,11 +32,13 @@ function NavItem({
   label,
   active,
   onClick,
+  badge,
 }: {
   icon: ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;
+  badge?: string;
 }) {
   return (
     <button
@@ -51,6 +54,11 @@ function NavItem({
     >
       {icon}
       <span className="flex-1 truncate">{label}</span>
+      {badge && (
+        <span className="rounded-full bg-primary px-1.5 py-0.5 font-mono text-3xs font-semibold text-primary-foreground uppercase">
+          {badge}
+        </span>
+      )}
     </button>
   );
 }
@@ -206,6 +214,7 @@ export function Sidebar({
   dark: boolean;
   onToggleTheme: () => void;
 }) {
+  const updateReady = useUpdater((s) => s.status === "available");
   return (
     <aside className="panel m-2 mr-0 flex w-[var(--sidebar-width)] shrink-0 flex-col rounded-2xl bg-sidebar backdrop-blur-xl">
       <div data-tauri-drag-region className="px-4 pt-4 pb-5">
@@ -235,6 +244,7 @@ export function Sidebar({
               label={SETTINGS.label}
               active={view === SETTINGS.id}
               onClick={() => onView(SETTINGS.id)}
+              badge={updateReady ? "Neu" : undefined}
             />
           </div>
           <div className="w-[4.5rem] shrink-0">

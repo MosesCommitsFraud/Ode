@@ -63,6 +63,18 @@
         "type": "downloadBootstrapper",
         "silent": true
       }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2NUQzQ0U0Mjc4NDcwMjEKUldRaGNJUW41RHhkTnRhVTZob2ZGakw0WnFwa2NuS2c0TDU1RXU1c2tGeXRJUTcyenhkSmJoRDMK",
+      "endpoints": [
+        "https://github.com/MosesCommitsFraud/Ode/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

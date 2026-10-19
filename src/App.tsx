@@ -3,6 +3,7 @@ import { MusicBar } from "~/components/shell/MusicBar";
 import { SETTINGS, Sidebar, VIEWS, type View } from "~/components/shell/Sidebar";
 import { TopBar } from "~/components/shell/TopBar";
 import { actions } from "~/lib/store";
+import { updater } from "~/lib/updater";
 import { LiveView } from "~/views/LiveView";
 import { MixerView } from "~/views/MixerView";
 import { SettingsView } from "~/views/SettingsView";
@@ -56,6 +57,7 @@ export default function App() {
 
   useEffect(() => {
     void actions.init();
+    void updater.init();
   }, []);
 
   const changeView = (next: View) => {

@@ -25,3 +25,6 @@ dist-ssr
 
 # Claude Code (lokal)
 .claude/settings.local.json
+
+# Signierschlüssel für Updates nie einchecken
+*.key

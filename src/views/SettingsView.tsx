@@ -1,5 +1,6 @@
 import { DeviceSetup } from "~/components/mixer/DeviceSetup";
 import { GeneralSettings } from "~/components/setup/GeneralSettings";
+import { UpdateCard } from "~/components/setup/UpdateCard";
 import { Badge, Card, Segmented } from "~/components/ui/misc";
 import { actions, useStore } from "~/lib/store";
 
@@ -100,6 +101,7 @@ export function SettingsView() {
       <div className="space-y-4">
         <LatencyCard />
         <BufferCard />
+        <UpdateCard />
       </div>
     </div>
   );

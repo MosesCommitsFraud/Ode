@@ -13,6 +13,8 @@
     "core:window:allow-close",
     "opener:default",
     "dialog:allow-open",
-    "clipboard-manager:allow-read-text"
+    "clipboard-manager:allow-read-text",
+    "updater:default",
+    "process:allow-restart"
   ]
 }
