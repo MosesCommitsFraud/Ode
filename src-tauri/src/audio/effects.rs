@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use super::ENGINE_RATE;
 use super::dsp::{AtomicF32, Biquad, Limiter, Shape, coef, db_to_gain, to_db};
 use super::insert::InsertSlot;
+use super::spectrum::SpectrumTap;
 use super::voice::{VoiceChain, VoiceMeters, VoiceParams};
 
 const RATE: f32 = ENGINE_RATE as f32;
@@ -224,6 +225,9 @@ pub struct EffectsShared {
     pub voice_fx: VoiceMeters,
     /// Platz für ein externes Plugin vor dem Limiter.
     pub insert: InsertSlot,
+    /// Spektrum vor dem EQ (nach Gate und Rauschfilter) und am Ende der Kette.
+    pub spectrum_in: SpectrumTap,
+    pub spectrum_out: SpectrumTap,
 }
 
 impl EffectsShared {
@@ -690,6 +694,7 @@ impl EffectChain {
         }
         shared.voice_open.store(voice_open, Ordering::Relaxed);
 
+        shared.spectrum_in.push(buf);
         if p.eq.enabled {
             self.eq.process(buf);
         }
@@ -737,6 +742,7 @@ impl EffectChain {
         } else {
             shared.limiter_reduction_db.store(0.0);
         }
+        shared.spectrum_out.push(buf);
     }
 }
 

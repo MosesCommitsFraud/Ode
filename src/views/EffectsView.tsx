@@ -1,5 +1,6 @@
 import { ArrowLineUp, ArrowsInLineVertical, Broom, Door, Equalizer, Gauge, Plug, Sun, Waves } from "@phosphor-icons/react";
 import { useEffect, type ReactNode } from "react";
+import { EqChart, HistoryChart, SpectrumChart, useHistory } from "~/components/effects/charts";
 import { Crossfade, DeviceBar, DevicePage, Lamp, Meter, ParamRow, QuickPicks, Slider, useSelected } from "~/components/effects/device";
 import { PluginsPanel } from "~/components/effects/PluginsPanel";
 import { PushButtons } from "~/components/ui/hardware";
@@ -73,7 +74,21 @@ function Device({ id }: { id: DeviceId }) {
   const live = useStore((s) => (s.info ? s.meters?.effects : undefined));
   const p = fx[id];
   const set = <K extends DeviceId>(key: K, patch: Partial<EffectsParams[K]>) => actions.setEffect(key, patch);
-  const page = (extra: { live?: ReactNode; columns?: 1 | 2 }, children: ReactNode) => (
+  // Verläufe für die Diagramme; welche gebraucht werden, hängt vom Gerät ab.
+  const levels = useHistory(useMicDb(), 8, -90);
+  const reductionNow =
+    id === "compressor" ? live?.compressorDb : id === "deEsser" ? live?.deEsserDb : id === "limiter" ? live?.limiterDb : id === "agc" ? live?.agcGainDb : 0;
+  const reductions = useHistory(p.enabled ? (reductionNow ?? 0) : 0, 8, 0);
+  const voices = useHistory(fx.denoise.enabled ? (live?.voice ?? 0) * 100 : 0, 8, 0);
+  const history = (range: [number, number], line?: { value: number; label: string; min: number; max: number; onChange: (v: number) => void }, gr?: number) => (
+    <HistoryChart
+      range={range}
+      grMax={gr}
+      line={line}
+      series={[{ values: levels, tone: "muted" }, ...(gr ? [{ values: reductions, tone: "warning" as const, scale: "gr" as const }] : [])]}
+    />
+  );
+  const page = (extra: { live?: ReactNode; columns?: 1 | 2; graph?: ReactNode }, children: ReactNode) => (
     <DevicePage
       icon={ICONS[id]}
       title={t(`effects.${id}`)}
@@ -97,6 +112,13 @@ function Device({ id }: { id: DeviceId }) {
               <Lamp on={!!live?.gateOpen && fx.gate.enabled} label={t("devices.open")} />
             </>
           ),
+          graph: history([-80, 0], {
+            value: fx.gate.thresholdDb,
+            label: `${t("effects.threshold")} ${db(fx.gate.thresholdDb)}`,
+            min: -70,
+            max: -10,
+            onChange: (thresholdDb) => set("gate", { thresholdDb }),
+          }),
         },
         <ParamRow label={t("effects.threshold")} hint={t("devices.gate.threshold")}>
           <Slider
@@ -127,6 +149,7 @@ function Device({ id }: { id: DeviceId }) {
               <Lamp on={voice > 0.6} label={t("devices.speech")} />
             </>
           ),
+          graph: <HistoryChart range={[0, 100]} series={[{ values: voices, tone: "accent" }]} />,
         },
         <>
           <ParamRow label={t("effects.amount")} hint={t("devices.denoise.strength")}>
@@ -162,7 +185,17 @@ function Device({ id }: { id: DeviceId }) {
     }
     case "eq":
       return page(
-        {},
+        {
+          graph: (
+            <EqChart
+              eq={fx.eq}
+              labels={[t("effects.bass"), t("effects.presence"), t("effects.treble")]}
+              spectrumIn={live?.spectrumIn}
+              spectrumOut={live?.spectrumOut}
+              onChange={(key, v) => set("eq", { [key]: v })}
+            />
+          ),
+        },
         <>
           <ParamRow label={t("devices.quick")}>
             <QuickPicks
@@ -212,6 +245,13 @@ function Device({ id }: { id: DeviceId }) {
               <Meter label={t("devices.gain")} value={0.5 + gain / range / 2} from={0.5} text={db(gain)} />
             </>
           ),
+          graph: history([-60, 0], {
+            value: fx.agc.targetDb,
+            label: `${t("effects.target")} ${db(fx.agc.targetDb)}`,
+            min: -30,
+            max: -10,
+            onChange: (targetDb) => set("agc", { targetDb }),
+          }),
         },
         <>
           <ParamRow label={t("effects.target")} hint={t("devices.agc.target")}>
@@ -260,6 +300,17 @@ function Device({ id }: { id: DeviceId }) {
               <MicMeter marker={levelPos(fx.compressor.thresholdDb)} />
               <ReductionMeter db={fx.compressor.enabled ? (live?.compressorDb ?? 0) : 0} max={18} />
             </>
+          ),
+          graph: history(
+            [-60, 0],
+            {
+              value: fx.compressor.thresholdDb,
+              label: `${t("effects.threshold")} ${db(fx.compressor.thresholdDb)}`,
+              min: -50,
+              max: 0,
+              onChange: (thresholdDb) => set("compressor", { thresholdDb }),
+            },
+            18,
           ),
         },
         <>
@@ -311,7 +362,18 @@ function Device({ id }: { id: DeviceId }) {
       );
     case "deEsser":
       return page(
-        { live: <ReductionMeter db={fx.deEsser.enabled ? (live?.deEsserDb ?? 0) : 0} max={18} /> },
+        {
+          live: <ReductionMeter db={fx.deEsser.enabled ? (live?.deEsserDb ?? 0) : 0} max={18} />,
+          graph: (
+            <SpectrumChart
+              spectrum={live?.spectrumOut}
+              markerHz={fx.deEsser.frequencyHz}
+              markerLabel={`${t("effects.frequency")} ${kHz(fx.deEsser.frequencyHz)}`}
+              range={[3000, 10000]}
+              onMarker={(frequencyHz) => set("deEsser", { frequencyHz })}
+            />
+          ),
+        },
         <>
           <ParamRow label={t("effects.threshold")} hint={t("devices.deEsser.threshold")}>
             <Slider
@@ -353,7 +415,17 @@ function Device({ id }: { id: DeviceId }) {
       );
     case "exciter":
       return page(
-        {},
+        {
+          graph: (
+            <SpectrumChart
+              spectrum={live?.spectrumOut}
+              markerHz={fx.exciter.frequencyHz}
+              markerLabel={`${t("effects.frequency")} ${kHz(fx.exciter.frequencyHz)}`}
+              range={[1000, 8000]}
+              onMarker={(frequencyHz) => set("exciter", { frequencyHz })}
+            />
+          ),
+        },
         <>
           <ParamRow label={t("effects.frequency")} hint={t("devices.exciter.frequency")}>
             <Slider
@@ -400,6 +472,17 @@ function Device({ id }: { id: DeviceId }) {
               <MicMeter marker={levelPos(fx.limiter.ceilingDb)} />
               <ReductionMeter db={fx.limiter.enabled ? (live?.limiterDb ?? 0) : 0} max={12} />
             </>
+          ),
+          graph: history(
+            [-40, 0],
+            {
+              value: fx.limiter.ceilingDb,
+              label: `${t("effects.ceiling")} ${db(fx.limiter.ceilingDb)}`,
+              min: -20,
+              max: 0,
+              onChange: (ceilingDb) => set("limiter", { ceilingDb }),
+            },
+            12,
           ),
         },
         <ParamRow label={t("effects.ceiling")} hint={t("devices.limiter.ceiling")}>

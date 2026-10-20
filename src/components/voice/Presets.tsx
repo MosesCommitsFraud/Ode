@@ -170,6 +170,8 @@ function BankKey({
   title,
   onClick,
   onEdit,
+  compact,
+  hotkey,
 }: {
   active: boolean;
   color: string;
@@ -178,6 +180,9 @@ function BankKey({
   title?: string;
   onClick: () => void;
   onEdit?: () => void;
+  /** Flach in einer Zeile: Symbol neben dem Namen. */
+  compact?: boolean;
+  hotkey?: string;
 }) {
   return (
     <div className="group relative min-w-0 flex-1" style={{ "--key": color } as CSSProperties}>
@@ -193,14 +198,16 @@ function BankKey({
         }}
         className={cn(
           // Rundung der Mulde (16) minus Innenabstand (6).
-          "flex h-[clamp(60px,9vh,80px)] w-full cursor-default flex-col items-center justify-center gap-1.5 rounded-[10px] px-2 transition-all duration-200 [&_svg]:size-6",
+          "flex w-full cursor-default items-center rounded-[10px] px-2 transition-all duration-200",
+          compact ? "h-10 justify-start gap-2 [&_svg]:size-4" : "h-[76px] flex-col justify-center gap-1 [&_svg]:size-6",
           active
             ? "bg-panel-raised shadow-[inset_0_0_0_2px_var(--key),0_4px_12px_-6px_oklch(0%_0_0/45%)]"
             : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
         )}
       >
         <span className="text-[var(--key)]">{icon}</span>
-        <span className={cn("w-full truncate text-center text-xs", active ? "font-semibold text-foreground" : "font-medium")}>{label}</span>
+        <span className={cn("min-w-0 truncate text-xs", !compact && "w-full text-center", active ? "font-semibold text-foreground" : "font-medium")}>{label}</span>
+        {hotkey && <span className="max-w-full truncate font-mono text-[9px] text-muted-foreground">{hotkey}</span>}
       </button>
       {onEdit && (
         <button
@@ -216,94 +223,107 @@ function BankKey({
   );
 }
 
-const KEY_MIN_WIDTH = 96;
-
-/** Wie viele Tasten nebeneinander passen. */
-function useKeyCount() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [count, setCount] = useState(8);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new ResizeObserver(([entry]) => setCount(Math.max(1, Math.floor(entry.contentRect.width / KEY_MIN_WIDTH))));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return { ref, count };
-}
+const PER_PAGE = 20;
 
 /**
- * Die Stimme als eine Reihe von Wahltasten: „Aus“, „Eigene“ (die gerade
- * eingestellte Stimme) und die Presets. Genau eine gilt; mehr Presets als
- * Platz blättern seitenweise. Rechtsklick auf ein Preset bearbeitet es.
+ * Die Stimme als Auswahlfeld: zeigt, was gerade läuft (Preset, „Eigene“
+ * oder „Aus“). Ein Klick öffnet alle Presets als Raster, dazu Aus und
+ * Eigene; unten Platz für Aktionen (Speichern, Zurückholen). Rechtsklick
+ * oder der Stift auf einem Preset bearbeitet es.
  */
-export function PresetBank({ onEdit, aside }: { onEdit: (preset: Preset) => void; aside?: ReactNode }) {
+export function PresetPicker({ onEdit, actions: footer, className }: { onEdit: (preset: Preset) => void; actions?: ReactNode; className?: string }) {
   const presets = useStore((s) => s.presets);
   const active = useStore((s) => s.activePreset);
   const voice = useStore((s) => s.effects.voice);
-  const fit = useKeyCount();
+  const [open, setOpen] = useState(false);
   const [page, setPage] = useState(0);
-  // Aus und Eigene sind immer da, der Rest der Reihe gehört den Presets.
-  const perPage = Math.max(1, fit.count - 2);
-  const pages = Math.max(1, Math.ceil(presets.length / perPage));
-  const current = Math.min(page, pages - 1);
-  const shown = presets.slice(current * perPage, (current + 1) * perPage);
+  const root = useRef<HTMLDivElement>(null);
   const running = presets.find((p) => p.id === active && voice.enabled);
   const own = voice.enabled && !running;
-  const turn = (delta: number) => setPage(Math.min(pages - 1, Math.max(0, current + delta)));
+  const pages = Math.max(1, Math.ceil(presets.length / PER_PAGE));
+  const current = Math.min(page, pages - 1);
+  const shown = presets.slice(current * PER_PAGE, (current + 1) * PER_PAGE);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
+    const escape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", escape);
+    return () => {
+      window.removeEventListener("mousedown", close);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  const choose = (run: () => void) => {
+    run();
+    setOpen(false);
+  };
+  const color = running ? soundColor(running.color) : own ? "var(--ch-mic)" : "var(--muted-foreground)";
+  const name = running ? presetName(running) : own ? t("voice.own") : t("voice.off");
 
   return (
-    <div className="panel flex shrink-0 items-center gap-1 rounded-2xl p-1.5">
-      <div ref={fit.ref} onWheel={(e) => pages > 1 && Math.abs(e.deltaY) > 20 && turn(e.deltaY > 0 ? 1 : -1)} className="flex min-w-0 flex-1 gap-1">
-        <BankKey active={!voice.enabled} color="var(--muted-foreground)" icon={<Prohibit />} label={t("voice.off")} onClick={() => void actions.presetOff()} />
-        <BankKey
-          active={own}
-          color="var(--ch-mic)"
-          icon={<SlidersHorizontal />}
-          label={t("voice.own")}
-          onClick={() => actions.setVoiceEnabled(true)}
-        />
-        <div className="mx-1 w-px self-stretch bg-hairline" />
-        {shown.map((p) => (
-          <BankKey
-            key={p.id}
-            active={running?.id === p.id}
-            color={soundColor(p.color)}
-            icon={<PresetIcon name={p.icon} weight={running?.id === p.id ? "fill" : "duotone"} />}
-            label={presetName(p)}
-            title={p.hotkey ? `${presetName(p)} · ${hotkeyLabel(p.hotkey, p.hotkeyLabel).join(" + ")}` : undefined}
-            onClick={() => void actions.applyPreset(p.id)}
-            onEdit={() => onEdit(p)}
-          />
-        ))}
-        {/* Leere Plätze halten die Tastenbreite auf der letzten Seite. */}
-        {Array.from({ length: perPage - shown.length }, (_, i) => (
-          <div key={i} className="min-w-0 flex-1" />
-        ))}
-      </div>
-      {pages > 1 && (
-        <div className="flex shrink-0 flex-col gap-1">
-          <button
-            type="button"
-            title={t("common.previousPage")}
-            disabled={current === 0}
-            onClick={() => turn(-1)}
-            className="flex size-7 cursor-default items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:size-4"
-          >
-            <CaretUp />
-          </button>
-          <button
-            type="button"
-            title={t("common.nextPage")}
-            disabled={current === pages - 1}
-            onClick={() => turn(1)}
-            className="flex size-7 cursor-default items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:size-4"
-          >
-            <CaretDown />
-          </button>
+    <div ref={root} className={cn("relative shrink-0", className)}>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        style={{ "--key": color } as CSSProperties}
+        className="well flex h-9 w-56 cursor-default items-center gap-2 rounded-full pr-3 pl-1.5 text-left transition-colors hover:bg-accent/60"
+      >
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-panel-raised text-[var(--key)] shadow-[0_1px_0_var(--hairline)] [&_svg]:size-4">
+          {running ? <PresetIcon name={running.icon} weight="fill" /> : own ? <SlidersHorizontal /> : <Prohibit />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-mono text-[9px] leading-none tracking-[0.14em] text-muted-foreground uppercase">{t("voice.presets")}</span>
+          <span className="block truncate text-[13px] leading-tight font-semibold">{name}</span>
+        </span>
+        <CaretDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="panel absolute top-11 left-0 z-50 flex w-[min(640px,calc(100vw-22rem))] origin-top-left animate-[pop-in_180ms_var(--ease-drawer)] flex-col gap-2 rounded-2xl p-2 shadow-[0_18px_50px_-12px_oklch(0%_0_0/45%)]">
+          <div className="flex gap-1">
+            <BankKey compact active={!voice.enabled} color="var(--muted-foreground)" icon={<Prohibit />} label={t("voice.off")} onClick={() => choose(() => void actions.presetOff())} />
+            <BankKey compact active={own} color="var(--ch-mic)" icon={<SlidersHorizontal />} label={t("voice.own")} onClick={() => choose(() => actions.setVoiceEnabled(true))} />
+          </div>
+          <div className="h-px bg-hairline" />
+          <div className="grid grid-cols-5 gap-1">
+            {shown.map((p) => (
+              <BankKey
+                key={p.id}
+                active={running?.id === p.id}
+                color={soundColor(p.color)}
+                icon={<PresetIcon name={p.icon} weight={running?.id === p.id ? "fill" : "duotone"} />}
+                label={presetName(p)}
+                title={p.hotkey ? `${presetName(p)} · ${hotkeyLabel(p.hotkey, p.hotkeyLabel).join(" + ")}` : undefined}
+                hotkey={p.hotkey ? hotkeyLabel(p.hotkey, p.hotkeyLabel).join("+") : undefined}
+                onClick={() => choose(() => void actions.applyPreset(p.id))}
+                onEdit={() => {
+                  setOpen(false);
+                  onEdit(p);
+                }}
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-2 border-t border-hairline px-1 pt-2">
+            {pages > 1 && (
+              <div className="flex items-center gap-1">
+                <button type="button" disabled={current === 0} onClick={() => setPage(current - 1)} className="flex size-7 cursor-default items-center justify-center rounded-lg text-muted-foreground hover:bg-accent disabled:opacity-30 [&_svg]:size-4">
+                  <CaretUp className="-rotate-90" />
+                </button>
+                <span className="font-mono text-2xs text-muted-foreground tabular-nums">{t("common.page", { current: current + 1, pages })}</span>
+                <button type="button" disabled={current === pages - 1} onClick={() => setPage(current + 1)} className="flex size-7 cursor-default items-center justify-center rounded-lg text-muted-foreground hover:bg-accent disabled:opacity-30 [&_svg]:size-4">
+                  <CaretUp className="rotate-90" />
+                </button>
+              </div>
+            )}
+            <div className="flex-1" />
+            {footer}
+          </div>
         </div>
       )}
-      {aside}
     </div>
   );
 }

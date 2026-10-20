@@ -14,6 +14,7 @@ pub mod live;
 pub mod mixer;
 pub mod resample;
 pub mod sampler;
+pub mod spectrum;
 pub mod voice;
 
 /// Interne Abtastrate der Engine.

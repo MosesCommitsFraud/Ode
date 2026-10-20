@@ -208,6 +208,9 @@ export interface Meters {
     voiceLatencyMs: number;
     /** 16 Bandpegel des Vocoders. */
     vocoder: number[];
+    /** Spektrum vor dem EQ und am Ende der Kette, je 120 Bänder 20 Hz – 20 kHz in dB. */
+    spectrumIn: number[];
+    spectrumOut: number[];
   };
 }
 

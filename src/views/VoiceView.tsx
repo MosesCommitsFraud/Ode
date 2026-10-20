@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Crossfade, DeviceBar, useSelected } from "~/components/effects/device";
 import { HelpIcon } from "~/components/effects/HelpDrawer";
 import { ActionGroup, ActionPill } from "~/components/ui/pills";
-import { PresetBank, PresetEditor } from "~/components/voice/Presets";
+import { PresetEditor, PresetPicker } from "~/components/voice/Presets";
 import { VOICE_DEVICES, VOICE_ICONS, VoiceDevice, type VoiceDeviceId } from "~/components/voice/VoiceDevices";
 import type { Preset } from "~/lib/engine";
 import { t } from "~/lib/i18n";
@@ -53,28 +53,31 @@ export function VoiceView() {
         </div>
       ))}
 
-      <PresetBank
-        onEdit={setEditing}
-        aside={
-          <div className="flex shrink-0 flex-col items-end justify-between gap-2 self-stretch py-1 pr-1 pl-2">
-            <HelpIcon topic="presets" />
-            <ActionGroup>
-              <ActionPill title={t("voice.restore")} onClick={() => void actions.restorePresets()}>
-                <ArrowCounterClockwise />
-              </ActionPill>
-              <ActionPill primary onClick={() => void save()}>
-                <FloppyDisk /> {t("voice.savePreset")}
-              </ActionPill>
-            </ActionGroup>
-          </div>
-        }
-      />
-
-      <DeviceBar
-        value={open}
-        onChange={select}
-        groups={[(["pitch", "autotune", "harmonizer", "vocoder"] as const).map(key), (["character", "modulation", "echo", "reverb"] as const).map(key)]}
-      />
+      {/* Über der Geräteseite, damit das Preset-Raster sie überdeckt. */}
+      <div className="relative z-20 flex shrink-0 items-center gap-3">
+        <PresetPicker
+          onEdit={setEditing}
+          actions={
+            <>
+              <HelpIcon topic="presets" />
+              <ActionGroup>
+                <ActionPill title={t("voice.restore")} onClick={() => void actions.restorePresets()}>
+                  <ArrowCounterClockwise />
+                </ActionPill>
+                <ActionPill primary onClick={() => void save()}>
+                  <FloppyDisk /> {t("voice.savePreset")}
+                </ActionPill>
+              </ActionGroup>
+            </>
+          }
+        />
+        <DeviceBar
+          className="flex-1"
+          value={open}
+          onChange={select}
+          groups={[(["pitch", "autotune", "harmonizer", "vocoder"] as const).map(key), (["character", "modulation", "echo", "reverb"] as const).map(key)]}
+        />
+      </div>
 
       {/* Bei ausgeschalteter Stimme bleibt alles bedienbar, wirkt aber erst mit „Eigene“ oder einem Preset. */}
       <Crossfade id={open} order={VOICE_DEVICES} className={cn("transition-opacity duration-300", !voice.enabled && "opacity-60")}>

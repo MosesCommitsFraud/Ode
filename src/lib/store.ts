@@ -1,3 +1,4 @@
+import { SPECTRUM_FLOOR, eqResponse, spectrumFrequencies } from "./filters";
 import { useSyncExternalStore } from "react";
 import { t } from "./i18n";
 import {
@@ -395,11 +396,32 @@ function startDemo() {
           deEsserDb: state.effects.deEsser.enabled ? -Math.max(0, Math.sin(t * 5.3) * 6) : 0,
           limiterDb: state.effects.limiter.enabled && voice > 0.6 ? -1.2 : 0,
           ...demoVoice(t, voice),
+          ...demoSpectrum(t, voice),
         },
         duckingDb: state.ducking.enabled && voice > 0.05 ? -state.ducking.amountDb : 0,
       },
     });
   }, 33);
+}
+
+/**
+ * Simuliertes Spektrum einer Stimme für die Vorschau im Browser: Obertöne
+ * eines Grundtons unter drei Formanten, darüber der echte Frequenzgang des
+ * eingestellten EQs.
+ */
+function demoSpectrum(t: number, level: number) {
+  const f0 = 140 + Math.sin(t * 0.7) * 20;
+  const loud = 20 * Math.log10(Math.max(level, 0.02));
+  const spectrumIn = spectrumFrequencies.map((f) => {
+    const harmonic = Math.abs(f / f0 - Math.round(f / f0));
+    const formant = [500, 1500, 2700].reduce((sum, c) => sum + Math.exp(-Math.pow(Math.log2(f / c), 2) * 3), 0);
+    const tone = -30 - Math.log2(f / f0) * 6 + formant * 12 - harmonic * 30;
+    // Grundrauschen um −85 dB, darüber die Stimme.
+    return Math.max(-85 + Math.sin(f + t) * 3, Math.min(-6, tone + loud + Math.sin(t * 9 + f) * 2));
+  });
+  const fx = state.effects;
+  const eq = fx.eq.enabled ? eqResponse(fx.eq, spectrumFrequencies) : spectrumFrequencies.map(() => 0);
+  return { spectrumIn, spectrumOut: spectrumIn.map((v, i) => Math.max(SPECTRUM_FLOOR, v + eq[i])) };
 }
 
 /** Simulierte Anzeigen der Stimm-Effekte für die Vorschau im Browser. */

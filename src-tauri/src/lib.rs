@@ -25,6 +25,7 @@ use audio::mixer::{
     ChannelId, ChannelParams, DuckingParams, Mixer, MixerSettings, Output, OutputId, OutputParams,
 };
 use audio::sampler::PlayingSound;
+use audio::spectrum::Analyzer;
 use downloader::{Downloads, Tools};
 use library::Library;
 use music::{MusicLibrary, Player};
@@ -113,6 +114,9 @@ struct EffectMeters {
     /// Zusätzliche Verzögerung der Stimm-Effekte.
     voice_latency_ms: f32,
     vocoder: Vec<f32>,
+    /// Spektrum vor dem EQ und am Ende der Kette, je `spectrum::BANDS` Werte in dB.
+    spectrum_in: Vec<f32>,
+    spectrum_out: Vec<f32>,
 }
 
 fn frames_to_ms(frames: u32, rate: u32) -> f32 {
@@ -137,7 +141,7 @@ fn output_meters(output: &Output) -> OutputMeters {
     }
 }
 
-fn snapshot(engine: &Engine) -> Meters {
+fn snapshot(engine: &Engine, analyzers: &mut (Analyzer, Analyzer)) -> Meters {
     let mixer: &Mixer = &engine.mixer;
     let running = engine.info().is_some();
     let input_callback_ms = frames_to_ms(
@@ -187,6 +191,16 @@ fn snapshot(engine: &Engine) -> Meters {
             correction_cents: voice.correction_cents.load(),
             voice_latency_ms: voice.latency_ms.load(),
             vocoder: voice.vocoder.iter().map(|b| b.take()).collect(),
+            spectrum_in: if running {
+                analyzers.0.analyze(&mixer.effects.spectrum_in)
+            } else {
+                Vec::new()
+            },
+            spectrum_out: if running {
+                analyzers.1.analyze(&mixer.effects.spectrum_out)
+            } else {
+                Vec::new()
+            },
         },
         ducking_db: if running {
             mixer.ducking.reduction_db.load()
@@ -201,9 +215,10 @@ fn spawn_meter_loop(app: AppHandle) {
         .name("ode-meters".into())
         .spawn(move || {
             let mut tick = 0u32;
+            let mut analyzers = (Analyzer::new(), Analyzer::new());
             loop {
                 thread::sleep(Duration::from_millis(33));
-                let meters = snapshot(&app.state::<Engine>());
+                let meters = snapshot(&app.state::<Engine>(), &mut analyzers);
                 let _ = app.emit("engine://meters", meters);
                 // Player-Stand reicht mit etwa 10 Hz.
                 tick = tick.wrapping_add(1);

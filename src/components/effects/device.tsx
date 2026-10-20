@@ -1,6 +1,7 @@
 import { ArrowCounterClockwise } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type WheelEvent } from "react";
 import { Toggle } from "~/components/ui/hardware";
+import { Pill, PillGroup } from "~/components/ui/pills";
 import { parseNumber } from "~/components/ui/knob";
 import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
@@ -17,68 +18,41 @@ const accentStyle = (accent?: string) => (accent ? ({ "--ch-mic": accent, "--key
 export type DeviceKey = { id: string; title: string; icon: ReactNode; enabled: boolean; accent?: string };
 
 /**
- * Alle Geräte als Tastenreihe: Symbol in einem Kreis, der sich in der
- * Gerätefarbe füllt, solange das Gerät an ist; die gewählte Taste hebt sich
- * hell heraus und trägt einen Rahmen. Gruppen sind durch feine Linien getrennt.
+ * Alle Geräte als Pillen wie die Seitenwahl im Mischpult: die gewählte hebt
+ * sich hell heraus (die Markierung gleitet mit), das Symbol trägt die
+ * Gerätefarbe, solange das Gerät an ist. Gruppen trennt ein feiner Strich.
  */
-export function DeviceBar({ groups, value, onChange }: { groups: DeviceKey[][]; value: string; onChange: (id: string) => void }) {
+export function DeviceBar({ groups, value, onChange, className }: { groups: DeviceKey[][]; value: string; onChange: (id: string) => void; className?: string }) {
   const ids = groups.flat().map((d) => d.id);
-  const keys = useRef(new Map<string, HTMLButtonElement>());
-  const step = (delta: number) => {
-    const next = ids[(ids.indexOf(value) + delta + ids.length) % ids.length];
-    onChange(next);
-    keys.current.get(next)?.focus();
-  };
   return (
     <div
       role="tablist"
-      className="panel flex shrink-0 items-stretch gap-1 rounded-2xl p-1.5"
+      className={cn("min-w-0", className)}
       onKeyDown={(e) => {
         if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
         e.preventDefault();
-        step(e.key === "ArrowRight" ? 1 : -1);
+        onChange(ids[(ids.indexOf(value) + (e.key === "ArrowRight" ? 1 : -1) + ids.length) % ids.length]);
       }}
     >
-      {groups.map((group, g) => (
-        <div key={g} className="flex min-w-0 flex-1 items-stretch gap-1" style={{ flexGrow: group.length }}>
-          {g > 0 && <div aria-hidden className="mx-1 w-px self-stretch bg-hairline" />}
-          {group.map((d) => {
-            const selected = d.id === value;
-            return (
-              <button
-                key={d.id}
-                ref={(el) => {
-                  if (el) keys.current.set(d.id, el);
-                  else keys.current.delete(d.id);
-                }}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                tabIndex={selected ? 0 : -1}
-                onClick={() => onChange(d.id)}
-                style={accentStyle(d.accent)}
-                className={cn(
-                  // Rundung der Leiste (16) minus Innenabstand (6).
-                  "flex h-[clamp(56px,8vh,68px)] min-w-0 flex-1 cursor-default flex-col items-center justify-center gap-1 rounded-[10px] px-1.5 transition-all duration-200",
-                  selected ? "bg-panel-raised shadow-[inset_0_0_0_2px_var(--key),0_4px_12px_-6px_oklch(0%_0_0/45%)]" : "hover:bg-accent/60",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex size-7 items-center justify-center rounded-full transition-[background-color,color] duration-300 [&_svg]:size-4",
-                    d.enabled ? "bg-[var(--key)] text-white" : "bg-[var(--meter-track)] text-muted-foreground",
-                  )}
-                >
-                  {d.icon}
-                </span>
-                <span className={cn("w-full truncate text-center text-xs", selected ? "font-semibold text-foreground" : d.enabled ? "font-medium text-foreground" : "text-muted-foreground")}>
-                  {d.title}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ))}
+      <PillGroup className="w-fit max-w-full">
+        {groups.map((group, g) => [
+          g > 0 && <span key={`s${g}`} aria-hidden className="mx-1 h-4 w-px shrink-0 bg-hairline" />,
+          ...group.map((d) => (
+            <Pill
+              key={d.id}
+              role="tab"
+              aria-selected={d.id === value}
+              active={d.id === value}
+              onClick={() => onChange(d.id)}
+              style={accentStyle(d.accent)}
+              className="min-w-0 shrink"
+            >
+              <span className={cn("transition-colors duration-300 [&_svg]:size-3.5", d.enabled ? "text-[var(--key)]" : "text-muted-foreground/60")}>{d.icon}</span>
+              <span className="truncate">{d.title}</span>
+            </Pill>
+          )),
+        ])}
+      </PillGroup>
     </div>
   );
 }
@@ -96,6 +70,7 @@ export function DevicePage({
   onToggle,
   onReset,
   live,
+  graph,
   columns = 1,
   accent,
   children,
@@ -107,6 +82,8 @@ export function DevicePage({
   onToggle: (on: boolean) => void;
   onReset?: () => void;
   live?: ReactNode;
+  /** Diagramm zwischen Live-Werten und Einstellungen; nimmt den freien Platz. */
+  graph?: ReactNode;
   columns?: 1 | 2;
   accent?: string;
   children: ReactNode;
@@ -148,9 +125,15 @@ export function DevicePage({
           {live}
         </div>
       )}
+      {graph && (
+        <div className={cn("well relative mx-6 mb-1 min-h-[140px] flex-1 overflow-hidden rounded-[12px] transition-opacity duration-300", !enabled && "opacity-50")}>
+          {graph}
+        </div>
+      )}
       <div
         className={cn(
-          "grid min-h-0 flex-1 content-start gap-x-12 px-6 pb-3 transition-opacity duration-300",
+          "grid min-h-0 content-start gap-x-12 px-6 pb-3 transition-opacity duration-300",
+          graph ? "shrink-0" : "flex-1",
           columns === 2 ? "grid-cols-2" : "grid-cols-1",
           !enabled && "opacity-60",
         )}

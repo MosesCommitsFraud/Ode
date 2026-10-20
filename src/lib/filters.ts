@@ -1,0 +1,106 @@
+/*
+ * Frequenzgang der EQs, exakt wie in der Engine: dieselben Biquads nach dem
+ * Audio-EQ-Cookbook (src-tauri/src/audio/dsp.rs, `Biquad::design`) mit
+ * denselben Frequenzen und Güten (effects.rs `Equalizer`, bus.rs
+ * `ChannelTone`). Wer dort etwas ändert, ändert es hier mit.
+ */
+
+const RATE = 48_000;
+
+export type Shape = "lowShelf" | "peak" | "highShelf" | "lowPass" | "highPass";
+type Coefs = [number, number, number, number, number];
+
+function design(shape: Shape, freq: number, q: number, gainDb: number): Coefs {
+  const a = Math.pow(10, gainDb / 40);
+  const w0 = (2 * Math.PI * Math.min(Math.max(freq, 10), RATE * 0.49)) / RATE;
+  const sin = Math.sin(w0);
+  const cos = Math.cos(w0);
+  const alpha = sin / (2 * q);
+  let b0: number, b1: number, b2: number, a0: number, a1: number, a2: number;
+  switch (shape) {
+    case "peak":
+      [b0, b1, b2, a0, a1, a2] = [1 + alpha * a, -2 * cos, 1 - alpha * a, 1 + alpha / a, -2 * cos, 1 - alpha / a];
+      break;
+    case "lowShelf": {
+      const k = 2 * Math.sqrt(a) * alpha;
+      [b0, b1, b2, a0, a1, a2] = [
+        a * (a + 1 - (a - 1) * cos + k),
+        2 * a * (a - 1 - (a + 1) * cos),
+        a * (a + 1 - (a - 1) * cos - k),
+        a + 1 + (a - 1) * cos + k,
+        -2 * (a - 1 + (a + 1) * cos),
+        a + 1 + (a - 1) * cos - k,
+      ];
+      break;
+    }
+    case "highShelf": {
+      const k = 2 * Math.sqrt(a) * alpha;
+      [b0, b1, b2, a0, a1, a2] = [
+        a * (a + 1 + (a - 1) * cos + k),
+        -2 * a * (a - 1 + (a + 1) * cos),
+        a * (a + 1 + (a - 1) * cos - k),
+        a + 1 - (a - 1) * cos + k,
+        2 * (a - 1 - (a + 1) * cos),
+        a + 1 - (a - 1) * cos - k,
+      ];
+      break;
+    }
+    case "lowPass":
+      [b0, b1, b2, a0, a1, a2] = [(1 - cos) / 2, 1 - cos, (1 - cos) / 2, 1 + alpha, -2 * cos, 1 - alpha];
+      break;
+    case "highPass":
+      [b0, b1, b2, a0, a1, a2] = [(1 + cos) / 2, -(1 + cos), (1 + cos) / 2, 1 + alpha, -2 * cos, 1 - alpha];
+      break;
+  }
+  return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
+}
+
+/** Betrag des Biquads bei `freq` in dB: |H(e^jω)| aus den Koeffizienten. */
+function responseDb([b0, b1, b2, a1, a2]: Coefs, freq: number) {
+  const w = (2 * Math.PI * freq) / RATE;
+  const c1 = Math.cos(w);
+  const s1 = Math.sin(w);
+  const c2 = Math.cos(2 * w);
+  const s2 = Math.sin(2 * w);
+  const numRe = b0 + b1 * c1 + b2 * c2;
+  const numIm = -(b1 * s1 + b2 * s2);
+  const denRe = 1 + a1 * c1 + a2 * c2;
+  const denIm = -(a1 * s1 + a2 * s2);
+  const mag = Math.sqrt((numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm));
+  return 20 * Math.log10(Math.max(mag, 1e-9));
+}
+
+export type EqSettings = { lowDb: number; midDb: number; highDb: number; lowCutHz?: number; highCutHz?: number };
+
+/** Höhe der EQ-Anzeige je Richtung: etwas mehr als der Regelweg (±12 dB). */
+export const EQ_RANGE_DB = 14;
+
+/** Die Bänder der EQs der Engine. */
+export const EQ_BANDS = [
+  { key: "lowDb", shape: "lowShelf", freq: 120, q: 0.707 },
+  { key: "midDb", shape: "peak", freq: 2_500, q: 0.9 },
+  { key: "highDb", shape: "highShelf", freq: 8_000, q: 0.707 },
+] as const;
+
+/** Gesamter Frequenzgang des EQs in dB an den Frequenzen `freqs`. */
+export function eqResponse(eq: EqSettings, freqs: number[]) {
+  const filters: Coefs[] = EQ_BANDS.map((b) => design(b.shape, b.freq, b.q, eq[b.key]));
+  // Wie bus.rs (LOW_CUT_OFF, HIGH_CUT_OFF): Cuts nur, wenn sie etwas abschneiden.
+  if (eq.lowCutHz !== undefined && eq.lowCutHz > 20) filters.push(design("highPass", eq.lowCutHz, 0.707, 0));
+  if (eq.highCutHz !== undefined && eq.highCutHz < 20_000) filters.push(design("lowPass", eq.highCutHz, 0.707, 0));
+  return freqs.map((f) => filters.reduce((sum, c) => sum + responseDb(c, f), 0));
+}
+
+/** Frequenzen gleichmäßig auf der logarithmischen Achse. */
+export function logFrequencies(count: number, low = 20, high = 20_000) {
+  const ratio = Math.pow(high / low, 1 / (count - 1));
+  return Array.from({ length: count }, (_, i) => low * Math.pow(ratio, i));
+}
+
+/** Wie src-tauri/src/audio/spectrum.rs: 120 Bänder von 20 Hz bis 20 kHz, Mitte je Band. */
+export const SPECTRUM_BANDS = 120;
+export const SPECTRUM_FLOOR = -100;
+export const spectrumFrequencies = (() => {
+  const ratio = Math.pow(20_000 / 20, 1 / SPECTRUM_BANDS);
+  return Array.from({ length: SPECTRUM_BANDS }, (_, i) => 20 * Math.pow(ratio, i + 0.5));
+})();
