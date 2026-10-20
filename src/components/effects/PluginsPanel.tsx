@@ -1,7 +1,8 @@
 import { AppWindow, ArrowClockwise, CaretLeft, CaretRight, FolderOpen, MagnifyingGlass, Plug, Trash, Warning, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
-import { Knob, Lever } from "~/components/ui/knob";
+import { PushButton } from "~/components/ui/hardware";
+import { Knob } from "~/components/ui/knob";
 import { Card, EmptyState } from "~/components/ui/misc";
 import { ActionGroup, ActionPill } from "~/components/ui/pills";
 import { t } from "~/lib/i18n";
@@ -167,7 +168,7 @@ function Rack() {
         <Readout label={t("plugins.latency")}>{status.latencyMs.toFixed(1)} ms</Readout>
         <Readout label={t("plugins.cpu")}>{status.loadMs.toFixed(2)} ms</Readout>
         <div className="w-20">
-          <Lever label={t("plugins.bypass")} checked={!status.bypass} on={t("plugins.active")} off={t("plugins.off")} onChange={(on) => void plugins.setBypass(!on)} />
+          <PushButton label={t("plugins.bypass")} on={status.bypass} onChange={(on) => void plugins.setBypass(on)} />
         </div>
         <ActionGroup>
           {status.hasGui && (

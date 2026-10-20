@@ -1,5 +1,7 @@
-import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Tick } from "~/components/effects/rack";
-import { Knob, StepKnob } from "~/components/ui/knob";
+import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Tick, Wide } from "~/components/effects/rack";
+import { Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
+import { PushButtons, SlideFader } from "~/components/ui/hardware";
+import { Knob } from "~/components/ui/knob";
 import type { CharacterMode, ModulationMode } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -9,7 +11,14 @@ const hz = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.
 
 /* ---------- Charakter ---------- */
 
-const MODES: CharacterMode[] = ["robot", "radio", "telephone", "megaphone", "distortion", "bitcrusher"];
+const MODES: { id: CharacterMode; icon: React.ReactNode }[] = [
+  { id: "robot", icon: <Robot /> },
+  { id: "radio", icon: <Radio /> },
+  { id: "telephone", icon: <Phone /> },
+  { id: "megaphone", icon: <Megaphone /> },
+  { id: "distortion", icon: <Lightning /> },
+  { id: "bitcrusher", icon: <WaveSquare /> },
+];
 
 /** Bedeutung und Anzeige des Farb-Reglers je Modus. */
 function toneOf(mode: CharacterMode, tone: number): { label: string; value: string } {
@@ -87,18 +96,19 @@ export function CharacterModule() {
   return (
     <Module
       title={t("voice.character")}
-      columns={4}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("character", { enabled })}
       display={<CharacterDisplay mode={p.mode} amount={p.amount} tone={p.tone} mix={p.mix} />}
     >
-      <StepKnob
-        label={t("voice.modeLabel")}
-        value={p.mode}
-        disabled={!p.enabled}
-        onChange={(mode: CharacterMode) => actions.setVoice("character", { mode })}
-        options={MODES.map((m) => ({ value: m, label: t(`voice.mode.${m}`) }))}
-      />
+      <Wide grow={3}>
+        <PushButtons
+          label={t(`voice.mode.${p.mode}`)}
+          value={p.mode}
+          disabled={!p.enabled}
+          onChange={(mode: CharacterMode) => actions.setVoice("character", { mode })}
+          options={MODES.map((m) => ({ value: m.id, label: m.icon, title: t(`voice.mode.${m.id}`) }))}
+        />
+      </Wide>
       <Knob
         label={t("voice.amount")}
         value={p.amount}
@@ -121,7 +131,7 @@ export function CharacterModule() {
         disabled={!p.enabled}
         onChange={(v) => actions.setVoice("character", { tone: v })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.mix")}
         value={p.mix}
         min={0}
@@ -190,18 +200,19 @@ export function ModulationModule() {
   return (
     <Module
       title={t("voice.modulation")}
-      columns={5}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("modulation", { enabled })}
       display={<ModulationDisplay mode={p.mode} rateHz={p.rateHz} depth={p.depth} />}
     >
-      <StepKnob
-        label={t("voice.modeLabel")}
-        value={p.mode}
-        disabled={!p.enabled}
-        onChange={(mode: ModulationMode) => actions.setVoice("modulation", { mode })}
-        options={MOD_MODES.map((m) => ({ value: m, label: t(`voice.mod.${m}`) }))}
-      />
+      <Wide grow={2.5}>
+        <PushButtons
+          label={t("voice.modeLabel")}
+          value={p.mode}
+          disabled={!p.enabled}
+          onChange={(mode: ModulationMode) => actions.setVoice("modulation", { mode })}
+          options={MOD_MODES.map((m) => ({ value: m, label: t(`voice.mod.${m}`) }))}
+        />
+      </Wide>
       <Knob
         label={t("voice.rate")}
         value={p.rateHz}
@@ -235,7 +246,7 @@ export function ModulationModule() {
         disabled={!p.enabled || p.mode === "chorus"}
         onChange={(feedback) => actions.setVoice("modulation", { feedback })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.mix")}
         value={p.mix}
         min={0}
@@ -268,12 +279,14 @@ export function EchoControls({
 }) {
   return (
     <>
-      <Knob
+      <SlideFader
         label={t("voice.time")}
         value={params.timeMs}
         min={20}
         max={1500}
         step={5}
+        scale={[20, 500, 1000, 1500]}
+        tickLabel={(v) => (v >= 1000 ? `${v / 1000}s` : String(Math.round(v)))}
         reset={320}
         format={(v) => `${Math.round(v)} ms`}
         disabled={disabled}
@@ -304,7 +317,7 @@ export function EchoControls({
         color={color}
         onChange={(v) => onChange({ toneHz: Math.round(Math.pow(2, v)) })}
       />
-      <Knob
+      <SlideFader
         label={mixLabel}
         value={params.mix}
         min={0}
@@ -359,12 +372,14 @@ export function ReverbControls({
         color={color}
         onChange={(damping) => onChange({ damping })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.predelay")}
         value={params.predelayMs}
         min={0}
         max={200}
         step={1}
+        scale={[0, 50, 100, 150, 200]}
+        tickLabel={(v) => String(Math.round(v))}
         reset={20}
         format={(v) => `${v} ms`}
         disabled={disabled}
@@ -383,7 +398,7 @@ export function ReverbControls({
         color={color}
         onChange={(lowCutHz) => onChange({ lowCutHz })}
       />
-      <Knob
+      <SlideFader
         label={mixLabel}
         value={params.mix}
         min={0}
@@ -404,7 +419,6 @@ export function EchoModule() {
   return (
     <Module
       title={t("voice.echo")}
-      columns={4}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("echo", { enabled })}
       display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.15, p.mix)} />}
@@ -419,7 +433,6 @@ export function ReverbModule() {
   return (
     <Module
       title={t("voice.reverb")}
-      columns={5}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("reverb", { enabled })}
       display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} />}

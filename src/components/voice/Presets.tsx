@@ -1,10 +1,11 @@
 import { CaretLeft, CaretRight, PencilSimple, X } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { HotkeyRecorder } from "~/components/soundboard/HotkeyRecorder";
 import { hotkeyLabel } from "~/components/soundboard/hotkey";
 import { Button } from "~/components/ui/button";
-import { EmptyState, Kbd, SectionLabel } from "~/components/ui/misc";
+import { Engraved, HardwareKey } from "~/components/ui/hardware";
+import { Card, EmptyState, Kbd, SectionLabel } from "~/components/ui/misc";
 import type { Preset, VoiceParams } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -20,21 +21,25 @@ export function sameVoice(a: VoiceParams, b: VoiceParams) {
   return JSON.stringify({ ...a, enabled: true }) === JSON.stringify({ ...b, enabled: true });
 }
 
-const TILE_MIN_WIDTH = 150;
-const TILE_HEIGHT = 108;
-const GAP = 12;
+const KEY_MIN_WIDTH = 104;
+const KEY_MIN_HEIGHT = 100;
+const KEY_MAX_HEIGHT = 190;
+const GAP = 8;
 
-function useGridSize() {
+/** Tasten füllen den Bereich: bis zu drei Reihen, Höhe nach Platz. */
+function useBankSize() {
   const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ cols: 4, rows: 3 });
+  const [size, setSize] = useState({ cols: 8, rows: 2, space: 240 });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
+      const rows = Math.min(3, Math.max(1, Math.floor((height + GAP) / (KEY_MIN_HEIGHT + GAP))));
       setSize({
-        cols: Math.max(1, Math.floor((width + GAP) / (TILE_MIN_WIDTH + GAP))),
-        rows: Math.max(1, Math.floor((height + GAP) / (TILE_HEIGHT + GAP))),
+        cols: Math.max(1, Math.floor((width + GAP) / (KEY_MIN_WIDTH + GAP))),
+        rows,
+        space: height,
       });
     });
     observer.observe(el);
@@ -43,59 +48,36 @@ function useGridSize() {
   return { ref, ...size };
 }
 
-function PresetTile({ preset, active, modified, onEdit }: { preset: Preset; active: boolean; modified: boolean; onEdit: () => void }) {
-  const toggle = () => void (active ? actions.presetOff() : actions.applyPreset(preset.id));
+/** Eine Preset-Taste: Leuchtstreifen, Symbol, Name, Hotkey. */
+function PresetKey({ preset, active, onEdit }: { preset: Preset; active: boolean; onEdit: () => void }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-pressed={active}
-      onClick={toggle}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        onEdit();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+    <div className="group relative h-full min-w-0">
+      <HardwareKey
+        on={active}
+        title={presetName(preset)}
+        className="size-full justify-between gap-1.5 px-2 pt-4 pb-2 [&_svg]:size-6"
+        onClick={() => void (active ? actions.presetOff() : actions.applyPreset(preset.id))}
+        onContextMenu={(e) => {
           e.preventDefault();
-          toggle();
-        }
-      }}
-      className={cn(
-        "group panel relative flex h-full cursor-default flex-col gap-2 overflow-hidden rounded-2xl p-3 text-left outline-none transition-transform duration-150 select-none",
-        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:scale-[0.98]",
-        active && "shadow-[inset_0_0_0_1.5px_var(--primary)]",
-      )}
-    >
-      <div
-        className={cn(
-          "flex size-10 items-center justify-center rounded-xl transition-colors [&_svg]:size-5",
-          active ? "bg-primary text-primary-foreground" : "well text-muted-foreground group-hover:text-foreground",
-        )}
+          onEdit();
+        }}
       >
-        <PresetIcon name={preset.icon} weight={active ? "fill" : "bold"} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm leading-tight font-semibold" title={presetName(preset)}>
-          {presetName(preset)}
-        </div>
-        {active && modified && <div className="mt-0.5 font-mono text-3xs text-muted-foreground">{t("voice.modified")}</div>}
-      </div>
-      {preset.hotkey && (
-        <div className="flex gap-1">
-          {hotkeyLabel(preset.hotkey, preset.hotkeyLabel).map((k, i) => (
-            <Kbd key={`${i}-${k}`}>{k}</Kbd>
-          ))}
-        </div>
-      )}
+        <PresetIcon name={preset.icon} weight={active ? "fill" : "bold"} className={cn(active && "text-[var(--ch-mic)]")} />
+        <span className="w-full truncate py-0.5 text-center text-[10px] leading-normal tracking-[0.08em]">{presetName(preset)}</span>
+        <span className="flex h-4 items-center gap-0.5 normal-case">
+          {preset.hotkey &&
+            hotkeyLabel(preset.hotkey, preset.hotkeyLabel).map((k, i) => (
+              <Kbd key={`${i}-${k}`} className="h-4 min-w-4 px-1 text-[9px]">
+                {k}
+              </Kbd>
+            ))}
+        </span>
+      </HardwareKey>
       <button
         type="button"
         title={t("voice.editPreset")}
-        onClick={(e: MouseEvent) => {
-          e.stopPropagation();
-          onEdit();
-        }}
-        className="absolute top-2 right-2 flex size-7 cursor-default items-center justify-center rounded-lg bg-panel-raised text-muted-foreground opacity-0 shadow-[0_0_0_1px_var(--hairline)] transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 hover:text-foreground [&_svg]:size-4"
+        onClick={onEdit}
+        className="absolute top-2 right-1.5 flex size-6 cursor-default items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground [&_svg]:size-3.5"
       >
         <PencilSimple />
       </button>
@@ -218,60 +200,81 @@ export function PresetEditor({ preset, onClose }: { preset: Preset; onClose: () 
   );
 }
 
-/** Alle Presets als Kacheln, seitenweise. Klick schaltet ein, nochmal aus. */
-export function PresetGrid({ onEdit }: { onEdit: (preset: Preset) => void }) {
+/**
+ * Presets als Tastenbank wie an einem Effektgerät: oben das Display mit dem
+ * laufenden Preset, darunter die Tasten, seitenweise in Bänken. Drücken
+ * schaltet ein, nochmal drücken aus.
+ */
+export function PresetBank({ onEdit }: { onEdit: (preset: Preset) => void }) {
   const presets = useStore((s) => s.presets);
   const active = useStore((s) => s.activePreset);
   const voice = useStore((s) => s.effects.voice);
-  const grid = useGridSize();
+  const bank = useBankSize();
   const [page, setPage] = useState(0);
-  const pageSize = grid.cols * grid.rows;
-  const pages = Math.max(1, Math.ceil(presets.length / pageSize));
-  const current = Math.min(page, pages - 1);
-  const shown = presets.slice(current * pageSize, (current + 1) * pageSize);
-  const turn = (delta: number) => setPage(Math.min(pages - 1, Math.max(0, current + delta)));
+  const perBank = bank.cols * bank.rows;
+  const banks = Math.max(1, Math.ceil(presets.length / perBank));
+  const current = Math.min(page, banks - 1);
+  const shown = presets.slice(current * perBank, (current + 1) * perBank);
+  // Die belegten Reihen teilen sich die Höhe.
+  const usedRows = Math.max(1, Math.min(bank.rows, Math.ceil(shown.length / bank.cols)));
+  const keyHeight = Math.min(KEY_MAX_HEIGHT, Math.floor((bank.space - GAP * (usedRows - 1)) / usedRows));
+  const turn = (delta: number) => setPage(Math.min(banks - 1, Math.max(0, current + delta)));
+  const running = presets.find((p) => p.id === active && voice.enabled);
+  const modified = running && !sameVoice(running.voice, voice);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div
-        ref={grid.ref}
-        onWheel={(e) => pages > 1 && Math.abs(e.deltaY) > 20 && turn(e.deltaY > 0 ? 1 : -1)}
-        className="min-h-0 flex-1 overflow-hidden pr-3 pl-6"
-      >
-        {presets.length === 0 ? (
-          <EmptyState icon={<PresetIcon name="microphone" weight="duotone" />} title={t("voice.emptyTitle")}>
-            {t("voice.emptyHint")}
-          </EmptyState>
-        ) : (
-          <div
-            className="grid"
-            style={{ gap: GAP, gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))`, gridAutoRows: TILE_HEIGHT }}
-          >
-            {shown.map((p) => (
-              <PresetTile
-                key={p.id}
-                preset={p}
-                active={voice.enabled && active === p.id}
-                modified={!sameVoice(p.voice, voice)}
-                onEdit={() => onEdit(p)}
-              />
-            ))}
+    <div className="flex min-h-0 flex-1 flex-col gap-3 pr-3 pb-3 pl-6">
+      <Card className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+        {/* Display */}
+        <div className="well flex h-16 shrink-0 items-center gap-4 rounded-xl px-5">
+          <div className="min-w-0 flex-1">
+            <Engraved>{t("voice.presets")}</Engraved>
+            <div className={cn("truncate font-mono text-xl font-semibold tracking-[0.12em] uppercase", running ? "text-[var(--ch-mic)]" : "text-muted-foreground")}>
+              {running ? presetName(running) : voice.enabled ? t("voice.custom") : t("voice.off")}
+              {modified && <span className="ml-3 text-xs tracking-normal text-muted-foreground normal-case">{t("voice.modified")}</span>}
+            </div>
           </div>
-        )}
-      </div>
-      <div className="flex h-12 shrink-0 items-center justify-center gap-3 pr-3 pl-6">
-        {pages > 1 && (
-          <>
+          {running?.hotkey && (
+            <div className="flex gap-1">
+              {hotkeyLabel(running.hotkey, running.hotkeyLabel).map((k, i) => (
+                <Kbd key={`${i}-${k}`}>{k}</Kbd>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon-sm" title={t("common.previousPage")} disabled={current === 0} onClick={() => turn(-1)}>
               <CaretLeft />
             </Button>
-            <span className="font-mono text-2xs text-muted-foreground tabular-nums">{t("common.page", { current: current + 1, pages })}</span>
-            <Button variant="ghost" size="icon-sm" title={t("common.nextPage")} disabled={current === pages - 1} onClick={() => turn(1)}>
+            <div className="w-16 text-center">
+              <Engraved>{t("voice.bank")}</Engraved>
+              <div className="font-mono text-sm tabular-nums">
+                {current + 1} / {banks}
+              </div>
+            </div>
+            <Button variant="ghost" size="icon-sm" title={t("common.nextPage")} disabled={current === banks - 1} onClick={() => turn(1)}>
               <CaretRight />
             </Button>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+
+        <div ref={bank.ref} onWheel={(e) => banks > 1 && Math.abs(e.deltaY) > 20 && turn(e.deltaY > 0 ? 1 : -1)} className="min-h-0 flex-1 overflow-hidden">
+          {presets.length === 0 ? (
+            <EmptyState icon={<PresetIcon name="microphone" weight="duotone" />} title={t("voice.emptyTitle")}>
+              {t("voice.emptyHint")}
+            </EmptyState>
+          ) : (
+            <div
+              key={current}
+              className="grid animate-[layout-in_260ms_var(--ease-drawer)]"
+              style={{ gap: GAP, gridTemplateColumns: `repeat(${bank.cols}, minmax(0, 1fr))`, gridAutoRows: keyHeight }}
+            >
+              {shown.map((p) => (
+                <PresetKey key={p.id} preset={p} active={voice.enabled && active === p.id} onEdit={() => onEdit(p)} />
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }

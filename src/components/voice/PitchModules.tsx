@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { GridLine, Module, PLOT, Reading, Tick, freqX } from "~/components/effects/rack";
+import { GridLine, Module, PLOT, Reading, Tick, Wide, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
-import { Knob, Lever, StepKnob } from "~/components/ui/knob";
+import { Caption, PushButton, PushButtons, SlideFader } from "~/components/ui/hardware";
+import { Knob, Needle } from "~/components/ui/knob";
 import type { Chord, Scale } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
+import { cn } from "~/lib/utils";
 import { inScale, keyName, noteName, noteOf } from "./icons";
 
 const signed = (v: number, digits = 0) => `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v).toFixed(digits)}`;
@@ -94,7 +96,6 @@ export function PitchModule() {
   return (
     <Module
       title={t("voice.pitch")}
-      columns={2}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("pitch", { enabled })}
       status={
@@ -227,6 +228,63 @@ function TuneDisplay({ keyNote, scale, enabled }: { keyNote: number; scale: Scal
 }
 
 const SCALES: Scale[] = ["chromatic", "major", "minor", "pentatonic", "blues"];
+const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);
+
+/**
+ * Grundton als Klaviatur: eine Oktave, die Tasten der gewählten Skala
+ * tragen einen Strich, der Grundton leuchtet.
+ */
+function Keyboard({
+  value,
+  keyNote,
+  scale,
+  disabled,
+  onChange,
+}: {
+  value: number;
+  keyNote: number;
+  scale: Scale;
+  disabled?: boolean;
+  onChange: (key: number) => void;
+}) {
+  const whites = [0, 2, 4, 5, 7, 9, 11];
+  // Schwarze Tasten sitzen zwischen den weißen; Position in Weiß-Breiten.
+  const blackAt: Record<number, number> = { 1: 1, 3: 2, 6: 4, 8: 5, 10: 6 };
+  const key = (n: number, black: boolean) => {
+    const on = n === value;
+    const inside = inScale(n, keyNote, scale);
+    return (
+      <button
+        key={n}
+        type="button"
+        title={keyName(n)}
+        aria-pressed={on}
+        disabled={disabled}
+        onClick={() => onChange(n)}
+        className={cn(
+          "flex cursor-default flex-col items-center justify-end pb-1 font-mono text-[9px] leading-none font-semibold transition-colors",
+          black
+            ? "absolute top-0 z-10 h-[58%] w-[9%] -translate-x-1/2 rounded-b-[4px] bg-[linear-gradient(to_bottom,oklch(30%_0.006_60),oklch(18%_0.006_60))] text-white/70 shadow-[0_2px_4px_oklch(0%_0_0/45%)]"
+            : "relative h-full flex-1 rounded-b-[5px] bg-[linear-gradient(to_bottom,oklch(97%_0.003_75),oklch(88%_0.006_75))] text-black/60 shadow-[0_0_0_1px_oklch(0%_0_0/18%),0_2px_3px_-1px_oklch(0%_0_0/30%)]",
+          on && "!bg-none !bg-[var(--ch-mic)] !text-black/80",
+        )}
+        style={black ? { left: `${(blackAt[n] / 7) * 100}%` } : undefined}
+      >
+        {inside && !on && <span className={cn("mb-1 h-[3px] w-2.5 rounded-full", black ? "bg-white/50" : "bg-black/35")} />}
+        {!black && keyName(n)}
+      </button>
+    );
+  };
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1", disabled && "opacity-45")}>
+      <div className="relative flex h-[76px] gap-px">
+        {whites.map((n) => key(n, false))}
+        {[...BLACK_KEYS].map((n) => key(n, true))}
+      </div>
+      <Caption label={t("voice.key")} />
+    </div>
+  );
+}
 
 export function AutotuneModule() {
   const p = useStore((s) => s.effects.voice.autotune);
@@ -235,7 +293,6 @@ export function AutotuneModule() {
   return (
     <Module
       title={t("voice.autotune")}
-      columns={3}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("autotune", { enabled })}
       status={
@@ -245,23 +302,26 @@ export function AutotuneModule() {
           </Reading>
         )
       }
-      display={<TuneDisplay keyNote={p.key} scale={p.scale} enabled={p.enabled} />}
+      display={
+        <div className="absolute inset-0 flex">
+          <div className="relative min-w-0 flex-[3]">
+            <TuneDisplay keyNote={p.key} scale={p.scale} enabled={p.enabled} />
+          </div>
+          <div className="relative min-w-0 flex-[2] border-l border-hairline">
+            <Needle
+              className="absolute inset-2"
+              value={0.5 + Math.max(-50, Math.min(50, p.enabled && target >= 0 ? cents : 0)) / 100}
+              label={target >= 0 && p.enabled ? noteName(target) : "CENT"}
+              scale={[-50, -25, 0, 25, 50].map((c) => [0.5 + c / 100, c > 0 ? `+${c}` : String(c)])}
+            />
+          </div>
+        </div>
+      }
     >
-      <StepKnob
-        label={t("voice.key")}
-        value={p.key}
-        disabled={!p.enabled}
-        onChange={(key) => actions.setVoice("autotune", { key })}
-        options={Array.from({ length: 12 }, (_, k) => ({ value: k, label: keyName(k) }))}
-      />
-      <StepKnob
-        label={t("voice.scale")}
-        value={p.scale}
-        disabled={!p.enabled}
-        onChange={(scale: Scale) => actions.setVoice("autotune", { scale })}
-        options={SCALES.map((s) => ({ value: s, label: t(`voice.scale.${s}`) }))}
-      />
-      <Knob
+      <Wide grow={4}>
+        <Keyboard value={p.key} keyNote={p.key} scale={p.scale} disabled={!p.enabled} onChange={(key) => actions.setVoice("autotune", { key })} />
+      </Wide>
+      <SlideFader
         label={t("voice.speed")}
         value={p.speed}
         min={0}
@@ -271,6 +331,15 @@ export function AutotuneModule() {
         format={(v) => (v < 0.05 ? t("voice.instant") : `${Math.round(v * v * 400)} ms`)}
         disabled={!p.enabled}
         onChange={(speed) => actions.setVoice("autotune", { speed })}
+      />
+      <PushButtons
+        label={t("voice.scale")}
+        value={p.scale}
+        columns={3}
+        className="w-40"
+        disabled={!p.enabled}
+        onChange={(scale: Scale) => actions.setVoice("autotune", { scale })}
+        options={SCALES.map((s) => ({ value: s, label: t(`voice.scaleShort.${s}`), title: t(`voice.scale.${s}`) }))}
       />
     </Module>
   );
@@ -321,7 +390,6 @@ export function HarmonizerModule() {
   return (
     <Module
       title={t("voice.harmonizer")}
-      columns={6}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("harmonizer", { enabled })}
       display={<HarmonyDisplay voices={p.voices} enabled={p.enabled} />}
@@ -330,13 +398,12 @@ export function HarmonizerModule() {
         const v = p.voices[i];
         const off = !p.enabled || !v.enabled;
         return [
-          <Lever
+          <PushButton
             key={`t${i}`}
-            label={t("voice.voiceN", { n: i + 1 })}
-            checked={v.enabled}
+            label={String(i + 1)}
+            caption={t("voice.voiceN", { n: i + 1 })}
+            on={v.enabled}
             disabled={!p.enabled}
-            on={t("voice.leverOn")}
-            off={t("voice.leverOff")}
             onChange={(enabled) => setVoice(i, { enabled })}
           />,
           <Knob
@@ -353,7 +420,7 @@ export function HarmonizerModule() {
             disabled={off}
             onChange={(semitones) => setVoice(i, { semitones })}
           />,
-          <Knob
+          <SlideFader
             key={`l${i}`}
             label={t("voice.level")}
             value={v.level}
@@ -383,7 +450,6 @@ export function VocoderModule() {
   return (
     <Module
       title={t("voice.vocoder")}
-      columns={5}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("vocoder", { enabled })}
       status={
@@ -407,19 +473,20 @@ export function VocoderModule() {
         </div>
       }
     >
-      <StepKnob
-        label={t("voice.chord")}
-        value={p.chord}
+      <Wide grow={3}>
+        <PushButtons
+          label={t("voice.chord")}
+          value={p.chord}
+          disabled={!p.enabled}
+          onChange={(chord: Chord) => actions.setVoice("vocoder", { chord })}
+          options={CHORDS.map((c) => ({ value: c, label: t(`voice.chordShort.${c}`), title: t(`voice.chord.${c}`) }))}
+        />
+      </Wide>
+      <PushButton
+        label={t("voice.followShort")}
+        caption={t("voice.follow")}
+        on={p.follow}
         disabled={!p.enabled}
-        onChange={(chord: Chord) => actions.setVoice("vocoder", { chord })}
-        options={CHORDS.map((c) => ({ value: c, label: t(`voice.chord.${c}`) }))}
-      />
-      <Lever
-        label={t("voice.follow")}
-        checked={p.follow}
-        disabled={!p.enabled}
-        on={t("voice.leverOn")}
-        off={t("voice.leverOff")}
         onChange={(follow) => actions.setVoice("vocoder", { follow })}
       />
       <Knob
@@ -444,7 +511,7 @@ export function VocoderModule() {
         disabled={!p.enabled}
         onChange={(breath) => actions.setVoice("vocoder", { breath })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.mix")}
         value={p.mix}
         min={0}

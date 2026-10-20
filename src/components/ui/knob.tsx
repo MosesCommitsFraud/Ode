@@ -1,11 +1,12 @@
-import { useId, useRef, type KeyboardEvent, type PointerEvent, type ReactNode, type WheelEvent } from "react";
-import { Switch } from "~/components/ui/misc";
+import { useId, useRef, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import { Caption } from "~/components/ui/hardware";
 import { cn } from "~/lib/utils";
 
 /*
- * Analoge Bedienelemente: Drehregler, Stufenschalter, Kippschalter und ein
- * Zeigerinstrument. Drehregler reagieren auf Ziehen (hoch/rechts = mehr,
- * Shift = fein), Mausrad, Pfeiltasten und Doppelklick (zurücksetzen).
+ * Analoge Bedienelemente: Drehregler und Zeigerinstrument (VU-Nadel).
+ * Drehregler reagieren auf Ziehen (hoch/rechts = mehr, Shift = fein),
+ * Mausrad, Pfeiltasten und Doppelklick (zurücksetzen). Fader, Tasten und
+ * Kippschalter liegen in hardware.tsx.
  */
 
 /** Drehweg: 270°, von links unten nach rechts unten. */
@@ -163,87 +164,9 @@ export function Knob({
           <line x1={cx} y1={cy} x2={px} y2={py} stroke="var(--foreground)" strokeWidth="4.5" strokeLinecap="round" />
         </svg>
       </div>
-      <div className="w-full min-w-0 text-center leading-tight">
-        <div className="truncate text-2xs text-muted-foreground" title={label}>
-          {label}
-        </div>
-        <div className="truncate font-mono text-2xs tabular-nums">{format(value)}</div>
-      </div>
+      <Caption label={label} value={format(value)} />
     </div>
   );
-}
-
-/** Wahlschalter mit Rastpunkten für eine feste Auswahl. */
-export function StepKnob<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-  disabled,
-  color,
-  size,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-  disabled?: boolean;
-  color?: string;
-  size?: "sm" | "md";
-}) {
-  const index = Math.max(0, options.findIndex((o) => o.value === value));
-  return (
-    <Knob
-      label={label}
-      value={index}
-      min={0}
-      max={options.length - 1}
-      step={1}
-      ticks={options.length}
-      reset={0}
-      disabled={disabled}
-      color={color}
-      size={size}
-      format={(i) => options[Math.round(i)]?.label ?? ""}
-      onChange={(i) => onChange(options[Math.round(i)].value)}
-    />
-  );
-}
-
-/** Kippschalter im Raster der Drehregler: Schalter oben, Beschriftung darunter. */
-export function Lever({
-  label,
-  checked,
-  onChange,
-  disabled,
-  on = "An",
-  off = "Aus",
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (on: boolean) => void;
-  disabled?: boolean;
-  on?: string;
-  off?: string;
-}) {
-  return (
-    <div className={cn("flex min-w-0 flex-col items-center gap-1", disabled && "opacity-45")}>
-      <div className="flex size-12 items-center justify-center">
-        <Switch label={label} checked={checked} disabled={disabled} onCheckedChange={onChange} />
-      </div>
-      <div className="w-full min-w-0 text-center leading-tight">
-        <div className="truncate text-2xs text-muted-foreground" title={label}>
-          {label}
-        </div>
-        <div className="truncate font-mono text-2xs">{checked ? on : off}</div>
-      </div>
-    </div>
-  );
-}
-
-/** Reihe von Reglern, gleichmäßig verteilt. */
-export function KnobRow({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex items-start justify-around gap-2 [&>*]:min-w-0 [&>*]:flex-1", className)}>{children}</div>;
 }
 
 /**
@@ -254,6 +177,7 @@ export function Needle({
   value,
   scale,
   danger,
+  marker,
   label,
   className,
 }: {
@@ -261,6 +185,8 @@ export function Needle({
   /** Beschriftungen an Positionen 0–1. */
   scale: [number, string][];
   danger?: number;
+  /** Markierung auf der Skala (0–1), z. B. eine Schwelle. */
+  marker?: number;
   label?: string;
   className?: string;
 }) {
@@ -295,6 +221,12 @@ export function Needle({
             </g>
           );
         })}
+        {marker !== undefined &&
+          (() => {
+            const [x1, y1] = point(angleOf(marker), 44);
+            const [x2, y2] = point(angleOf(marker), 53);
+            return <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--ch-mic)" strokeWidth="1.6" strokeLinecap="round" />;
+          })()}
         {label && (
           <text x="50" y="44" textAnchor="middle" fontSize="4.5" fill="var(--muted-foreground)" fontFamily="var(--font-mono)" letterSpacing=".6">
             {label}

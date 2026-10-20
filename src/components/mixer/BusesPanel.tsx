@@ -1,7 +1,7 @@
 import { EchoDisplay, EqDisplay, Module, ReverbDisplay } from "~/components/effects/rack";
+import { SlideFader } from "~/components/ui/hardware";
 import { Knob } from "~/components/ui/knob";
 import { EchoControls, ReverbControls } from "~/components/voice/SoundModules";
-import { SectionLabel } from "~/components/ui/misc";
 import type { ChannelId } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -10,11 +10,11 @@ import { formatDb } from "~/lib/utils";
 /* Effekt-Busse: ein gemeinsamer Hall und ein Echo, auf die jeder Kanal mit
    eigenem Send schickt, dazu ein Klang-EQ für Soundboard, Musik und Live. */
 
-const CHANNELS: { id: ChannelId; name: () => string; color: string }[] = [
-  { id: "mic", name: () => t("mixer.microphone"), color: "var(--ch-mic)" },
-  { id: "soundboard", name: () => t("mixer.soundboard"), color: "var(--ch-soundboard)" },
-  { id: "music", name: () => t("mixer.music"), color: "var(--ch-music)" },
-  { id: "live", name: () => t("mixer.live"), color: "var(--ch-live)" },
+const CHANNELS: { id: ChannelId; name: () => string; short: () => string; color: string }[] = [
+  { id: "mic", name: () => t("mixer.microphone"), short: () => t("mixer.shortMic"), color: "var(--ch-mic)" },
+  { id: "soundboard", name: () => t("mixer.soundboard"), short: () => t("mixer.shortSoundboard"), color: "var(--ch-soundboard)" },
+  { id: "music", name: () => t("mixer.music"), short: () => t("mixer.shortMusic"), color: "var(--ch-music)" },
+  { id: "live", name: () => t("mixer.live"), short: () => t("mixer.shortLive"), color: "var(--ch-live)" },
 ];
 
 const percent = (v: number) => `${Math.round(v * 100)} %`;
@@ -22,13 +22,11 @@ const percent = (v: number) => `${Math.round(v * 100)} %`;
 function Sends({ bus, disabled }: { bus: "reverbSend" | "echoSend"; disabled: boolean }) {
   const channels = useStore((s) => s.buses.channels);
   return (
-    <>
-      <SectionLabel className="col-span-full -mb-1">{t("mixer.sendTo")}</SectionLabel>
+    <div className="flex items-end gap-2 border-l border-hairline pl-3 [&>*]:min-w-0" title={t("mixer.sendTo")}>
       {CHANNELS.map((c) => (
-        <Knob
+        <SlideFader
           key={c.id}
-          size="sm"
-          label={c.name()}
+          label={c.short()}
           value={channels[c.id][bus]}
           min={0}
           max={1}
@@ -39,7 +37,7 @@ function Sends({ bus, disabled }: { bus: "reverbSend" | "echoSend"; disabled: bo
           onChange={(v) => actions.setChannelFx(c.id, { [bus]: v })}
         />
       ))}
-    </>
+    </div>
   );
 }
 
@@ -49,7 +47,6 @@ function ReverbBus() {
     <Module
       className="col-span-3"
       title={t("mixer.reverbBus")}
-      columns={5}
       accent="var(--ch-out)"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setBus("reverb", { enabled })}
@@ -62,9 +59,7 @@ function ReverbBus() {
         color="var(--ch-out)"
         onChange={(patch) => actions.setBus("reverb", patch)}
       />
-      <div className="col-span-full grid grid-cols-4 gap-x-3 gap-y-2.5">
-        <Sends bus="reverbSend" disabled={!p.enabled} />
-      </div>
+      <Sends bus="reverbSend" disabled={!p.enabled} />
     </Module>
   );
 }
@@ -75,7 +70,6 @@ function EchoBus() {
     <Module
       className="col-span-3"
       title={t("mixer.echoBus")}
-      columns={4}
       accent="var(--ch-out)"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setBus("echo", { enabled })}
@@ -101,7 +95,6 @@ function ChannelTone({ id }: { id: ChannelId }) {
     <Module
       className="col-span-2"
       title={`${channel.name()} · ${t("mixer.tone")}`}
-      columns={5}
       accent={channel.color}
       enabled={fx.eqEnabled}
       onToggle={(eqEnabled) => actions.setChannelFx(id, { eqEnabled })}

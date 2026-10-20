@@ -40,6 +40,10 @@ export default {
     lowCut: "Low-Cut",
     highCut: "High-Cut",
     cutOff: "aus",
+    shortMic: "Mic",
+    shortSoundboard: "Board",
+    shortMusic: "Musik",
+    shortLive: "Live",
   },
   en: {
     microphone: "Microphone",
@@ -81,5 +85,9 @@ export default {
     lowCut: "Low cut",
     highCut: "High cut",
     cutOff: "off",
+    shortMic: "Mic",
+    shortSoundboard: "Board",
+    shortMusic: "Music",
+    shortLive: "Live",
   },
 };

@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
-import { Badge, Card, Switch } from "~/components/ui/misc";
+import { PowerSwitch } from "~/components/ui/hardware";
+import { Badge, Card } from "~/components/ui/misc";
 import { cn } from "~/lib/utils";
 
 /* Bausteine der Effekt-Seiten: Module als Karten mit Anzeige und Reglern. */
 
 /**
- * Ein Effekt als Karte: Kopf mit Schalter, große Anzeige, Regler darunter.
- * `columns` legt die Regler in ein Raster, sonst stehen sie untereinander.
+ * Ein Effekt als Rack-Gerät: Kippschalter mit Kontrolllampe, Anzeigefenster,
+ * darunter die Bedienelemente nebeneinander, unten bündig (Drehregler,
+ * Fader, Tasten).
  */
 export function Module({
   title,
@@ -15,9 +17,9 @@ export function Module({
   status,
   display,
   className,
-  columns,
   children,
   accent,
+  side,
 }: {
   title: string;
   enabled: boolean;
@@ -25,33 +27,59 @@ export function Module({
   status?: ReactNode;
   display: ReactNode;
   className?: string;
-  columns?: number;
   children?: ReactNode;
   /** Farbe für Anzeige und Regler, z. B. die Kanalfarbe. */
   accent?: string;
+  /**
+   * Bedienung rechts neben der Anzeige statt darunter (für Zeigerinstrumente).
+   * `"wide"`: nur wenn die Karte breit genug ist, sonst darunter.
+   */
+  side?: boolean | "wide";
 }) {
   return (
     <Card
-      className={cn("flex min-h-0 min-w-0 flex-col gap-3 p-4", className)}
+      className={cn("@container flex min-h-0 min-w-0 flex-col gap-3 p-4 pt-3", className)}
       style={accent ? ({ "--ch-mic": accent } as React.CSSProperties) : undefined}
     >
-      <div className="flex h-7 items-center gap-3">
-        <Switch label={title} checked={enabled} onCheckedChange={onToggle} />
+      <div className="flex h-7 items-center gap-2.5">
+        <PowerSwitch label={title} on={enabled} onChange={onToggle} />
         <h3 className="min-w-0 flex-1 truncate font-display text-base font-semibold tracking-tight">{title}</h3>
         {status}
       </div>
-      <div className={cn("well relative min-h-0 flex-1 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
-        {display}
-      </div>
-      {children && (
-        <div
-          className={columns ? "grid gap-x-3 gap-y-2.5" : "space-y-2.5"}
-          style={columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}
-        >
-          {children}
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 gap-4",
+          side === true ? "flex-row items-stretch" : side === "wide" ? "flex-col @[30rem]:flex-row @[30rem]:items-stretch" : "flex-col",
+        )}
+      >
+        <div className={cn("well relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
+          {display}
         </div>
-      )}
+        {children && (
+          <div
+            className={cn(
+              "flex items-end gap-3 [&>*]:min-w-0",
+              side === true
+                ? "shrink-0 justify-center self-end"
+                : side === "wide"
+                  ? "justify-around @[30rem]:shrink-0 @[30rem]:justify-center @[30rem]:self-end"
+                  : "justify-around",
+            )}
+          >
+            {children}
+          </div>
+        )}
+      </div>
     </Card>
+  );
+}
+
+/** Gruppe in der Reglerzeile, z. B. Tasten, die mehr Breite brauchen. */
+export function Wide({ children, grow = 2 }: { children: ReactNode; grow?: number }) {
+  return (
+    <div className="min-w-0" style={{ flex: `${grow} 1 0` }}>
+      {children}
+    </div>
   );
 }
 

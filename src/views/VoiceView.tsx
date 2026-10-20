@@ -4,7 +4,7 @@ import { PageBar } from "~/components/effects/rack";
 import { Badge, Switch } from "~/components/ui/misc";
 import { ActionGroup, ActionPill, Pill, PillGroup } from "~/components/ui/pills";
 import { AutotuneModule, HarmonizerModule, PitchModule, VocoderModule } from "~/components/voice/PitchModules";
-import { PresetEditor, PresetGrid, presetName, sameVoice } from "~/components/voice/Presets";
+import { PresetBank, PresetEditor, presetName, sameVoice } from "~/components/voice/Presets";
 import { CharacterModule, EchoModule, ModulationModule, ReverbModule } from "~/components/voice/SoundModules";
 import type { Preset } from "~/lib/engine";
 import { t } from "~/lib/i18n";
@@ -129,7 +129,7 @@ export function VoiceView() {
       )}
 
       {page === "presets" ? (
-        <PresetGrid onEdit={setEditing} />
+        <PresetBank onEdit={setEditing} />
       ) : (
         <div
           key={page}
