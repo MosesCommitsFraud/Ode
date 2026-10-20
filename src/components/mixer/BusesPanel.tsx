@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Bench, DeviceGrid, Divider, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
-import { Knob } from "~/components/ui/knob";
+import { Bench, DeviceGrid, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
+import { Knob, parseNumber } from "~/components/ui/knob";
 import { EchoControls, ReverbControls } from "~/components/voice/SoundModules";
 import type { ChannelId } from "~/lib/engine";
 import { t } from "~/lib/i18n";
@@ -55,7 +55,6 @@ function ReverbBus({ highlight }: { highlight: boolean }) {
       display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} color="var(--ch-out)" />}
     >
       <ReverbControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("reverb", patch)} />
-      <Divider />
       <Sends bus="reverbSend" />
     </Module>
   );
@@ -73,7 +72,6 @@ function EchoBus({ highlight }: { highlight: boolean }) {
       display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.3, p.mix)} color="var(--ch-out)" />}
     >
       <EchoControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("echo", patch)} />
-      <Divider />
       <Sends bus="echoSend" />
     </Module>
   );
@@ -120,6 +118,10 @@ function ChannelTone({ id, highlight }: { id: ChannelId; highlight: boolean }) {
           size="sm"
           label={t("mixer.highCut")}
           value={Math.log2(fx.highCutHz)}
+          parse={(text) => {
+            const hz = parseNumber(text, /k/i.test(text) ? "kHz" : "Hz");
+            return hz && hz > 0 ? Math.log2(hz) : null;
+          }}
           min={Math.log2(1000)}
           max={Math.log2(20000)}
           step={0.01}
@@ -132,6 +134,10 @@ function ChannelTone({ id, highlight }: { id: ChannelId; highlight: boolean }) {
           size="sm"
           label={t("mixer.lowCut")}
           value={Math.log2(fx.lowCutHz)}
+          parse={(text) => {
+            const hz = parseNumber(text, /k/i.test(text) ? "kHz" : "Hz");
+            return hz && hz > 0 ? Math.log2(hz) : null;
+          }}
           min={Math.log2(20)}
           max={Math.log2(1000)}
           step={0.01}
@@ -209,12 +215,12 @@ export function BusesPanel() {
       ]}
     >
       {state.group === "buses" ? (
-        <DeviceGrid count={2}>
+        <DeviceGrid cols={2} rows={1}>
           <ReverbBus highlight={flash === "reverb"} />
           <EchoBus highlight={flash === "echo"} />
         </DeviceGrid>
       ) : (
-        <DeviceGrid count={3}>
+        <DeviceGrid cols={3} rows={1}>
           {(["soundboard", "music", "live"] as const).map((id) => (
             <ChannelTone key={id} id={id} highlight={flash === id} />
           ))}

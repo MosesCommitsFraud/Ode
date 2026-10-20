@@ -35,7 +35,7 @@ export default {
     emptyHint: "Stell unter Tonhöhe und Klang etwas ein und speichere es als Preset.",
     included: "Mitgeliefert",
     // Tonhöhe
-    pitch: "Tonhöhe & Formant",
+    pitch: "Tonhöhe",
     semitones: "Halbtöne",
     formant: "Formant",
     autotune: "Autotune",
@@ -162,7 +162,7 @@ export default {
     emptyTitle: "No presets yet",
     emptyHint: "Dial something in under Pitch and Sound, then save it as a preset.",
     included: "Included",
-    pitch: "Pitch & formant",
+    pitch: "Pitch",
     semitones: "Semitones",
     formant: "Formant",
     autotune: "Autotune",

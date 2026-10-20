@@ -2,15 +2,17 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Toggle } from "~/components/ui/hardware";
 import { HelpIcon } from "./HelpDrawer";
 import { t } from "~/lib/i18n";
-import { cn } from "~/lib/utils";
+import { cn, formatDb } from "~/lib/utils";
 
 /* Bausteine der Effekt-Seiten: Module als Karten mit Anzeige und Reglern. */
 
 /**
- * Ein Effekt als Gerät: Name mit Schalter rechts, eine Anzeige, in der sich
- * oft direkt ziehen lässt, und die Regler. Ist das Gerät breit und flach,
- * stehen die Regler neben der Anzeige, sonst darunter. Aus ist es blass und
- * grau, an trägt es seine Farbe.
+ * Ein Effekt als Gerät: Name mit Schalter rechts, darunter die Regler. Geräte,
+ * bei denen ein Bild hilft (EQ, Kompressor, Gate …), haben eine Anzeige, in
+ * der sich oft direkt ziehen lässt; ist das Gerät breit und flach, stehen die
+ * Regler daneben. Kompakte Geräte zeigen nur Regler, höchstens ein schmales
+ * Meter (`meter`) oder eine Lampe am Titel (`indicator`). Aus ist das Gerät
+ * blass und grau, an trägt es seine Farbe.
  */
 export function Module({
   title,
@@ -22,12 +24,17 @@ export function Module({
   accent,
   help,
   keys,
+  meter,
+  indicator,
   highlight,
+  stacked,
 }: {
   title: string;
   enabled: boolean;
   onToggle: (on: boolean) => void;
-  display: ReactNode;
+  /** Große Anzeige; ohne ist das Gerät kompakt. */
+  display?: ReactNode;
+  /** Platz im Raster, z. B. `col-span-2 row-span-2`. */
   className?: string;
   /** Regler. */
   children?: ReactNode;
@@ -37,11 +44,23 @@ export function Module({
   help?: string;
   /** Wahltasten, z. B. Modus oder Tonart. */
   keys?: ReactNode;
+  /** Schmales Meter rechts neben den Reglern, z. B. die Absenkung. */
+  meter?: ReactNode;
+  /** Kleine Anzeige am Titel, z. B. eine Lampe für erkannte Sprache. */
+  indicator?: ReactNode;
   /** Kurz hervorheben, z. B. wenn es in der Liste gewählt wurde. */
   highlight?: boolean;
+  /** Regler immer unter der Anzeige, z. B. wenn die Anzeige ihre Breite braucht. */
+  stacked?: boolean;
 }) {
   // Ohne eigene Farbe bleibt --ch-mic geerbt; sich selbst zuweisen wäre ungültig.
   const style: Record<string, string> = accent ? { "--ch-mic": accent, "--ch": accent } : { "--ch": "var(--ch-mic)" };
+  const controls = (keys || children) && (
+    <div className="device-controls flex min-w-0 flex-1 flex-col justify-center gap-3">
+      {keys && <div className="flex flex-col gap-2">{keys}</div>}
+      {children && <div className="flex flex-wrap items-start justify-center gap-x-1 gap-y-2">{children}</div>}
+    </div>
+  );
   return (
     <section
       style={style}
@@ -56,22 +75,70 @@ export function Module({
           {title}
         </h3>
         {help && <HelpIcon topic={help} />}
+        {indicator}
         <div className="flex-1" />
         <Toggle label={title} on={enabled} onChange={onToggle} />
       </div>
-      <div className={cn("device-body min-h-0 flex-1 transition-[opacity,filter] duration-300", !enabled && "opacity-50 grayscale")}>
-        <div className="device-layout flex size-full flex-col gap-3">
-          {/* Mulde: Rundung der Karte (16) minus Innenabstand, damit beide konzentrisch wirken. */}
-          <div className="well relative min-h-[72px] min-w-0 flex-1 overflow-hidden rounded-[10px]">{display}</div>
-          {(keys || children) && (
-            <div className="device-controls flex shrink-0 flex-col justify-center gap-3">
+      <div className={cn("min-h-0 flex-1 transition-[opacity,filter] duration-300", display && !stacked && "device-body", !enabled && "opacity-50 grayscale")}>
+        {display ? (
+          <div className="device-layout flex size-full flex-col gap-3">
+            {/* Mulde: Rundung der Karte (16) minus Innenabstand, damit beide konzentrisch wirken. */}
+            <div className="well relative min-h-[72px] min-w-0 flex-1 overflow-hidden rounded-[10px]">{display}</div>
+            {(controls || meter) && (
+              <div className="flex min-h-0 w-full shrink-0 items-stretch gap-3">
+                {controls}
+                {meter}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex size-full items-stretch justify-center gap-3">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-3">
               {keys && <div className="flex flex-col gap-2">{keys}</div>}
-              {children && <div className="flex flex-wrap items-start justify-center gap-x-2 gap-y-2">{children}</div>}
+              {children && <div className="flex flex-wrap content-center items-start justify-center gap-x-1 gap-y-2">{children}</div>}
             </div>
-          )}
-        </div>
+            {meter}
+          </div>
+        )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Absenkung als schmales senkrechtes Meter mit dB-Skala: wächst von oben,
+ * je stärker das Gerät gerade eingreift.
+ */
+export function ReductionMeter({ db, max, label }: { db: number; max: number; label: string }) {
+  const ticks = [0, -Math.round(max / 2), -max];
+  return (
+    <div title={label} aria-label={label} className="flex shrink-0 flex-col items-center gap-1 py-1">
+      <div className="flex min-h-16 flex-1 gap-1">
+        <div className="relative w-6 font-mono text-[9px] text-muted-foreground tabular-nums">
+          {ticks.map((v) => (
+            <span key={v} className="absolute right-0 -translate-y-1/2" style={{ top: `${(-v / max) * 100}%` }}>
+              {v}
+            </span>
+          ))}
+        </div>
+        <div className="relative w-2 overflow-hidden rounded-full bg-[var(--meter-track)]">
+          <div
+            className="absolute inset-x-0 top-0 rounded-full bg-[var(--ch-mic)] transition-[height] duration-100"
+            style={{ height: `${Math.min(1, Math.max(0, -db / max)) * 100}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Lampe, die leuchtet, solange etwas zutrifft (z. B. Sprache erkannt). */
+export function Lamp({ on, label }: { on: boolean; label: string }) {
+  return (
+    <span title={label} className="flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[11px] text-muted-foreground">
+      <span className={cn("size-2 rounded-full transition-colors duration-150", on ? "bg-[var(--success)]" : "bg-[var(--led-off)] shadow-[inset_0_1px_1px_oklch(0%_0_0/25%)]")} />
+      {label}
+    </span>
   );
 }
 
@@ -182,16 +249,12 @@ export function Bench({
   );
 }
 
-/** Geräte einer Gruppe im Raster: zwei → nebeneinander, drei → drei Spalten, vier → 2 × 2 (oder `columns`). */
-export function DeviceGrid({ children, count, columns }: { children: ReactNode; count: number; columns?: number }) {
-  const cols = columns ?? (count === 4 ? 2 : count);
+/** Geräte einer Gruppe im Raster; Platzierung über `className` der Geräte (z. B. `col-span-2`). */
+export function DeviceGrid({ children, cols, rows }: { children: ReactNode; cols: number; rows: number }) {
   return (
     <div
       className="grid min-h-0 min-w-0 flex-1 gap-3"
-      style={{
-        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${Math.ceil(count / cols)}, minmax(0, 1fr))`,
-      }}
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
     >
       {children}
     </div>
@@ -445,9 +508,9 @@ export function EqDisplay({
       </div>
       <YAxis ticks={EQ_DB_TICKS.map((v) => [dy(v), v > 0 ? `+${v}` : String(v)])} />
       <div className="pointer-events-none absolute right-3 bottom-0 left-10 h-6">
-        {EQ_BANDS.map(([f, label]) => (
+        {EQ_BANDS.map(([f, label], i) => (
           <Tick key={f} axis="x" at={freqX(f)}>
-            {t(label)}
+            {t(label)} {formatDb([low, mid, high][i])}
           </Tick>
         ))}
       </div>

@@ -1,5 +1,6 @@
-import { useRef, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
-import { Caption } from "~/components/ui/hardware";
+import { useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import { Engraved } from "~/components/ui/hardware";
+import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
 
 /*
@@ -45,6 +46,22 @@ export interface KnobProps {
   /** Früher Skalenstriche; der flache Regler zeigt keine. */
   ticks?: number;
   size?: "sm" | "md" | "lg";
+  /** Getippten Wert lesen; ohne liest `parseNumber` anhand der Einheit in `format`. */
+  parse?: (text: string) => number | null;
+}
+
+/**
+ * Zahl aus getipptem Text, passend zur Einheit der Anzeige (`sample`):
+ * „6k“ oder „6“ bei kHz → 6000, „50“ bei % → 0,5; Komma und Minuszeichen
+ * werden verstanden.
+ */
+export function parseNumber(text: string, sample: string): number | null {
+  const clean = text.trim().toLowerCase().replace(",", ".").replace("−", "-");
+  let n = parseFloat(clean.replace(/^\+/, ""));
+  if (Number.isNaN(n)) return null;
+  if (/\d\s*k/.test(clean) || (sample.includes("kHz") && Math.abs(n) < 100)) n *= 1000;
+  if (sample.includes("%")) n /= 100;
+  return n;
 }
 
 export function Knob({
@@ -60,7 +77,10 @@ export function Knob({
   color = "var(--ch-mic)",
   bipolar,
   size = "md",
+  parse,
 }: KnobProps) {
+  const [editing, setEditing] = useState(false);
+  const [dragging, setDragging] = useState(false);
   // Bipolare Regler ruhen in der Mitte, alle anderen am Anfang.
   const reset = resetValue ?? (bipolar ? (min + max) / 2 : min);
   const drag = useRef<{ y: number; x: number; value: number } | null>(null);
@@ -77,9 +97,15 @@ export function Knob({
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (disabled || e.button !== 0) return;
+    // Strg-, Cmd- oder Alt-Klick setzt zurück, wie in den meisten Plugins.
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      set(reset);
+      return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus();
     drag.current = { y: e.clientY, x: e.clientX, value };
+    setDragging(true);
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
@@ -90,6 +116,12 @@ export function Knob({
   };
   const onPointerUp = () => {
     drag.current = null;
+    setDragging(false);
+  };
+  const commit = (text: string) => {
+    setEditing(false);
+    const next = parse ? parse(text) : parseNumber(text, format(value));
+    if (next !== null && Number.isFinite(next)) set(next);
   };
   const onWheel = (e: WheelEvent) => {
     if (disabled) return;
@@ -119,7 +151,7 @@ export function Knob({
 
   return (
     // Feste Breite: wechselnde Werte unter dem Regler verschieben nichts daneben.
-    <div className={cn("flex shrink-0 flex-col items-center gap-1 select-none", size === "sm" ? "w-16" : size === "lg" ? "w-24" : "w-20", disabled && "opacity-45")}>
+    <div className={cn("relative flex shrink-0 flex-col items-center gap-1 select-none", size === "sm" ? "w-16" : size === "lg" ? "w-24" : "w-20", disabled && "opacity-45")}>
       <div
         role="slider"
         tabIndex={disabled ? -1 : 0}
@@ -156,7 +188,39 @@ export function Knob({
           <line x1={cx} y1={cy} x2={px} y2={py} stroke="var(--foreground)" strokeWidth="5" strokeLinecap="round" />
         </svg>
       </div>
-      <Caption label={label} value={format(value)} />
+      {/* Beim Ziehen steht der Wert groß über dem Regler. */}
+      {dragging && (
+        <span className="pointer-events-none absolute -top-7 left-1/2 z-20 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 font-mono text-[11px] whitespace-nowrap text-background tabular-nums shadow-md">
+          {format(value)}
+        </span>
+      )}
+      <div className="w-full min-w-0 text-center">
+        <Engraved>{label}</Engraved>
+        {editing ? (
+          <input
+            autoFocus
+            defaultValue={format(value)}
+            aria-label={label}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={(e) => commit(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            className="h-[15px] w-full rounded-[4px] bg-panel-raised text-center font-mono text-2xs leading-tight tabular-nums shadow-[0_0_0_1px_var(--ch-mic)] outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            title={t("common.typeValue")}
+            disabled={disabled}
+            onClick={() => setEditing(true)}
+            className="block w-full cursor-text truncate rounded-[4px] font-mono text-2xs leading-tight tabular-nums hover:bg-accent"
+          >
+            {format(value)}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

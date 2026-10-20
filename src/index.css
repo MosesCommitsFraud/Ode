@@ -258,8 +258,8 @@
   .device-layout {
     flex-direction: row;
   }
-  .device-controls {
-    width: min(42%, 260px);
+  .device-layout > :last-child {
+    max-width: min(46%, 300px);
   }
 }
 

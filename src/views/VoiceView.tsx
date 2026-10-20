@@ -47,7 +47,18 @@ function readOpen(): { group: GroupId; device?: string } {
   }
 }
 
-const MODULES: Record<DeviceId, (props: { highlight?: boolean }) => React.ReactNode> = {
+const PLACE: Record<DeviceId, string> = {
+  autotune: "col-start-1 row-start-1 row-span-2",
+  pitch: "col-start-2 row-start-1",
+  harmonizer: "col-start-3 row-start-1",
+  vocoder: "col-start-2 col-span-2 row-start-2",
+  reverb: "col-start-1 row-start-1 row-span-2",
+  character: "col-start-2 row-start-1",
+  modulation: "col-start-3 row-start-1",
+  echo: "col-start-2 col-span-2 row-start-2",
+};
+
+const MODULES: Record<DeviceId, (props: { highlight?: boolean; className?: string }) => React.ReactNode> = {
   pitch: PitchModule,
   autotune: AutotuneModule,
   harmonizer: HarmonizerModule,
@@ -131,11 +142,11 @@ export function VoiceView() {
           { id: "sound", title: t("voice.soundPage"), devices: GROUPS.sound.map(device) },
         ]}
       >
-        {/* Unter der Preset-Leiste ist es flach: vier Geräte nebeneinander statt 2 × 2. */}
-        <DeviceGrid count={4} columns={4}>
+        {/* Je Gruppe ein Gerät mit Anzeige hoch links, die kompakten daneben. */}
+        <DeviceGrid cols={3} rows={2}>
           {GROUPS[state.group].map((id) => {
             const Device = MODULES[id];
-            return <Device key={id} highlight={flash === id} />;
+            return <Device key={id} highlight={flash === id} className={PLACE[id]} />;
           })}
         </DeviceGrid>
       </Bench>
