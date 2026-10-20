@@ -1,13 +1,14 @@
 //! Engine-Thread: besitzt die Geräte-Streams und wird nur über Befehle
 //! gesteuert. Mikrofon → Kanal-Fader → je ein Puffer pro Ausgang; dort
 //! kommen Soundboard-Sounds dazu → Routing, Ausgangs-Fader, Limiter →
-//! Kopfhörer (A) und Kabel (B).
+//! Kopfhörer (A) und Kabel (B). Dazu der Mitschnitt des Lautsprechers als
+//! Referenz für die Echo-Entfernung.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::thread;
 
-use cpal::traits::{DeviceTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{
     BufferSize, Device, FromSample, Host, Sample, SampleFormat, SizedSample, Stream, StreamConfig,
     SupportedStreamConfig,
@@ -63,6 +64,8 @@ pub struct EngineInfo {
     pub input: StreamInfo,
     pub monitor: Option<StreamInfo>,
     pub cable: Option<StreamInfo>,
+    /// Lautsprecher, dessen Ton die Echo-Entfernung abzieht.
+    pub echo_reference: Option<StreamInfo>,
 }
 
 enum Command {
@@ -334,9 +337,22 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
 
     *shared.live_producers.lock() = live_producers;
 
+    let (echo_reference, echo_info) = match build_echo_reference(host, config) {
+        Some((stream, info, consumer)) => {
+            streams.push(stream);
+            (Some(consumer), Some(info))
+        }
+        None => (None, None),
+    };
+
     let input_device = devices::find(host, &config.input_id)?;
-    let (input_stream, input) =
-        build_input(&input_device, mixer.clone(), errors.clone(), producers)?;
+    let (input_stream, input) = build_input(
+        &input_device,
+        mixer.clone(),
+        errors.clone(),
+        producers,
+        echo_reference,
+    )?;
     streams.push(input_stream);
 
     // Mikrofon zuerst starten, damit die Ausgänge nicht leer anlaufen.
@@ -350,6 +366,7 @@ fn start(host: &Host, config: &EngineConfig, shared: &Shared) -> anyhow::Result<
             input,
             monitor,
             cable,
+            echo_reference: echo_info,
         },
         samplers,
         preview,
@@ -490,6 +507,7 @@ fn build_input(
     mixer: Arc<Mixer>,
     errors: Arc<Mutex<Vec<String>>>,
     producers: Vec<(OutputId, HeapProd<f32>)>,
+    echo_reference: Option<HeapCons<f32>>,
 ) -> anyhow::Result<(Stream, StreamInfo)> {
     let supported = pick_config(
         device.default_input_config()?,
@@ -499,6 +517,10 @@ fn build_input(
     let rate = supported.sample_rate();
     mixer.input_rate.store(rate, Ordering::Relaxed);
 
+    let mut effects = EffectChain::new();
+    if let Some(reference) = echo_reference {
+        effects.set_echo_reference(reference);
+    }
     let processor = InputProcessor {
         mixer,
         producers,
@@ -506,7 +528,7 @@ fn build_input(
         channels: supported.channels() as usize,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),
         engine: Vec::with_capacity(MAX_CALLBACK_FRAMES * 2),
-        effects: EffectChain::new(),
+        effects,
         gain: SmoothedGain::new(0.0),
     };
 
@@ -543,6 +565,110 @@ fn build_input(
         errors
     )?;
     Ok((stream, info))
+}
+
+// ------------------------------------------------------- Echo-Referenz
+
+struct ReferenceProcessor {
+    producer: HeapProd<f32>,
+    resampler: PushResampler,
+    channels: usize,
+    mono: Vec<f32>,
+    engine: Vec<f32>,
+}
+
+impl ReferenceProcessor {
+    fn process<T>(&mut self, data: &[T])
+    where
+        T: Sample,
+        f32: FromSample<T>,
+    {
+        self.mono.clear();
+        let scale = 1.0 / self.channels as f32;
+        for frame in data.chunks_exact(self.channels) {
+            let sum: f32 = frame.iter().map(|s| s.to_sample::<f32>()).sum();
+            self.mono.push(sum * scale);
+        }
+        self.engine.clear();
+        if self.resampler.is_passthrough() {
+            self.engine.extend_from_slice(&self.mono);
+        } else {
+            let engine = &mut self.engine;
+            self.resampler.process(&self.mono, |s| engine.push(s));
+        }
+        // Voll heißt: Echo-Entfernung ist aus und holt nichts ab.
+        self.producer.push_slice(&self.engine);
+    }
+}
+
+/// Schneidet per WASAPI-Loopback mit, was der Lautsprecher spielt: das
+/// Standard-Ausgabegerät, also auch Discord, Spiele und Ode selbst. Nie das
+/// virtuelle Kabel, sonst fiele die eigene Stimme mit heraus; dann der
+/// Kopfhörer-Ausgang. Ohne passendes Gerät bleibt die Echo-Entfernung wirkungslos.
+fn build_echo_reference(
+    host: &Host,
+    config: &EngineConfig,
+) -> Option<(Stream, StreamInfo, HeapCons<f32>)> {
+    let usable = |device: &Device| {
+        let id = devices::id_of(device);
+        id.is_some()
+            && id.as_deref() != config.cable_id.as_deref()
+            && !devices::is_virtual_cable(&devices::name_of(device))
+    };
+    let device = host
+        .default_output_device()
+        .filter(&usable)
+        .or_else(|| {
+            let id = config.monitor_id.as_deref()?;
+            devices::find(host, id).ok().filter(&usable)
+        })?;
+    let supported = pick_config(
+        device.default_input_config().ok()?,
+        device.supported_input_configs().ok()?,
+    );
+    let info = stream_info(&device, &supported);
+    let (producer, consumer) = HeapRb::<f32>::new(RING_FRAMES).split();
+    let processor = ReferenceProcessor {
+        producer,
+        resampler: PushResampler::new(supported.sample_rate(), ENGINE_RATE),
+        channels: supported.channels() as usize,
+        mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),
+        engine: Vec::with_capacity(MAX_CALLBACK_FRAMES * 2),
+    };
+
+    fn build<T>(
+        device: &Device,
+        config: StreamConfig,
+        processor: ReferenceProcessor,
+    ) -> anyhow::Result<Stream>
+    where
+        T: SizedSample + Send + 'static,
+        f32: FromSample<T>,
+    {
+        let processor = Arc::new(Mutex::new(processor));
+        let stream = build_with_buffer(config, |config| {
+            let processor = processor.clone();
+            device.build_input_stream::<T, _, _>(
+                config,
+                move |data, _| processor.lock().process(data),
+                |_| {},
+                None,
+            )
+        })?;
+        Ok(stream)
+    }
+
+    let stream = (|| {
+        dispatch_format!(
+            supported.sample_format(),
+            build,
+            &device,
+            supported.config(),
+            processor
+        )
+    })()
+    .ok()?;
+    Some((stream, info, consumer))
 }
 
 // ---------------------------------------------------------------- Ausgänge

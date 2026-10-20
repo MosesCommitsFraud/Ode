@@ -49,6 +49,8 @@ clack-extensions = { version = "0.2", optional = true, features = ["clack-host",
 clack-plugin = { version = "0.2", optional = true }
 realfft = "3"
 fundsp = "0.23"
+# Echo-Entfernung: WebRTC AEC3 als reiner Rust-Port.
+sonora = { version = "0.2", default-features = false }
 
 
 # Audio-Bibliotheken auch im Debug-Build optimieren, sonst dekodiert symphonia

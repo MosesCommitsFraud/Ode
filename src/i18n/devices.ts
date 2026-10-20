@@ -12,6 +12,16 @@ export default {
     speech: "Sprache erkannt",
     quick: "Schnellwahl",
 
+    "aec.about": "Entfernt, was deine Lautsprecher ins Mikrofon zurückspielen – andere hören sich selbst und dein Soundboard nicht doppelt.",
+    "aec.speaker": "Lautsprecher",
+    "aec.removed": "Echo entfernt",
+    "aec.reference": "Hört mit",
+    "aec.referenceHint": "Ode schneidet mit, was dieses Gerät abspielt, und zieht es vom Mikrofon ab. Es ist dein Standard-Ausgabegerät.",
+    "aec.noReference": "Kein Lautsprecher gefunden",
+    "aec.delay": "Laufzeit",
+    "aec.delayHint": "So lange braucht der Ton vom Lautsprecher bis ins Mikrofon. Wird automatisch gemessen.",
+    "aec.learning": "lernt …",
+
     "gate.about": "Schaltet das Mikrofon stumm, solange du nicht sprichst – gegen Lüfter, Rauschen und Tippen in Pausen.",
     "gate.threshold": "Alles, was leiser ist, wird stumm. Knapp über das Grundrauschen in Pausen stellen.",
 
@@ -117,6 +127,16 @@ export default {
     open: "Mic open",
     speech: "Speech detected",
     quick: "Quick pick",
+
+    "aec.about": "Removes what your speakers play back into the microphone – others don't hear themselves or your soundboard twice.",
+    "aec.speaker": "Speakers",
+    "aec.removed": "Echo removed",
+    "aec.reference": "Listening to",
+    "aec.referenceHint": "Ode captures what this device plays and subtracts it from the microphone. It is your default output device.",
+    "aec.noReference": "No speakers found",
+    "aec.delay": "Delay",
+    "aec.delayHint": "How long sound takes from the speakers into the microphone. Measured automatically.",
+    "aec.learning": "learning …",
 
     "gate.about": "Mutes your microphone while you are not talking – against fans, hiss and typing in pauses.",
     "gate.threshold": "Anything quieter is muted. Set it just above the noise in pauses.",

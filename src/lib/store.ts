@@ -372,6 +372,7 @@ function startDemo() {
       input: stream(devices.inputs[0].name),
       monitor: stream(devices.outputs[0].name),
       cable: stream(devices.outputs[1].name),
+      echoReference: stream(devices.outputs[0].name),
     },
   });
   let t = 0;
@@ -403,6 +404,9 @@ function startDemo() {
         errors: [],
         playing: demoPlaying(t),
         effects: {
+          echoReference: state.effects.aec.enabled ? Math.abs(Math.sin(t * 0.7)) * 0.5 : 0,
+          echoErleDb: state.effects.aec.enabled ? 18 + Math.sin(t * 0.4) * 4 : 0,
+          echoDelayMs: state.effects.aec.enabled ? 64 : 0,
           gateOpen: !state.effects.gate.enabled || voice > 0.05,
           voice: state.effects.denoise.enabled ? Math.min(1, voice * 2) : 0,
           voiceOpen: !state.effects.denoise.voiceGate || voice > 0.4,

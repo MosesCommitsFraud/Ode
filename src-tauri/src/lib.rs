@@ -99,6 +99,11 @@ struct Meters {
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct EffectMeters {
+    /// Echo-Entfernung: Pegel der Lautsprecher-Referenz (0–1), Absenkung des
+    /// Echos (ERLE) und geschätzte Laufzeit Lautsprecher → Mikrofon.
+    echo_reference: f32,
+    echo_erle_db: f32,
+    echo_delay_ms: f32,
     gate_open: bool,
     voice: f32,
     voice_open: bool,
@@ -181,6 +186,9 @@ fn snapshot(engine: &Engine, analyzers: &mut Analyzers) -> Meters {
             .cloned()
             .collect(),
         effects: EffectMeters {
+            echo_reference: mixer.effects.echo_reference.take(),
+            echo_erle_db: mixer.effects.echo_erle_db.load(),
+            echo_delay_ms: mixer.effects.echo_delay_ms.load(),
             gate_open: mixer.effects.gate_open.load(Ordering::Relaxed),
             voice: mixer.effects.voice.load(),
             voice_open: mixer.effects.voice_open.load(Ordering::Relaxed),

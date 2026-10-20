@@ -81,3 +81,7 @@ pub fn find(host: &Host, id: &str) -> anyhow::Result<Device> {
 pub fn name_of(device: &Device) -> String {
     device_name(device)
 }
+
+pub fn id_of(device: &Device) -> Option<String> {
+    device_id(device)
+}

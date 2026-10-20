@@ -1,6 +1,7 @@
 /** Effekte-Seite: die Mikrofon-Kette. */
 export default {
   de: {
+    aec: "Echo-Entfernung",
     gate: "Noise Gate",
     open: "Offen",
     closed: "Zu",
@@ -43,6 +44,7 @@ export default {
     ratioHard: "Kräftig",
   },
   en: {
+    aec: "Echo removal",
     gate: "Noise gate",
     open: "Open",
     closed: "Closed",

@@ -11,7 +11,11 @@ export default {
     when: "Wann du es brauchst",
     controls: "Bedienung",
     close: "Schließen",
-    order: "Reihenfolge der Kette: Gate → Rauschfilter → EQ → Auto-Lautstärke → Kompressor → De-Esser → Exciter → Stimm-Effekte → Limiter.",
+    order: "Reihenfolge der Kette: Echo-Entfernung → Gate → Rauschfilter → EQ → Auto-Lautstärke → Kompressor → De-Esser → Exciter → Stimm-Effekte → Limiter.",
+
+    "aec.what": "Die Echo-Entfernung aus WebRTC (AEC3), wie in Videokonferenzen. Sie hört mit, was dein Lautsprecher spielt, misst die Laufzeit bis ins Mikrofon und zieht genau diesen Anteil ab. Deine Stimme bleibt stehen.",
+    "aec.when": "Wenn du ohne Kopfhörer sprichst und andere sich selbst, Spielsound oder dein Soundboard aus deinem Mikrofon hören. Mit Kopfhörern unnötig. Kostet 10 ms Verzögerung.",
+    "aec.controls": "Lautsprecher: Was gerade als Referenz ankommt.\nEcho entfernt: Wie stark das Echo abgesenkt wird. Nach dem Einschalten braucht sie ein paar Sekunden Ton, um sich einzulernen.",
 
     "gate.what": "Schaltet das Mikrofon stumm, solange es leiser ist als die Schwelle. Die Nadel zeigt deinen Pegel, die farbige Marke die Schwelle.",
     "gate.when": "Gegen Grundrauschen, Lüfter oder Tastatur in Sprechpausen. Für Klicks zwischen Wörtern eignet sich das Sprach-Gate im Rauschfilter besser.",
@@ -88,7 +92,11 @@ export default {
     when: "When you need it",
     controls: "Controls",
     close: "Close",
-    order: "Chain order: gate → noise filter → EQ → auto volume → compressor → de-esser → exciter → voice effects → limiter.",
+    order: "Chain order: echo removal → gate → noise filter → EQ → auto volume → compressor → de-esser → exciter → voice effects → limiter.",
+
+    "aec.what": "WebRTC's echo canceller (AEC3), as used in video calls. It listens to what your speakers play, measures the delay into the microphone and subtracts exactly that part. Your voice stays.",
+    "aec.when": "When you talk without headphones and others hear themselves, game sound or your soundboard through your mic. Not needed with headphones. Adds 10 ms of delay.",
+    "aec.controls": "Speakers: what currently arrives as reference.\nEcho removed: how much the echo is lowered. After switching on it needs a few seconds of sound to adapt.",
 
     "gate.what": "Mutes the microphone while it is quieter than the threshold. The needle shows your level, the colored mark the threshold.",
     "gate.when": "Against background hiss, fans or keyboard in pauses. For clicks between words, the voice gate in the noise filter works better.",

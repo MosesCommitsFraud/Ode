@@ -1,4 +1,5 @@
-//! Mikrofon-Effektkette in fester Reihenfolge: Noise Gate → Rauschunterdrückung
+//! Mikrofon-Effektkette in fester Reihenfolge: Echo-Entfernung (AEC3, siehe
+//! `echo`) → Noise Gate → Rauschunterdrückung
 //! (RNNoise mit Sprach-Gate) → Equalizer → automatische Lautstärke (AGC) →
 //! Kompressor → De-Esser → Exciter → Stimm-Effekte (siehe `voice`) → Plugin-Slot
 //! (siehe `insert`) → Limiter.
@@ -18,6 +19,7 @@ use fundsp::prelude32::{
     Shared, Tanh, afollow, dc, highpass, limiter, lowpass, mul, pass, shape, shared, var,
 };
 
+use super::echo::EchoCanceller;
 use super::eq::{EqSettings, ParamEq};
 use super::fund::Fixed;
 use super::insert::InsertSlot;
@@ -27,6 +29,13 @@ use super::voice::{VoiceChain, VoiceMeters, VoiceParams};
 const RATE: f32 = ENGINE_RATE as f32;
 
 // ------------------------------------------------------------ Parameter
+
+/// Echo-Entfernung: zieht ab, was der Lautsprecher ins Mikrofon zurückspielt.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AecParams {
+    pub enabled: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -174,6 +183,7 @@ impl Default for ExciterParams {
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct EffectsParams {
+    pub aec: AecParams,
     pub gate: GateParams,
     pub denoise: DenoiseParams,
     pub eq: EqParams,
@@ -209,6 +219,11 @@ impl EffectsParams {
 pub struct EffectsShared {
     params: Mutex<EffectsParams>,
     version: AtomicU64,
+    /// Echo-Entfernung: Pegel der Lautsprecher-Referenz (Spitze seit dem
+    /// letzten Abholen), Absenkung des Echos und geschätzte Laufzeit.
+    pub echo_reference: AtomicF32,
+    pub echo_erle_db: AtomicF32,
+    pub echo_delay_ms: AtomicF32,
     pub gate_open: AtomicBool,
     /// Sprachwahrscheinlichkeit laut RNNoise, 0–1.
     pub voice: AtomicF32,
@@ -608,6 +623,8 @@ impl PeakLimiter {
 pub struct EffectChain {
     params: EffectsParams,
     version: u64,
+    aec: EchoCanceller,
+    aec_active: bool,
     gate: Gate,
     denoise: Denoiser,
     denoise_active: bool,
@@ -633,6 +650,8 @@ impl EffectChain {
             limiter: PeakLimiter::new(),
             params,
             version: u64::MAX,
+            aec: EchoCanceller::new(),
+            aec_active: false,
             gate: Gate::new(),
             denoise: Denoiser::new(),
             denoise_active: false,
@@ -643,6 +662,11 @@ impl EffectChain {
             exciter: Exciter::new(),
             voice: VoiceChain::new(),
         }
+    }
+
+    /// Mitschnitt des Lautsprechers als Referenz für die Echo-Entfernung.
+    pub fn set_echo_reference(&mut self, reference: ringbuf::HeapCons<f32>) {
+        self.aec.set_reference(reference);
     }
 
     /// Neue Einstellungen übernehmen, ohne den Audio-Thread zu blockieren.
@@ -676,6 +700,21 @@ impl EffectChain {
     pub fn process(&mut self, buf: &mut [f32], shared: &EffectsShared) {
         self.sync(shared);
         let p = self.params;
+
+        if p.aec.enabled {
+            if !self.aec_active {
+                self.aec.reset();
+                self.aec_active = true;
+            }
+            self.aec.process(buf);
+        } else {
+            self.aec_active = false;
+            self.aec.idle();
+        }
+        let echo = self.aec.stats();
+        shared.echo_reference.fetch_max(echo.reference_peak);
+        shared.echo_erle_db.store(echo.erle_db);
+        shared.echo_delay_ms.store(echo.delay_ms);
 
         let open = if p.gate.enabled {
             self.gate.process(buf, db_to_gain(p.gate.threshold_db))

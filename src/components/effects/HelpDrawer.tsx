@@ -13,6 +13,7 @@ import { cn } from "~/lib/utils";
 
 /** Werkzeug-ID → Schlüssel des Titels, wie er auf der Seite steht. */
 const TITLES: Record<string, string> = {
+  aec: "effects.aec",
   gate: "effects.gate",
   denoise: "effects.denoise",
   eq: "effects.eq",

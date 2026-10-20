@@ -1,8 +1,8 @@
-import { ArrowLineUp, ArrowsInLineVertical, Broom, Door, Equalizer, Gauge, Plug, Sun, Waves } from "@phosphor-icons/react";
+import { ArrowLineUp, ArrowsInLineVertical, Broom, Door, Equalizer, Gauge, Plug, SpeakerSimpleSlash, Sun, Waves } from "@phosphor-icons/react";
 import { useEffect, type ReactNode } from "react";
 import { HistoryChart, SpectrumChart, useHistory } from "~/components/effects/charts";
 import { EqControls, EqGraph, useEqTarget } from "~/components/effects/EqEditor";
-import { Crossfade, DeviceBar, DevicePage, KnobDeck, Lamp, Meter, ParamRow, Slider, useSelected } from "~/components/effects/device";
+import { Crossfade, DeviceBar, DevicePage, KnobDeck, Lamp, Meter, ParamRow, Readout, Slider, useSelected } from "~/components/effects/device";
 import { PluginsPanel } from "~/components/effects/PluginsPanel";
 import { PushButtons } from "~/components/ui/hardware";
 import { EFFECTS_DEFAULTS } from "~/lib/defaults";
@@ -23,8 +23,9 @@ const kHz = (v: number) => `${(v / 1000).toFixed(1)} kHz`;
 const percent = (v: number) => `${Math.round(v * 100)} %`;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-const DEVICES: DeviceId[] = ["gate", "denoise", "eq", "agc", "compressor", "deEsser", "exciter", "limiter"];
+const DEVICES: DeviceId[] = ["aec", "gate", "denoise", "eq", "agc", "compressor", "deEsser", "exciter", "limiter"];
 const ICONS: Record<DeviceId | "plugin", ReactNode> = {
+  aec: <SpeakerSimpleSlash />,
   gate: <Door />,
   denoise: <Broom />,
   eq: <Equalizer />,
@@ -74,6 +75,8 @@ function Device({ id }: { id: DeviceId }) {
     id === "compressor" ? live?.compressorDb : id === "deEsser" ? live?.deEsserDb : id === "limiter" ? live?.limiterDb : id === "agc" ? live?.agcGainDb : 0;
   const reductions = useHistory(p.enabled ? (reductionNow ?? 0) : 0, 8, 0);
   const voices = useHistory(fx.denoise.enabled ? (live?.voice ?? 0) * 100 : 0, 8, 0);
+  const erles = useHistory(fx.aec.enabled ? (live?.echoErleDb ?? 0) : 0, 8, 0);
+  const echoReference = useStore((s) => s.info?.echoReference);
   const history = (range: [number, number], line?: { value: number; label: string; min: number; max: number; onChange: (v: number) => void }, gr?: number) => (
     <HistoryChart
       range={range}
@@ -96,6 +99,30 @@ function Device({ id }: { id: DeviceId }) {
   );
 
   switch (id) {
+    case "aec": {
+      const speaker = fx.aec.enabled ? (live?.echoReference ?? 0) : 0;
+      const erle = fx.aec.enabled ? (live?.echoErleDb ?? 0) : 0;
+      const delay = fx.aec.enabled ? (live?.echoDelayMs ?? 0) : 0;
+      return page(
+        {
+          live: (
+            <>
+              <Meter label={t("devices.aec.speaker")} value={levelPos(gainToDb(speaker, LEVEL_FLOOR))} text={speaker > 0.001 ? db(gainToDb(speaker, LEVEL_FLOOR)) : "—"} scale={LEVEL_SCALE} />
+              <Meter label={t("devices.aec.removed")} value={erle / 40} tone="success" text={erle > 0.05 ? `${erle.toFixed(1)} dB` : "0 dB"} />
+            </>
+          ),
+          graph: <HistoryChart range={[0, 40]} series={[{ values: erles, tone: "accent" }]} />,
+        },
+        <>
+          <ParamRow label={t("devices.aec.reference")} hint={t("devices.aec.referenceHint")}>
+            <span className={echoReference ? "text-sm" : "text-sm text-muted-foreground"}>{echoReference?.deviceName ?? t("devices.aec.noReference")}</span>
+          </ParamRow>
+          <ParamRow label={t("devices.aec.delay")} hint={t("devices.aec.delayHint")}>
+            <Readout label="" value={delay > 0 ? `${Math.round(delay)} ms` : "—"} sub={fx.aec.enabled && delay <= 0 ? t("devices.aec.learning") : undefined} />
+          </ParamRow>
+        </>,
+      );
+    }
     case "gate":
       return page(
         {
@@ -457,7 +484,7 @@ export function EffectsView() {
         value={open}
         onChange={select}
         groups={[
-          (["gate", "denoise", "eq", "agc"] as const).map(key),
+          (["aec", "gate", "denoise", "eq", "agc"] as const).map(key),
           (["compressor", "deEsser", "exciter", "limiter"] as const).map(key),
           ...(plugin.available
             ? [[{ id: "plugin", title: plugin.loaded?.name ?? t("plugins.page"), icon: ICONS.plugin, enabled: !!plugin.loaded && !plugin.bypass }]]

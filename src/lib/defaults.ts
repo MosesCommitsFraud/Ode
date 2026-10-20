@@ -28,6 +28,7 @@ export const EMPTY_BAND: EqBand = { enabled: false, shape: "bell", freqHz: 1000,
 export const EQ_DEFAULTS: EqSettings = { bands: Array.from({ length: EQ_SLOTS }, () => EMPTY_BAND) };
 
 export const EFFECTS_DEFAULTS: EffectsParams = {
+  aec: { enabled: false },
   gate: { enabled: false, thresholdDb: -50 },
   denoise: { enabled: false, voiceGate: true, strength: 1 },
   eq: { enabled: false, ...EQ_DEFAULTS },

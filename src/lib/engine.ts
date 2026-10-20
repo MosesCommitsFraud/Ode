@@ -34,6 +34,8 @@ export interface EngineInfo {
   input: StreamInfo;
   monitor: StreamInfo | null;
   cable: StreamInfo | null;
+  /** Lautsprecher, dessen Ton die Echo-Entfernung abzieht (Loopback). */
+  echoReference: StreamInfo | null;
 }
 
 export interface ChannelParams {
@@ -124,6 +126,8 @@ export interface EqSettings {
 }
 
 export interface EffectsParams {
+  /** Echo-Entfernung (WebRTC AEC3) mit dem Lautsprecher als Referenz. */
+  aec: { enabled: boolean };
   gate: { enabled: boolean; thresholdDb: number };
   /** voiceGate: senkt alles ab, was RNNoise nicht als Sprache erkennt (Klicks, Tippen). */
   denoise: { enabled: boolean; voiceGate: boolean; strength: number };
@@ -199,6 +203,12 @@ export interface Meters {
   /** Aktuelle Absenkung durch Ducking in dB, 0 = keine. */
   duckingDb: number;
   effects: {
+    /** Pegel der Lautsprecher-Referenz 0–1. */
+    echoReference: number;
+    /** Wie stark das Echo abgesenkt wird (ERLE) in dB. */
+    echoErleDb: number;
+    /** Geschätzte Laufzeit Lautsprecher → Mikrofon in ms. */
+    echoDelayMs: number;
     gateOpen: boolean;
     voice: number;
     /** Sprach-Gate lässt gerade durch. */
