@@ -351,6 +351,8 @@ export function EqChart({
               const over = u.over;
               over.style.touchAction = "none";
               over.tabIndex = 0;
+              // Normaler Mauszeiger überall; wo ein Band entsteht, zeigt der Ring auf der Linie.
+              over.style.cursor = "default";
               over.style.outline = "none";
               const local = (e: MouseEvent) => {
                 const r = over.getBoundingClientRect();
@@ -409,9 +411,7 @@ export function EqChart({
                   s.onChange({ bands: withBand(s.eq, grab.index, patch) });
                   return;
                 }
-                const onHandle = near(x, y);
-                const hover = !onHandle && onLine(x, y) && s.eq.bands.some((b) => !b.enabled) ? x : null;
-                over.style.cursor = onHandle ? "grab" : hover !== null ? "copy" : "default";
+                const hover = !near(x, y) && onLine(x, y) && s.eq.bands.some((b) => !b.enabled) ? x : null;
                 if (hover !== s.hover) {
                   s.hover = hover;
                   u.redraw(false);
