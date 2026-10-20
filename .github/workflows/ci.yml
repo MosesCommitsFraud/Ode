@@ -60,6 +60,13 @@ jobs:
       - name: Tests
         working-directory: src-tauri
         run: cargo test
+      # Plugin-Prototyp (CLAP) ist nicht im Standard-Build, wird aber mitgeprüft.
+      - name: Clippy mit Plugins
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --features plugins -- -D warnings
+      - name: Tests mit Plugins
+        working-directory: src-tauri
+        run: cargo test --features plugins
 
   installer:
     name: Testbuild

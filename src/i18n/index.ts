@@ -7,6 +7,7 @@ import live from "./live";
 import messages from "./messages";
 import mixer from "./mixer";
 import music from "./music";
+import plugins from "./plugins";
 import settings from "./settings";
 import setup from "./setup";
 import shell from "./shell";
@@ -24,6 +25,7 @@ export const dictionaries: Record<string, Dictionary> = {
   messages,
   mixer,
   music,
+  plugins,
   settings,
   setup,
   shell,

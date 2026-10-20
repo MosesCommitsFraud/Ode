@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { PluginsPanel } from "~/components/effects/PluginsPanel";
 import { EqDisplay, GridLine, Module, PageBar, PLOT, Reading, Tick, freqX } from "~/components/effects/rack";
 import { Knob, Lever, Needle } from "~/components/ui/knob";
 import { Bars, LedBar, cssColor } from "~/components/ui/canvas";
@@ -6,6 +7,7 @@ import { Pill, PillGroup } from "~/components/ui/pills";
 import { actions, useStore } from "~/lib/store";
 import { formatDb, gainToDb } from "~/lib/utils";
 import { t } from "~/lib/i18n";
+import { plugins, usePlugins } from "~/lib/plugins";
 
 /* Die Aufbereitung des Mikrofons als Rack auf zwei Seiten: erst säubern
    (Gate, Rauschfilter, EQ, Auto-Lautstärke), dann Dynamik (Kompressor,
@@ -189,11 +191,12 @@ function HighBandDisplay({ frequencyHz, db, max }: { frequencyHz: number; db: nu
 }
 
 const PAGE_KEY = "ode.effects-page";
-type Page = "clean" | "dynamics";
+type Page = "clean" | "dynamics" | "plugin";
 
 function readPage(): Page {
   try {
-    return localStorage.getItem(PAGE_KEY) === "dynamics" ? "dynamics" : "clean";
+    const stored = localStorage.getItem(PAGE_KEY);
+    return stored === "dynamics" || stored === "plugin" ? stored : "clean";
   } catch {
     return "clean";
   }
@@ -204,7 +207,13 @@ export function EffectsView() {
   const live = useStore((s) => s.meters?.effects);
   const micPeak = useStore((s) => s.meters?.channels.find((c) => c.id === "mic")?.peak ?? 0);
   const running = useStore((s) => s.info !== null);
-  const [page, setPageState] = useState<Page>(readPage);
+  const [stored, setPageState] = useState<Page>(readPage);
+  const pluginsAvailable = usePlugins((s) => s.status.available);
+  // Die Plugin-Seite gibt es nur, wenn der Build Plugins enthält.
+  const page = stored === "plugin" && !pluginsAvailable ? "clean" : stored;
+  useEffect(() => {
+    void plugins.refresh();
+  }, []);
   const setPage = (next: Page) => {
     setPageState(next);
     try {
@@ -231,9 +240,17 @@ export function EffectsView() {
           <Pill active={page === "dynamics"} onClick={() => setPage("dynamics")}>
             {t("effects.dynamicsPage")}
           </Pill>
+          {pluginsAvailable && (
+            <Pill active={page === "plugin"} onClick={() => setPage("plugin")}>
+              {t("plugins.page")}
+            </Pill>
+          )}
         </PillGroup>
       </PageBar>
 
+      {page === "plugin" ? (
+        <PluginsPanel />
+      ) : (
       <div
         key={page}
         className="grid min-h-0 flex-1 animate-[layout-in_260ms_var(--ease-drawer)] grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 pr-3 pb-3 pl-6"
@@ -500,6 +517,7 @@ export function EffectsView() {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
