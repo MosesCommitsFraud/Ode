@@ -32,6 +32,9 @@ updates:
     groups:
       tauri:
         patterns: ["tauri", "tauri-*"]
+      # windows-core muss zur Version von windows passen (sonst bricht #[implement]).
+      windows:
+        patterns: ["windows", "windows-core"]
       cargo-klein:
         update-types: [minor, patch]
 
