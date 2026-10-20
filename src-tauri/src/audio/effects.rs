@@ -11,17 +11,9 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use super::ENGINE_RATE;
-use super::dsp::{AtomicF32, Limiter, db_to_gain};
+use super::dsp::{AtomicF32, Biquad, Limiter, Shape, coef, db_to_gain, to_db};
 
 const RATE: f32 = ENGINE_RATE as f32;
-
-fn coef(ms: f32) -> f32 {
-    (-1.0 / (ms / 1000.0 * RATE)).exp()
-}
-
-fn to_db(x: f32) -> f32 {
-    20.0 * x.max(1e-9).log10()
-}
 
 // ------------------------------------------------------------ Parameter
 
@@ -319,78 +311,6 @@ impl Denoiser {
             *s = self.output.pop_front().unwrap_or(0.0);
         }
         !voice_gate || self.hold > 0
-    }
-}
-
-#[derive(Clone, Copy, Default)]
-struct Biquad {
-    b0: f32,
-    b1: f32,
-    b2: f32,
-    a1: f32,
-    a2: f32,
-    z1: f32,
-    z2: f32,
-}
-
-#[derive(Clone, Copy)]
-enum Shape {
-    LowShelf,
-    Peak,
-    HighShelf,
-}
-
-impl Biquad {
-    /// Koeffizienten nach dem Audio-EQ-Cookbook (R. Bristow-Johnson).
-    fn design(&mut self, shape: Shape, freq: f32, q: f32, gain_db: f32) {
-        let a = 10f32.powf(gain_db / 40.0);
-        let w0 = std::f32::consts::TAU * freq / RATE;
-        let (sin, cos) = w0.sin_cos();
-        let alpha = sin / (2.0 * q);
-        let (b0, b1, b2, a0, a1, a2) = match shape {
-            Shape::Peak => (
-                1.0 + alpha * a,
-                -2.0 * cos,
-                1.0 - alpha * a,
-                1.0 + alpha / a,
-                -2.0 * cos,
-                1.0 - alpha / a,
-            ),
-            Shape::LowShelf => {
-                let k = 2.0 * a.sqrt() * alpha;
-                (
-                    a * ((a + 1.0) - (a - 1.0) * cos + k),
-                    2.0 * a * ((a - 1.0) - (a + 1.0) * cos),
-                    a * ((a + 1.0) - (a - 1.0) * cos - k),
-                    (a + 1.0) + (a - 1.0) * cos + k,
-                    -2.0 * ((a - 1.0) + (a + 1.0) * cos),
-                    (a + 1.0) + (a - 1.0) * cos - k,
-                )
-            }
-            Shape::HighShelf => {
-                let k = 2.0 * a.sqrt() * alpha;
-                (
-                    a * ((a + 1.0) + (a - 1.0) * cos + k),
-                    -2.0 * a * ((a - 1.0) + (a + 1.0) * cos),
-                    a * ((a + 1.0) + (a - 1.0) * cos - k),
-                    (a + 1.0) - (a - 1.0) * cos + k,
-                    2.0 * ((a - 1.0) - (a + 1.0) * cos),
-                    (a + 1.0) - (a - 1.0) * cos - k,
-                )
-            }
-        };
-        self.b0 = b0 / a0;
-        self.b1 = b1 / a0;
-        self.b2 = b2 / a0;
-        self.a1 = a1 / a0;
-        self.a2 = a2 / a0;
-    }
-
-    fn process(&mut self, x: f32) -> f32 {
-        let y = self.b0 * x + self.z1;
-        self.z1 = self.b1 * x - self.a1 * y + self.z2;
-        self.z2 = self.b2 * x - self.a2 * y;
-        y
     }
 }
 

@@ -1,5 +1,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use super::ENGINE_RATE;
+
 /// f32, das zwischen Audio-Thread und Steuerung geteilt wird.
 #[derive(Debug, Default)]
 pub struct AtomicF32(AtomicU32);
@@ -74,6 +76,169 @@ impl SmoothedGain {
             *s *= self.current;
         }
         self.current = target;
+    }
+}
+
+/// Glättungsfaktor einer Hüllkurve mit dieser Zeitkonstante in Engine-Rate.
+pub fn coef(ms: f32) -> f32 {
+    (-1.0 / (ms / 1000.0 * ENGINE_RATE as f32)).exp()
+}
+
+pub fn to_db(x: f32) -> f32 {
+    20.0 * x.max(1e-9).log10()
+}
+
+/// Filterformen des Biquads.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Shape {
+    LowShelf,
+    Peak,
+    HighShelf,
+    LowPass,
+    HighPass,
+    /// Bandpass mit 0 dB Spitze.
+    BandPass,
+}
+
+/// Filter zweiter Ordnung in Engine-Rate.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Biquad {
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    a1: f32,
+    a2: f32,
+    z1: f32,
+    z2: f32,
+}
+
+impl Biquad {
+    pub fn new(shape: Shape, freq: f32, q: f32, gain_db: f32) -> Self {
+        let mut b = Self::default();
+        b.design(shape, freq, q, gain_db);
+        b
+    }
+
+    /// Koeffizienten nach dem Audio-EQ-Cookbook (R. Bristow-Johnson).
+    pub fn design(&mut self, shape: Shape, freq: f32, q: f32, gain_db: f32) {
+        let rate = ENGINE_RATE as f32;
+        let a = 10f32.powf(gain_db / 40.0);
+        let w0 = std::f32::consts::TAU * freq.clamp(10.0, rate * 0.49) / rate;
+        let (sin, cos) = w0.sin_cos();
+        let alpha = sin / (2.0 * q);
+        let (b0, b1, b2, a0, a1, a2) = match shape {
+            Shape::Peak => (
+                1.0 + alpha * a,
+                -2.0 * cos,
+                1.0 - alpha * a,
+                1.0 + alpha / a,
+                -2.0 * cos,
+                1.0 - alpha / a,
+            ),
+            Shape::LowShelf => {
+                let k = 2.0 * a.sqrt() * alpha;
+                (
+                    a * ((a + 1.0) - (a - 1.0) * cos + k),
+                    2.0 * a * ((a - 1.0) - (a + 1.0) * cos),
+                    a * ((a + 1.0) - (a - 1.0) * cos - k),
+                    (a + 1.0) + (a - 1.0) * cos + k,
+                    -2.0 * ((a - 1.0) + (a + 1.0) * cos),
+                    (a + 1.0) + (a - 1.0) * cos - k,
+                )
+            }
+            Shape::HighShelf => {
+                let k = 2.0 * a.sqrt() * alpha;
+                (
+                    a * ((a + 1.0) + (a - 1.0) * cos + k),
+                    -2.0 * a * ((a - 1.0) + (a + 1.0) * cos),
+                    a * ((a + 1.0) + (a - 1.0) * cos - k),
+                    (a + 1.0) - (a - 1.0) * cos + k,
+                    2.0 * ((a - 1.0) - (a + 1.0) * cos),
+                    (a + 1.0) - (a - 1.0) * cos - k,
+                )
+            }
+            Shape::LowPass => (
+                (1.0 - cos) / 2.0,
+                1.0 - cos,
+                (1.0 - cos) / 2.0,
+                1.0 + alpha,
+                -2.0 * cos,
+                1.0 - alpha,
+            ),
+            Shape::HighPass => (
+                (1.0 + cos) / 2.0,
+                -(1.0 + cos),
+                (1.0 + cos) / 2.0,
+                1.0 + alpha,
+                -2.0 * cos,
+                1.0 - alpha,
+            ),
+            Shape::BandPass => (alpha, 0.0, -alpha, 1.0 + alpha, -2.0 * cos, 1.0 - alpha),
+        };
+        self.b0 = b0 / a0;
+        self.b1 = b1 / a0;
+        self.b2 = b2 / a0;
+        self.a1 = a1 / a0;
+        self.a2 = a2 / a0;
+    }
+
+    #[inline]
+    pub fn process(&mut self, x: f32) -> f32 {
+        let y = self.b0 * x + self.z1;
+        self.z1 = self.b1 * x - self.a1 * y + self.z2;
+        self.z2 = self.b2 * x - self.a2 * y;
+        y
+    }
+
+    pub fn reset(&mut self) {
+        self.z1 = 0.0;
+        self.z2 = 0.0;
+    }
+}
+
+/// Verzögerungsleitung mit Lesen zwischen den Samples.
+#[derive(Debug, Clone)]
+pub struct DelayLine {
+    buf: Vec<f32>,
+    write: usize,
+}
+
+impl DelayLine {
+    /// Für höchstens `max` Samples Verzögerung.
+    pub fn new(max: usize) -> Self {
+        Self {
+            buf: vec![0.0; max.next_power_of_two().max(2)],
+            write: 0,
+        }
+    }
+
+    #[inline]
+    pub fn push(&mut self, x: f32) {
+        self.write = (self.write + 1) & (self.buf.len() - 1);
+        self.buf[self.write] = x;
+    }
+
+    /// Sample von vor `delay` Schritten (0 = zuletzt geschrieben).
+    #[inline]
+    pub fn tap(&self, delay: usize) -> f32 {
+        let mask = self.buf.len() - 1;
+        self.buf[(self.write + self.buf.len() - (delay & mask)) & mask]
+    }
+
+    /// Linear interpoliert, `delay` in Samples.
+    #[inline]
+    pub fn read(&self, delay: f32) -> f32 {
+        let max = (self.buf.len() - 2) as f32;
+        let d = delay.clamp(0.0, max);
+        let i = d as usize;
+        let frac = d - i as f32;
+        let a = self.tap(i);
+        let b = self.tap(i + 1);
+        a + (b - a) * frac
+    }
+
+    pub fn clear(&mut self) {
+        self.buf.iter_mut().for_each(|s| *s = 0.0);
     }
 }
 

@@ -12,6 +12,7 @@ pub mod live;
 pub mod mixer;
 pub mod resample;
 pub mod sampler;
+pub mod voice;
 
 /// Interne Abtastrate der Engine.
 pub const ENGINE_RATE: u32 = 48_000;
