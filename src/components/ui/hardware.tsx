@@ -1,4 +1,6 @@
 import { useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import * as RadixSwitch from "@radix-ui/react-switch";
+import * as RadixToggleGroup from "@radix-ui/react-toggle-group";
 import { cn } from "~/lib/utils";
 
 /*
@@ -228,7 +230,7 @@ function WellKey({ on, onClick, disabled, title, children }: { on: boolean; onCl
   );
 }
 
-/** Wahltasten, von denen genau eine gilt; in einer Reihe oder als Block mit `columns` Spalten. */
+/** Wahltasten (Radix ToggleGroup), von denen genau eine gilt; in einer Reihe oder als Block mit `columns` Spalten. */
 export function PushButtons<T extends string | number>({
   label,
   value,
@@ -248,13 +250,32 @@ export function PushButtons<T extends string | number>({
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col items-center gap-1.5", disabled && "opacity-45", className)}>
-      <div className="well grid w-full gap-1 rounded-[10px] p-1" style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}>
+      <RadixToggleGroup.Root
+        type="single"
+        value={String(value)}
+        disabled={disabled}
+        // Abwählen gibt es nicht: ein zweiter Klick auf die gewählte Taste ändert nichts.
+        onValueChange={(v) => {
+          const next = options.find((o) => String(o.value) === v);
+          if (next) onChange(next.value);
+        }}
+        className="well grid w-full gap-1 rounded-[10px] p-1"
+        style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
+      >
         {options.map((o) => (
-          <WellKey key={String(o.value)} on={o.value === value} disabled={disabled} title={o.title} onClick={() => onChange(o.value)}>
+          <RadixToggleGroup.Item
+            key={String(o.value)}
+            value={String(o.value)}
+            title={o.title}
+            className={cn(
+              "flex h-7 min-w-0 cursor-default items-center justify-center gap-1 truncate rounded-[6px] px-2 text-xs font-medium transition-[background-color,color,box-shadow] duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4 [&_svg]:shrink-0",
+              "text-muted-foreground hover:text-foreground data-[state=on]:bg-panel-raised data-[state=on]:text-[var(--ch-mic)] data-[state=on]:shadow-[0_1px_0_var(--hairline),0_3px_8px_-4px_oklch(0%_0_0/40%)]",
+            )}
+          >
             {o.label}
-          </WellKey>
+          </RadixToggleGroup.Item>
         ))}
-      </div>
+      </RadixToggleGroup.Root>
       {label && <Caption label={label} />}
     </div>
   );
@@ -299,29 +320,25 @@ export function PushButton({
 export function Toggle({ on, onChange, label, size = "md" }: { on: boolean; onChange: (on: boolean) => void; label: string; size?: "sm" | "md" }) {
   const sm = size === "sm";
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
+    <RadixSwitch.Root
+      checked={on}
+      onCheckedChange={onChange}
       aria-label={label}
       title={label}
-      onClick={(e) => {
-        e.stopPropagation();
-        onChange(!on);
-      }}
+      onClick={(e) => e.stopPropagation()}
       className={cn(
         "group relative flex shrink-0 cursor-default items-center rounded-full p-0.5 outline-none transition-[background-color,box-shadow] duration-300 focus-visible:ring-2 focus-visible:ring-ring",
         sm ? "h-[18px] w-[30px]" : "h-[22px] w-[38px]",
         on ? "bg-[var(--ch-mic)]" : "bg-[oklch(0%_0_0/12%)] shadow-[inset_0_1px_2px_oklch(0%_0_0/18%)] dark:bg-[oklch(100%_0_0/12%)]",
       )}
     >
-      <span
+      <RadixSwitch.Thumb
         className={cn(
-          "h-full rounded-full bg-white shadow-[0_1px_3px_oklch(0%_0_0/35%)] transition-[transform,width] duration-[420ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+          "block h-full rounded-full bg-white shadow-[0_1px_3px_oklch(0%_0_0/35%)] transition-[transform,width] duration-[420ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
           sm ? "w-[14px] group-active:w-[18px]" : "w-[18px] group-active:w-[22px]",
           on && (sm ? "translate-x-[12px] group-active:translate-x-[8px]" : "translate-x-[16px] group-active:translate-x-[12px]"),
         )}
       />
-    </button>
+    </RadixSwitch.Root>
   );
 }

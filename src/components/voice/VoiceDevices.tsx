@@ -14,7 +14,8 @@ import {
   WaveSine,
   WaveSquare,
 } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { Klavier, type CustomKeyProps } from "klavier";
 import { DevicePage, ParamRow, QuickPicks, Readout, Slider } from "~/components/effects/device";
 import { PushButton, PushButtons } from "~/components/ui/hardware";
 import { parseNumber } from "~/components/ui/knob";
@@ -60,50 +61,64 @@ const parseLogHz = (text: string) => {
 /* ---------- Autotune-Klaviatur ---------- */
 
 const SCALES: Scale[] = ["chromatic", "major", "minor", "pentatonic", "blues"];
-const BLACK_KEYS = [1, 3, 6, 8, 10];
 
-/**
- * Grundton als Klaviatur über eine Oktave: wie ein echtes Keyboard mit
- * weißen und schwarzen Tasten. Der Grundton ist in der Gerätefarbe gefüllt,
- * die übrigen Töne der Skala tragen einen Punkt, Töne außerhalb sind blass.
- */
-function Keyboard({ value, scale, onChange }: { value: number; scale: Scale; onChange: (key: number) => void }) {
-  const whites = [0, 2, 4, 5, 7, 9, 11];
-  // Schwarze Tasten sitzen auf der Grenze zwischen zwei weißen; Position in Weiß-Breiten.
-  const blackAt: Record<number, number> = { 1: 1, 3: 2, 6: 4, 8: 5, 10: 6 };
-  const key = (n: number, black: boolean) => {
-    const root = n === value;
-    const inside = inScale(n, value, scale);
-    return (
-      <button
-        key={n}
-        type="button"
-        title={keyName(n)}
-        aria-pressed={root}
-        onClick={() => onChange(n)}
-        className={cn(
-          "flex cursor-default flex-col items-center justify-end gap-1 pb-1.5 transition-[background-color,color,transform] duration-150 active:translate-y-px",
-          black
-            ? "absolute top-0 z-10 h-[60%] w-[9.5%] -translate-x-1/2 rounded-b-[5px] shadow-[0_2px_3px_oklch(0%_0_0/35%)]"
-            : "relative h-full flex-1 rounded-b-[7px] shadow-[inset_0_-3px_0_oklch(0%_0_0/6%),0_0_0_1px_var(--hairline)]",
-          root
-            ? "bg-[var(--ch-mic)] text-white"
-            : black
-              ? "bg-[oklch(24%_0.006_60)] text-white/70 hover:bg-[oklch(32%_0.006_60)] dark:bg-[oklch(12%_0.006_60)]"
-              : "bg-[oklch(99.5%_0.002_75)] text-foreground hover:bg-[oklch(96%_0.004_75)] dark:bg-[oklch(88%_0.004_75)] dark:text-[oklch(20%_0_0)]",
-        )}
-        style={black ? { left: `${(blackAt[n] / 7) * 100}%` } : undefined}
-      >
-        {inside && !root && <span className={cn("size-1.5 rounded-full", black ? "bg-white/70" : "bg-[var(--ch-mic)]")} />}
-        {!black && <span className={cn("font-mono text-[11px] font-semibold", !inside && !root && "opacity-35")}>{keyName(n)}</span>}
-      </button>
-    );
-  };
+/** Grundton und Tonleiter für die Tasten der Klaviatur. */
+const ScaleContext = createContext<{ root: number; scale: Scale }>({ root: 0, scale: "chromatic" });
+
+/** Weiße Taste (klavier): Grundton gefüllt, Töne der Tonleiter mit Punkt, andere blass. */
+function WhiteKey({ note }: CustomKeyProps) {
+  const { root, scale } = useContext(ScaleContext);
+  const n = note.midiNumber % 12;
+  const isRoot = n === root;
+  const inside = inScale(n, root, scale);
   return (
-    <div className="relative flex h-24 max-w-xl min-w-0 gap-[3px] rounded-[10px] bg-[oklch(20%_0.006_60)] p-[3px] pt-1.5" title={t("voice.key")}>
-      {whites.map((n) => key(n, false))}
-      <div className="pointer-events-none absolute inset-x-[3px] top-1.5 bottom-[3px] [&>*]:pointer-events-auto">{BLACK_KEYS.map((n) => key(n, true))}</div>
+    <div
+      className={cn(
+        "flex h-full cursor-default flex-col items-center justify-end gap-1 rounded-b-[7px] pb-1.5 transition-colors duration-150 shadow-[inset_0_-3px_0_oklch(0%_0_0/6%),0_0_0_1px_var(--hairline)]",
+        isRoot ? "bg-[var(--ch-mic)] text-white" : "bg-[oklch(99.5%_0.002_75)] text-foreground hover:bg-[oklch(96%_0.004_75)] dark:bg-[oklch(88%_0.004_75)] dark:text-[oklch(20%_0_0)]",
+      )}
+    >
+      {inside && !isRoot && <span className="size-1.5 rounded-full bg-[var(--ch-mic)]" />}
+      <span className={cn("font-mono text-[11px] font-semibold", !inside && !isRoot && "opacity-35")}>{keyName(n)}</span>
     </div>
+  );
+}
+
+/** Schwarze Taste (klavier). */
+function BlackKey({ note }: CustomKeyProps) {
+  const { root, scale } = useContext(ScaleContext);
+  const n = note.midiNumber % 12;
+  const isRoot = n === root;
+  return (
+    <div
+      className={cn(
+        "flex h-full cursor-default flex-col items-center justify-end rounded-b-[5px] pb-1.5 shadow-[0_2px_3px_oklch(0%_0_0/35%)] transition-colors duration-150",
+        isRoot ? "bg-[var(--ch-mic)]" : "bg-[oklch(24%_0.006_60)] hover:bg-[oklch(32%_0.006_60)] dark:bg-[oklch(12%_0.006_60)]",
+      )}
+    >
+      {inScale(n, root, scale) && !isRoot && <span className="size-1.5 rounded-full bg-white/70" />}
+    </div>
+  );
+}
+
+const NoLabel = () => null;
+
+/** Grundton als Klaviatur über eine Oktave (klavier); ein Klick wählt den Grundton. */
+function Keyboard({ value, scale, onChange }: { value: number; scale: Scale; onChange: (key: number) => void }) {
+  return (
+    <ScaleContext.Provider value={{ root: value, scale }}>
+      <div className="max-w-xl rounded-[10px] bg-[oklch(20%_0.006_60)] p-[3px] pt-1.5" title={t("voice.key")}>
+        <Klavier
+          keyRange={[60, 71]}
+          activeKeys={[60 + value]}
+          onKeyPress={(midi) => onChange(midi % 12)}
+          interactive={{ keyboard: false, mouse: true, touch: true }}
+          height="88px"
+          blackKeyHeight="60%"
+          components={{ whiteKey: WhiteKey, blackKey: BlackKey, label: NoLabel }}
+        />
+      </div>
+    </ScaleContext.Provider>
   );
 }
 

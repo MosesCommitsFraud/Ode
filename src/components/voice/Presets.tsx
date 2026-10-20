@@ -1,5 +1,6 @@
 import { CaretDown, CaretUp, PencilSimple, Prohibit, SlidersHorizontal, X } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import * as RadixPopover from "@radix-ui/react-popover";
 import { createPortal } from "react-dom";
 import { HotkeyRecorder } from "~/components/soundboard/HotkeyRecorder";
 import { hotkeyLabel } from "~/components/soundboard/hotkey";
@@ -237,24 +238,12 @@ export function PresetPicker({ onEdit, actions: footer, className }: { onEdit: (
   const voice = useStore((s) => s.effects.voice);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(0);
-  const root = useRef<HTMLDivElement>(null);
   const running = presets.find((p) => p.id === active && voice.enabled);
   const own = voice.enabled && !running;
   const pages = Math.max(1, Math.ceil(presets.length / PER_PAGE));
   const current = Math.min(page, pages - 1);
   const shown = presets.slice(current * PER_PAGE, (current + 1) * PER_PAGE);
 
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
-    const escape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", escape);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("keydown", escape);
-    };
-  }, [open]);
 
   const choose = (run: () => void) => {
     run();
@@ -264,13 +253,10 @@ export function PresetPicker({ onEdit, actions: footer, className }: { onEdit: (
   const name = running ? presetName(running) : own ? t("voice.own") : t("voice.off");
 
   return (
-    <div ref={root} className={cn("relative shrink-0", className)}>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+    <RadixPopover.Root open={open} onOpenChange={setOpen}>
+      <RadixPopover.Trigger
         style={{ "--key": color } as CSSProperties}
-        className="well flex h-9 w-56 cursor-default items-center gap-2 rounded-full pr-3 pl-1.5 text-left transition-colors hover:bg-accent/60"
+        className={cn("well flex h-9 w-56 shrink-0 cursor-default items-center gap-2 rounded-full pr-3 pl-1.5 text-left transition-colors outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring", className)}
       >
         <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-panel-raised text-[var(--key)] shadow-[0_1px_0_var(--hairline)] [&_svg]:size-4">
           {running ? <PresetIcon name={running.icon} weight="fill" /> : own ? <SlidersHorizontal /> : <Prohibit />}
@@ -280,10 +266,15 @@ export function PresetPicker({ onEdit, actions: footer, className }: { onEdit: (
           <span className="block truncate text-[13px] leading-tight font-semibold">{name}</span>
         </span>
         <CaretDown className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
-      </button>
+      </RadixPopover.Trigger>
 
-      {open && (
-        <div className="panel absolute top-11 left-0 z-50 flex w-[min(640px,calc(100vw-22rem))] origin-top-left animate-[pop-in_180ms_var(--ease-drawer)] flex-col gap-2 rounded-2xl p-2 shadow-[0_18px_50px_-12px_oklch(0%_0_0/45%)]">
+      <RadixPopover.Portal>
+        <RadixPopover.Content
+          align="start"
+          sideOffset={8}
+          collisionPadding={12}
+          className="panel z-50 flex w-[min(640px,calc(100vw-22rem))] origin-(--radix-popover-content-transform-origin) animate-[pop-in_180ms_var(--ease-drawer)] flex-col gap-2 rounded-2xl p-2 shadow-[0_18px_50px_-12px_oklch(0%_0_0/45%)] outline-none"
+        >
           <div className="flex gap-1">
             <BankKey compact active={!voice.enabled} color="var(--muted-foreground)" icon={<Prohibit />} label={t("voice.off")} onClick={() => choose(() => void actions.presetOff())} />
             <BankKey compact active={own} color="var(--ch-mic)" icon={<SlidersHorizontal />} label={t("voice.own")} onClick={() => choose(() => actions.setVoiceEnabled(true))} />
@@ -322,8 +313,8 @@ export function PresetPicker({ onEdit, actions: footer, className }: { onEdit: (
             <div className="flex-1" />
             {footer}
           </div>
-        </div>
-      )}
-    </div>
+        </RadixPopover.Content>
+      </RadixPopover.Portal>
+    </RadixPopover.Root>
   );
 }
