@@ -1,99 +1,87 @@
+import { Power } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
-import { PowerSwitch } from "~/components/ui/hardware";
+import { StripToggle, ToggleGroup } from "~/components/mixer/ChannelStrip";
 import { HelpIcon } from "./HelpDrawer";
-import { Badge, Card } from "~/components/ui/misc";
+import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
 
 /* Bausteine der Effekt-Seiten: Module als Karten mit Anzeige und Reglern. */
 
 /**
- * Ein Effekt als Rack-Gerät: Kippschalter mit Kontrolllampe, Anzeigefenster,
- * darunter die Bedienelemente nebeneinander, unten bündig (Drehregler,
- * Fader, Tasten).
+ * Ein Effekt als Zug im Pult, wie die Kanalzüge im Mischpult: Name, ein
+ * Bildschirm, der zeigt, was das Gerät tut, darunter die Fader über die ganze
+ * Höhe und unten die Tasten. Aus ist der Zug blass, an trägt er seine Farbe.
  */
 export function Module({
   title,
   enabled,
   onToggle,
-  status,
   display,
   className,
   children,
   accent,
-  side,
   help,
+  keys,
+  extra,
+  framed,
 }: {
   title: string;
   enabled: boolean;
   onToggle: (on: boolean) => void;
-  status?: ReactNode;
   display: ReactNode;
   className?: string;
+  /** Fader in einer Reihe, sie teilen sich die Höhe. */
   children?: ReactNode;
   /** Farbe für Anzeige und Regler, z. B. die Kanalfarbe. */
   accent?: string;
-  /**
-   * Bedienung rechts neben der Anzeige statt darunter (für Zeigerinstrumente).
-   * `"wide"`: nur wenn die Karte breit genug ist, sonst darunter.
-   */
-  side?: boolean | "wide";
   /** Werkzeug für die Erklärung hinter dem „?“ am Titel (siehe i18n/help.ts). */
   help?: string;
+  /** Wahltasten über den Fadern, z. B. Modus oder Tonart; volle Breite. */
+  keys?: ReactNode;
+  /** Weitere Schalter neben „An“ in der Tastenmulde unten. */
+  extra?: ReactNode;
+  /** Als eigene Karte statt als Zug in einem `Console`. */
+  framed?: boolean;
 }) {
+  // Ohne eigene Farbe bleibt --ch-mic geerbt; sich selbst zuweisen wäre ungültig.
+  const style: Record<string, string> = accent ? { "--ch-mic": accent, "--ch": accent } : { "--ch": "var(--ch-mic)" };
   return (
-    <Card
-      className={cn("@container relative flex min-h-0 min-w-0 flex-col gap-3 p-3.5", className)}
-      style={accent ? ({ "--ch-mic": accent } as React.CSSProperties) : undefined}
+    <section
+      style={style}
+      className={cn("@container flex min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 py-3.5", framed && "panel overflow-hidden rounded-2xl", className)}
     >
-      {/* An: farbiger Rahmen ums ganze Gerät, damit man es auf einen Blick sieht. */}
-      <span
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_0_2px_var(--ch-mic)] transition-opacity duration-200",
-          enabled ? "opacity-70" : "opacity-0",
-        )}
-      />
-      <div className="flex h-9 items-center gap-2.5">
-        <PowerSwitch label={title} on={enabled} onChange={onToggle} />
-        <h3 className={cn("min-w-0 truncate font-display text-base font-semibold tracking-tight transition-colors", !enabled && "text-muted-foreground")}>
+      <div className="flex h-7 items-center gap-1.5">
+        <h3 className={cn("min-w-0 truncate font-display text-[17px] font-semibold tracking-tight transition-colors", !enabled && "text-muted-foreground")}>
           {title}
         </h3>
         {help && <HelpIcon topic={help} />}
-        <div className="flex-1" />
-        {status}
       </div>
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 gap-4",
-          side === true ? "flex-row items-stretch" : side === "wide" ? "flex-col @[30rem]:flex-row @[30rem]:items-stretch" : "flex-col",
-        )}
-      >
-        <div className={cn("well relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-3 transition-[opacity,filter] duration-200", !enabled && "opacity-45 grayscale")}>
+        <div
+          className={cn(
+            "well relative overflow-hidden rounded-lg",
+            framed ? "h-14 shrink-0" : !children ? "min-h-0 flex-1" : keys ? "h-[clamp(60px,12vh,140px)] shrink-0" : "h-[clamp(84px,19vh,168px)] shrink-0",
+          )}
+        >
           {display}
         </div>
-        {children && (
-          <div
-            className={cn(
-              "flex items-end gap-3 [&>*]:min-w-0",
-              side === true
-                ? "shrink-0 justify-center self-end"
-                : side === "wide"
-                  ? "justify-around @[30rem]:shrink-0 @[30rem]:justify-center @[30rem]:self-end"
-                  : "justify-around",
-            )}
-          >
-            {children}
-          </div>
-        )}
+        {keys && <div className="flex shrink-0 flex-col gap-2">{keys}</div>}
+        {children && <div className="flex min-h-0 flex-1 justify-evenly gap-1 [&>*]:min-w-0">{children}</div>}
       </div>
-    </Card>
+      <ToggleGroup>
+        <StripToggle title={title} on={enabled} onClick={() => onToggle(!enabled)}>
+          <Power weight="bold" /> {enabled ? t("common.on") : t("common.off")}
+        </StripToggle>
+        {extra}
+      </ToggleGroup>
+    </section>
   );
 }
 
-/** Gruppe in der Reglerzeile, z. B. Tasten, die mehr Breite brauchen. */
-export function Wide({ children, grow = 2 }: { children: ReactNode; grow?: number }) {
+/** Mehrere Effekt-Züge nebeneinander auf einem Pult, getrennt durch feine Linien. */
+export function Console({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className="min-w-0" style={{ flex: `${grow} 1 0` }}>
+    <div className={cn("panel flex min-h-0 flex-1 animate-[layout-in_260ms_var(--ease-drawer)] divide-x divide-hairline rounded-2xl p-1.5", className)}>
       {children}
     </div>
   );
@@ -114,12 +102,8 @@ export function Tick({ at, axis, children }: { at: number; axis: "x" | "y"; chil
   );
 }
 
-export function Reading({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "success" | "warning" | "primary" }) {
-  return <Badge tone={tone}>{children}</Badge>;
-}
-
 /** Zeichenfläche für Kurven mit Platz für die Achsen links und unten. */
-export const PLOT = "absolute top-3 right-3 bottom-6 left-9";
+export const PLOT = "absolute top-3 right-3 bottom-6 left-3";
 
 /** Gitterlinie im 0–100-Koordinatensystem der Anzeigen. */
 export function GridLine({ x, y, strong }: { x?: number; y?: number; strong?: boolean }) {
@@ -142,9 +126,7 @@ export function Curve({ points, base, color = "var(--ch-mic)", fill = true }: { 
   const line = points.map(([x, y]) => `${x},${y}`).join(" ");
   return (
     <>
-      {fill && base !== undefined && (
-        <polygon points={`${points[0][0]},${base} ${line} ${points.at(-1)![0]},${base}`} fill={color} fillOpacity=".16" />
-      )}
+      {fill && base !== undefined && <polygon points={`${points[0][0]},${base} ${line} ${points.at(-1)![0]},${base}`} fill={color} fillOpacity=".16" />}
       <polyline points={line} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
     </>
   );
@@ -160,6 +142,13 @@ const EQ_FREQ_TICKS: [number, string][] = [
   [1000, "1k"],
   [5000, "5k"],
   [15000, "15k"],
+];
+
+/** Wo die drei Regler des EQ greifen, mit ihren Namen statt Frequenzen. */
+const EQ_BANDS: [number, string][] = [
+  [90, "effects.bass"],
+  [1200, "effects.presence"],
+  [11000, "effects.treble"],
 ];
 
 /** 20 Hz … 20 kHz logarithmisch auf 0–100. */
@@ -212,17 +201,10 @@ export function EqDisplay({
           <Curve points={points} base={50} color={color} />
         </svg>
       </div>
-      <div className="pointer-events-none absolute top-3 bottom-6 left-0 w-9">
-        {EQ_DB_TICKS.map((db) => (
-          <Tick key={db} axis="y" at={dy(db)}>
-            {db > 0 ? `+${db}` : db}
-          </Tick>
-        ))}
-      </div>
-      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
-        {EQ_FREQ_TICKS.map(([f, label]) => (
+      <div className="pointer-events-none absolute right-3 bottom-0 left-3 h-6">
+        {EQ_BANDS.map(([f, label]) => (
           <Tick key={f} axis="x" at={freqX(f)}>
-            {label}
+            {t(label)}
           </Tick>
         ))}
       </div>
@@ -267,16 +249,6 @@ export function ReverbDisplay({ size, damping, predelayMs, mix, color }: { size:
           <Curve points={points} base={100} color={color} />
         </svg>
       </div>
-      <div className="pointer-events-none absolute top-3 right-3 font-mono text-[9px] text-muted-foreground/80 tabular-nums">
-        {seconds.toFixed(1)} s
-      </div>
-      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
-        {ticks.map((s) => (
-          <Tick key={s} axis="x" at={(s / REVERB_SPAN) * 100}>
-            {s} s
-          </Tick>
-        ))}
-      </div>
     </>
   );
 }
@@ -284,7 +256,19 @@ export function ReverbDisplay({ size, damping, predelayMs, mix, color }: { size:
 const ECHO_SPAN = 2;
 
 /** Wiederholungen des Echos als Striche über 2 s, jede leiser und dunkler. */
-export function EchoDisplay({ timeMs, feedback, toneHz, mix, color = "var(--ch-mic)" }: { timeMs: number; feedback: number; toneHz: number; mix: number; color?: string }) {
+export function EchoDisplay({
+  timeMs,
+  feedback,
+  toneHz,
+  mix,
+  color = "var(--ch-mic)",
+}: {
+  timeMs: number;
+  feedback: number;
+  toneHz: number;
+  mix: number;
+  color?: string;
+}) {
   const taps: { x: number; h: number; o: number }[] = [];
   const darkening = Math.min(1, toneHz / 8000);
   for (let n = 1; n < 60; n++) {
@@ -304,22 +288,20 @@ export function EchoDisplay({ timeMs, feedback, toneHz, mix, color = "var(--ch-m
           ))}
           <line x1="0" x2="0" y1="100" y2="12" stroke="var(--foreground)" strokeOpacity=".6" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
           {taps.map((tap, i) => (
-            <line key={i} x1={tap.x} x2={tap.x} y1="100" y2={100 - Math.max(2, tap.h)} stroke={color} strokeOpacity={tap.o} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+            <line
+              key={i}
+              x1={tap.x}
+              x2={tap.x}
+              y1="100"
+              y2={100 - Math.max(2, tap.h)}
+              stroke={color}
+              strokeOpacity={tap.o}
+              strokeWidth="2.5"
+              vectorEffect="non-scaling-stroke"
+            />
           ))}
         </svg>
       </div>
-      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
-        {ticks.map((s) => (
-          <Tick key={s} axis="x" at={(s / ECHO_SPAN) * 100}>
-            {s} s
-          </Tick>
-        ))}
-      </div>
     </>
   );
-}
-
-/** Seitenwahl einer Effekt-Seite mit Aktionen rechts. */
-export function PageBar({ children }: { children: ReactNode }) {
-  return <div className="flex shrink-0 items-center gap-2 pr-3 pl-6 pt-3 pb-3">{children}</div>;
 }

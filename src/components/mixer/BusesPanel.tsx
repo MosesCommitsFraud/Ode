@@ -45,6 +45,7 @@ function ReverbBus() {
   const p = useStore((s) => s.buses.reverb);
   return (
     <Module
+      framed
       className="col-span-3"
       title={t("mixer.reverbBus")}
       accent="var(--ch-out)"
@@ -68,6 +69,7 @@ function EchoBus() {
   const p = useStore((s) => s.buses.echo);
   return (
     <Module
+      framed
       className="col-span-3"
       title={t("mixer.echoBus")}
       accent="var(--ch-out)"
@@ -93,6 +95,7 @@ function ChannelTone({ id }: { id: ChannelId }) {
   const off = !fx.eqEnabled;
   return (
     <Module
+      framed
       className="col-span-2"
       title={`${channel.name()} · ${t("mixer.tone")}`}
       accent={channel.color}

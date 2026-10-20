@@ -1,7 +1,6 @@
-import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Tick, Wide } from "~/components/effects/rack";
+import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay } from "~/components/effects/rack";
 import { CassetteTape, Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
 import { PushButtons, SlideFader } from "~/components/ui/hardware";
-import { Knob } from "~/components/ui/knob";
 import type { CharacterMode, ModulationMode } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -108,17 +107,15 @@ export function CharacterModule() {
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("character", { enabled })}
       display={<CharacterDisplay mode={p.mode} amount={p.amount} tone={p.tone} mix={p.mix} />}
-    >
-      <Wide grow={3}>
+      keys={
         <PushButtons
-          label={t(`voice.mode.${p.mode}`)}
           value={p.mode}
-          disabled={!p.enabled}
           onChange={(mode: CharacterMode) => actions.setVoice("character", { mode })}
           options={MODES.map((m) => ({ value: m.id, label: m.icon, title: t(`voice.mode.${m.id}`) }))}
         />
-      </Wide>
-      <Knob
+      }
+    >
+      <SlideFader
         label={t("voice.amount")}
         value={p.amount}
         min={0}
@@ -126,10 +123,9 @@ export function CharacterModule() {
         step={0.01}
         reset={0.5}
         format={percent}
-        disabled={!p.enabled}
         onChange={(amount) => actions.setVoice("character", { amount })}
       />
-      <Knob
+      <SlideFader
         label={tone.label}
         value={p.tone}
         min={0}
@@ -137,7 +133,6 @@ export function CharacterModule() {
         step={0.01}
         reset={0.5}
         format={() => tone.value}
-        disabled={!p.enabled}
         onChange={(v) => actions.setVoice("character", { tone: v })}
       />
       <SlideFader
@@ -148,7 +143,6 @@ export function CharacterModule() {
         step={0.01}
         reset={1}
         format={percent}
-        disabled={!p.enabled}
         onChange={(mix) => actions.setVoice("character", { mix })}
       />
     </Module>
@@ -193,13 +187,6 @@ function ModulationDisplay({ mode, rateHz, depth }: { mode: ModulationMode; rate
           ))}
         </svg>
       </div>
-      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
-        {ticks.map((s) => (
-          <Tick key={s} axis="x" at={(s / MOD_SPAN) * 100}>
-            {s} s
-          </Tick>
-        ))}
-      </div>
     </>
   );
 }
@@ -213,17 +200,15 @@ export function ModulationModule() {
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("modulation", { enabled })}
       display={<ModulationDisplay mode={p.mode} rateHz={p.rateHz} depth={p.depth} />}
-    >
-      <Wide grow={2.5}>
+      keys={
         <PushButtons
-          label={t("voice.modeLabel")}
           value={p.mode}
-          disabled={!p.enabled}
           onChange={(mode: ModulationMode) => actions.setVoice("modulation", { mode })}
           options={MOD_MODES.map((m) => ({ value: m, label: t(`voice.mod.${m}`) }))}
         />
-      </Wide>
-      <Knob
+      }
+    >
+      <SlideFader
         label={t("voice.rate")}
         value={p.rateHz}
         min={0.05}
@@ -231,10 +216,9 @@ export function ModulationModule() {
         step={0.05}
         reset={0.8}
         format={(v) => `${v.toFixed(2)} Hz`}
-        disabled={!p.enabled}
         onChange={(rateHz) => actions.setVoice("modulation", { rateHz })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.depth")}
         value={p.depth}
         min={0}
@@ -242,10 +226,9 @@ export function ModulationModule() {
         step={0.01}
         reset={0.5}
         format={percent}
-        disabled={!p.enabled}
         onChange={(depth) => actions.setVoice("modulation", { depth })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.feedback")}
         value={p.feedback}
         min={0}
@@ -253,7 +236,7 @@ export function ModulationModule() {
         step={0.01}
         reset={0.3}
         format={percent}
-        disabled={!p.enabled || p.mode === "chorus"}
+        disabled={p.mode === "chorus"}
         onChange={(feedback) => actions.setVoice("modulation", { feedback })}
       />
       <SlideFader
@@ -264,7 +247,6 @@ export function ModulationModule() {
         step={0.01}
         reset={0.5}
         format={percent}
-        disabled={!p.enabled}
         onChange={(mix) => actions.setVoice("modulation", { mix })}
       />
     </Module>
@@ -295,15 +277,13 @@ export function EchoControls({
         min={20}
         max={1500}
         step={5}
-        scale={[20, 500, 1000, 1500]}
-        tickLabel={(v) => (v >= 1000 ? `${v / 1000}s` : String(Math.round(v)))}
         reset={320}
         format={(v) => `${Math.round(v)} ms`}
         disabled={disabled}
         color={color}
         onChange={(timeMs) => onChange({ timeMs })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.feedback")}
         value={params.feedback}
         min={0}
@@ -315,7 +295,7 @@ export function EchoControls({
         color={color}
         onChange={(feedback) => onChange({ feedback })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.echoTone")}
         value={Math.log2(params.toneHz)}
         min={Math.log2(500)}
@@ -358,7 +338,7 @@ export function ReverbControls({
 }) {
   return (
     <>
-      <Knob
+      <SlideFader
         label={t("voice.size")}
         value={params.size}
         min={0}
@@ -370,7 +350,7 @@ export function ReverbControls({
         color={color}
         onChange={(size) => onChange({ size })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.damping")}
         value={params.damping}
         min={0}
@@ -388,25 +368,11 @@ export function ReverbControls({
         min={0}
         max={200}
         step={1}
-        scale={[0, 50, 100, 150, 200]}
-        tickLabel={(v) => String(Math.round(v))}
         reset={20}
         format={(v) => `${v} ms`}
         disabled={disabled}
         color={color}
         onChange={(predelayMs) => onChange({ predelayMs })}
-      />
-      <Knob
-        label={t("voice.lowCut")}
-        value={params.lowCutHz}
-        min={20}
-        max={1000}
-        step={10}
-        reset={200}
-        format={hz}
-        disabled={disabled}
-        color={color}
-        onChange={(lowCutHz) => onChange({ lowCutHz })}
       />
       <SlideFader
         label={mixLabel}
@@ -434,7 +400,7 @@ export function EchoModule() {
       onToggle={(enabled) => actions.setVoice("echo", { enabled })}
       display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.15, p.mix)} />}
     >
-      <EchoControls params={p} disabled={!p.enabled} onChange={(patch) => actions.setVoice("echo", patch)} />
+      <EchoControls params={p} onChange={(patch) => actions.setVoice("echo", patch)} />
     </Module>
   );
 }
@@ -449,7 +415,7 @@ export function ReverbModule() {
       onToggle={(enabled) => actions.setVoice("reverb", { enabled })}
       display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} />}
     >
-      <ReverbControls params={p} disabled={!p.enabled} onChange={(patch) => actions.setVoice("reverb", patch)} />
+      <ReverbControls params={p} onChange={(patch) => actions.setVoice("reverb", patch)} />
     </Module>
   );
 }

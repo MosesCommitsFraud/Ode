@@ -3,7 +3,8 @@ import { cn } from "~/lib/utils";
 
 /*
  * Bedienelemente wie an Rack-Geräten: Schiebefader, Drucktasten mit
- * Leuchtstreifen, Wippschalter zum Einschalten und eingravierte Beschriftung. Leuchten sind flache Farbflächen, ohne Schein.
+ * Leuchtstreifen und eingravierte Beschriftung. Leuchten sind flache
+ * Farbflächen, ohne Schein.
  */
 
 /** Beschriftung wie auf eine Frontplatte gedruckt. */
@@ -28,7 +29,10 @@ export function Caption({ label, value }: { label: string; value?: ReactNode }) 
 /** Höhe der Faderkappe in px; der Weg endet je eine halbe Kappe vor dem Rand. */
 const CAP = 28;
 
-/** Senkrechter Fader mit Skala, Kappe wie am Pult; Füllung in `color`. */
+/**
+ * Senkrechter Fader mit Skala, Kappe wie am Pult; Füllung in `color`, bei
+ * `bipolar` von der Mitte aus. Nimmt die Höhe seines Platzes ein.
+ */
 export function SlideFader({
   label,
   value,
@@ -43,7 +47,7 @@ export function SlideFader({
   ticks = 5,
   tickLabel,
   scale,
-  size = "md",
+  bipolar,
 }: {
   label: string;
   value: number;
@@ -60,8 +64,7 @@ export function SlideFader({
   tickLabel?: (v: number) => string;
   /** Werte der Skalenstriche; ohne gleichmäßig `ticks` Stück. */
   scale?: number[];
-  /** `lg` füllt die Höhe neben einem Instrument, `md` passt unter eine Anzeige. */
-  size?: "md" | "lg";
+  bipolar?: boolean;
 }) {
   const track = useRef<HTMLDivElement>(null);
   const range = max - min;
@@ -105,8 +108,8 @@ export function SlideFader({
   const at = (p: number) => `calc(${CAP / 2}px + (100% - ${CAP}px) * ${p})`;
 
   return (
-    <div className={cn("flex min-w-0 flex-col items-center gap-1 select-none", disabled && "opacity-45")} style={{ "--ch": color } as CSSProperties}>
-      <div className={cn("flex items-stretch gap-1", size === "lg" ? "h-[clamp(96px,16vh,136px)]" : "h-[88px]")}>
+    <div className={cn("flex h-full min-h-0 min-w-0 flex-col items-center gap-1.5 select-none", disabled && "opacity-45")} style={{ "--ch": color } as CSSProperties}>
+      <div className="flex min-h-[44px] flex-1 items-stretch gap-1">
         {tickLabel && (
           <div className="relative w-6 font-mono text-[9px] leading-none text-muted-foreground/70 tabular-nums">
             {marks.map((p) => (
@@ -137,7 +140,10 @@ export function SlideFader({
             <span key={p} className="absolute left-1/2 h-px w-7 -translate-x-1/2 bg-muted-foreground/30" style={{ bottom: at(p) }} />
           ))}
           <div className="well absolute inset-y-3 left-1/2 w-1.5 -translate-x-1/2 rounded-full" />
-          <div className="absolute bottom-3 left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-[var(--ch)]" style={{ height: `calc((100% - 24px) * ${pos})` }} />
+          <div
+            className="absolute left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-[var(--ch)]"
+            style={{ bottom: `calc(12px + (100% - 24px) * ${bipolar ? Math.min(pos, 0.5) : 0})`, height: `calc((100% - 24px) * ${bipolar ? Math.abs(pos - 0.5) : pos})` }}
+          />
           <div
             className={cn(
               "absolute left-1/2 h-7 w-10 -translate-x-1/2 translate-y-1/2 rounded-[7px]",
@@ -201,7 +207,28 @@ export function HardwareKey({
   );
 }
 
-/** Tastenreihe, von der genau eine eingerastet ist (wie Wahltasten am Gerät). */
+/** Taste in einer Mulde wie die Schalter der Kanalzüge: gewählt hebt sie sich hell heraus. */
+function WellKey({ on, onClick, disabled, title, children }: { on: boolean; onClick: () => void; disabled?: boolean; title?: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex h-7 min-w-0 flex-1 cursor-default items-center justify-center gap-1 truncate rounded-[6px] px-1.5 font-mono text-2xs font-semibold uppercase transition-all duration-200 [&_svg]:size-4 [&_svg]:shrink-0",
+        on
+          ? "bg-panel-raised text-[var(--ch-mic)] shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)]"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Wahltasten, von denen genau eine gilt; in einer Reihe oder als Block mit `columns` Spalten. */
 export function PushButtons<T extends string | number>({
   label,
   value,
@@ -217,19 +244,15 @@ export function PushButtons<T extends string | number>({
   onChange: (v: T) => void;
   disabled?: boolean;
   className?: string;
-  /** Tasten als Block mit so vielen Spalten statt in einer Reihe. */
   columns?: number;
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-1", disabled && "opacity-45", className)}>
-      <div
-        className={columns ? "grid auto-rows-[32px] gap-1" : "flex h-9 gap-1"}
-        style={columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined}
-      >
+      <div className="well grid gap-1 rounded-[10px] p-1" style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}>
         {options.map((o) => (
-          <HardwareKey key={String(o.value)} on={o.value === value} disabled={disabled} title={o.title} onClick={() => onChange(o.value)}>
+          <WellKey key={String(o.value)} on={o.value === value} disabled={disabled} title={o.title} onClick={() => onChange(o.value)}>
             {o.label}
-          </HardwareKey>
+          </WellKey>
         ))}
       </div>
       {label && <Caption label={label} />}
@@ -237,7 +260,7 @@ export function PushButtons<T extends string | number>({
   );
 }
 
-/** Einzelner Rasttaster für An/Aus. */
+/** Einzelne Taste für An/Aus einer Option. */
 export function PushButton({
   label,
   caption,
@@ -255,65 +278,13 @@ export function PushButton({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col items-center gap-1", disabled && "opacity-45", className)}>
-      <div className="flex h-9 w-full min-w-11">
-        <HardwareKey on={on} disabled={disabled} onClick={() => onChange(!on)}>
+    <div className={cn("flex min-w-0 flex-col gap-1", disabled && "opacity-45", className)}>
+      <div className="well flex rounded-[10px] p-1">
+        <WellKey on={on} disabled={disabled} onClick={() => onChange(!on)}>
           {label}
-        </HardwareKey>
+        </WellKey>
       </div>
       {caption && <Caption label={caption} />}
     </div>
-  );
-}
-
-/**
- * Wippschalter zum Einschalten, wie an einer Steckdosenleiste: quadratisch,
- * oben „I“, unten „O“. An: die obere Hälfte ist eingedrückt und die Wippe
- * leuchtet vollflächig in der Gerätefarbe.
- */
-export function PowerSwitch({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      title={label}
-      onClick={() => onChange(!on)}
-      className="well size-9 shrink-0 cursor-default rounded-[9px] p-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <span
-        className={cn(
-          "relative flex size-full flex-col overflow-hidden rounded-[6px] font-mono text-[10px] leading-none font-bold transition-colors duration-150",
-          "shadow-[0_0_0_1px_oklch(0%_0_0/22%),0_2px_4px_-1px_oklch(0%_0_0/40%)]",
-          on ? "bg-[var(--ch-mic)] text-white" : "bg-[var(--knob-hi)] text-muted-foreground",
-        )}
-      >
-        {/* Obere Hälfte: „I“. Eingedrückt, wenn an. */}
-        <span
-          className={cn(
-            "flex flex-1 items-center justify-center",
-            on
-              ? "bg-[linear-gradient(to_bottom,oklch(0%_0_0/32%),oklch(0%_0_0/8%))]"
-              : "bg-[linear-gradient(to_bottom,oklch(100%_0_0/30%),oklch(0%_0_0/4%))]",
-          )}
-        >
-          I
-        </span>
-        {/* Kante der Wippe */}
-        <span className={cn("h-px", on ? "bg-black/30" : "bg-black/15")} />
-        {/* Untere Hälfte: „O“. Eingedrückt, wenn aus. */}
-        <span
-          className={cn(
-            "flex flex-1 items-center justify-center",
-            on
-              ? "bg-[linear-gradient(to_bottom,oklch(100%_0_0/28%),oklch(0%_0_0/6%))]"
-              : "bg-[linear-gradient(to_bottom,oklch(0%_0_0/18%),oklch(0%_0_0/6%))]",
-          )}
-        >
-          O
-        </span>
-      </span>
-    </button>
   );
 }

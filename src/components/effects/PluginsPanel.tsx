@@ -221,7 +221,8 @@ function Crashed({ message }: { message: string }) {
   );
 }
 
-export function PluginsPanel() {
+/** `embedded`: als Seite unter der Seitenwahl der Effekte, ohne eigenen Seitenrand. */
+export function PluginsPanel({ embedded }: { embedded?: boolean } = {}) {
   const loaded = usePlugins((s) => s.status.loaded !== null);
   const crashed = usePlugins((s) => s.status.crashed);
   const error = usePlugins((s) => s.error);
@@ -233,7 +234,7 @@ export function PluginsPanel() {
     return () => window.clearInterval(id);
   }, [loaded]);
   return (
-    <div className="flex min-h-0 flex-1 animate-[layout-in_260ms_var(--ease-drawer)] flex-col gap-3 pr-3 pb-3 pl-6">
+    <div className={cn("flex min-h-0 flex-1 animate-[layout-in_260ms_var(--ease-drawer)] flex-col gap-3", !embedded && "pr-3 pb-3 pl-6")}>
       {error && (
         <div className="flex items-center gap-3 rounded-2xl bg-error/10 px-4 py-2 text-sm text-error-foreground">
           <span className="flex-1">{error}</span>

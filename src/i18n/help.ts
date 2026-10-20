@@ -23,7 +23,7 @@ export default {
 
     "eq.what": "Hebt oder senkt Tiefen, Präsenz und Höhen der Stimme. Die Kurve zeigt, was mit welcher Frequenz passiert.",
     "eq.when": "Dumpfe Stimme: Präsenz und Höhen etwas anheben. Dröhnt es: Bass absenken. Zischelt es: Höhen absenken oder den De-Esser nehmen.",
-    "eq.controls": "Bass: 120 Hz und darunter.\nPräsenz: Verständlichkeit um 2,5 kHz.\nHöhen: Luft ab 8 kHz.\nDoppelklick auf einen Regler stellt ihn auf 0.",
+    "eq.controls": "Bass: 120 Hz und darunter.\nPräsenz: Verständlichkeit um 2,5 kHz.\nHöhen: Luft ab 8 kHz.\nDoppelklick auf einen Fader stellt ihn auf 0.",
 
     "agc.what": "Gleicht deine Lautstärke automatisch an: leise Passagen werden angehoben, laute abgesenkt. Die Nadel zeigt die aktuelle Anhebung.",
     "agc.when": "Wenn du mal nah, mal fern vom Mikrofon sitzt oder andere sagen, du seist zu leise.",
@@ -31,7 +31,7 @@ export default {
 
     "compressor.what": "Macht laute Stellen leiser, damit die Stimme gleichmäßiger klingt. Die Nadel zeigt, wie stark gerade abgesenkt wird.",
     "compressor.when": "Wenn du beim Lachen oder Rufen viel lauter wirst als beim normalen Sprechen.",
-    "compressor.controls": "Schwelle: Ab diesem Pegel wird abgesenkt.\nVerhältnis: Wie stark. 2:1 ist sanft, 10:1 fast eine Grenze.\nAufholen: Hebt danach alles wieder an, damit es nicht leiser wird.",
+    "compressor.controls": "Schwelle: Ab diesem Pegel wird abgesenkt.\nSanft, Mittel, Kräftig: Wie stark abgesenkt wird.\nAufholen: Hebt danach alles wieder an, damit es nicht leiser wird.",
 
     "deEsser.what": "Senkt nur die scharfen S- und Sch-Laute ab, der Rest der Stimme bleibt unberührt. Die Nadel zeigt die Absenkung.",
     "deEsser.when": "Wenn S-Laute zischen, vor allem mit Exciter oder angehobenen Höhen.",
@@ -79,7 +79,7 @@ export default {
 
     "reverb.what": "Lässt dich klingen, als stündest du in einem Raum. Die Kurve zeigt, wie der Hall abklingt.",
     "reverb.when": "Etwas Hall macht Gesang voller, viel Hall klingt nach Halle oder Kathedrale.",
-    "reverb.controls": "Größe: Vom Zimmer bis zur Kathedrale.\nDämpfung: Wie weich der Raum ist.\nVorlauf: Pause, bevor der Hall einsetzt. Mehr hält die Stimme klar.\nLow-Cut: Entfernt Bass aus dem Hall, damit es nicht dröhnt.\nAnteil: Lautstärke des Halls.",
+    "reverb.controls": "Größe: Vom Zimmer bis zur Kathedrale.\nDämpfung: Wie weich der Raum ist.\nVorlauf: Pause, bevor der Hall einsetzt. Mehr hält die Stimme klar.\nAnteil: Lautstärke des Halls.",
   },
   en: {
     button: "Explain",
@@ -108,7 +108,7 @@ export default {
 
     "compressor.what": "Makes loud parts quieter so your voice sounds more even. The needle shows how much is being reduced.",
     "compressor.when": "If you get much louder when laughing or shouting than when talking.",
-    "compressor.controls": "Threshold: reduction starts above this level.\nRatio: how strongly. 2:1 is gentle, 10:1 almost a hard limit.\nMakeup: raises everything afterwards so it does not get quieter.",
+    "compressor.controls": "Threshold: reduction starts above this level.\nGentle, Medium, Strong: how strongly it reduces.\nMakeup: raises everything afterwards so it does not get quieter.",
 
     "deEsser.what": "Lowers only sharp S and SH sounds, the rest of your voice stays untouched. The needle shows the reduction.",
     "deEsser.when": "When S sounds hiss, especially with the exciter or raised highs.",
@@ -156,6 +156,6 @@ export default {
 
     "reverb.what": "Makes you sound like you are standing in a room. The curve shows how the reverb fades.",
     "reverb.when": "A little reverb makes vocals fuller, a lot sounds like a hall or cathedral.",
-    "reverb.controls": "Size: from a small room to a cathedral.\nDamping: how soft the room is.\nPre-delay: pause before the reverb starts. More keeps your voice clear.\nLow cut: removes bass from the reverb so it does not boom.\nMix: reverb volume.",
+    "reverb.controls": "Size: from a small room to a cathedral.\nDamping: how soft the room is.\nPre-delay: pause before the reverb starts. More keeps your voice clear.\nMix: reverb volume.",
   },
 };

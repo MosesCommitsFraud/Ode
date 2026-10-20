@@ -1,12 +1,10 @@
-import { PencilSimple, X } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { CaretDown, CaretUp, PencilSimple, Prohibit, SlidersHorizontal, X } from "@phosphor-icons/react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { HelpIcon } from "~/components/effects/HelpDrawer";
 import { HotkeyRecorder } from "~/components/soundboard/HotkeyRecorder";
 import { hotkeyLabel } from "~/components/soundboard/hotkey";
 import { Button } from "~/components/ui/button";
-import { HardwareKey, PushButtons } from "~/components/ui/hardware";
-import { Card, EmptyState, Kbd, SectionLabel } from "~/components/ui/misc";
+import { SectionLabel } from "~/components/ui/misc";
 import type { Preset, VoiceParams } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { SOUND_COLORS, soundColor } from "~/lib/library";
@@ -21,131 +19,6 @@ export function presetName(p: Preset) {
 /** Gleiche Stimm-Einstellung, unabhängig vom Hauptschalter. */
 export function sameVoice(a: VoiceParams, b: VoiceParams) {
   return JSON.stringify({ ...a, enabled: true }) === JSON.stringify({ ...b, enabled: true });
-}
-
-const KEY_MIN_WIDTH = 104;
-const KEY_MIN_HEIGHT = 100;
-const KEY_MAX_HEIGHT = 190;
-const GAP = 8;
-
-/** Tasten füllen den Bereich: bis zu drei Reihen, Höhe nach Platz. */
-function useBankSize() {
-  const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ cols: 8, rows: 2, space: 240 });
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      const rows = Math.min(3, Math.max(1, Math.floor((height + GAP) / (KEY_MIN_HEIGHT + GAP))));
-      setSize({
-        cols: Math.max(1, Math.floor((width + GAP) / (KEY_MIN_WIDTH + GAP))),
-        rows,
-        space: height,
-      });
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-  return { ref, ...size };
-}
-
-/** Eine Preset-Taste: Leuchtstreifen, Symbol, Name, Hotkey. */
-function PresetKey({ preset, active, onEdit }: { preset: Preset; active: boolean; onEdit: () => void }) {
-  return (
-    <div className="group relative h-full min-w-0" style={{ "--ch-mic": soundColor(preset.color) } as CSSProperties}>
-      <HardwareKey
-        on={active}
-        title={presetName(preset)}
-        className="size-full justify-between gap-1 px-2 pt-5 pb-2.5 [&_svg]:size-8"
-        onClick={() => void (active ? actions.presetOff() : actions.applyPreset(preset.id))}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          onEdit();
-        }}
-      >
-        {/* Eingerastet: die Taste trägt ihre Farbe. */}
-        <span className={cn("pointer-events-none absolute inset-0 bg-[var(--ch-mic)] transition-opacity", active ? "opacity-[0.14]" : "opacity-0")} />
-        <PresetIcon name={preset.icon} weight={active ? "fill" : "duotone"} className="relative text-[var(--ch-mic)]" />
-        <span className="relative w-full truncate py-0.5 text-center text-[11px] leading-normal tracking-[0.08em] text-foreground">
-          {presetName(preset)}
-        </span>
-        <span className="relative flex h-4 items-center gap-0.5 normal-case">
-          {preset.hotkey &&
-            hotkeyLabel(preset.hotkey, preset.hotkeyLabel).map((k, i) => (
-              <Kbd key={`${i}-${k}`} className="h-4 min-w-4 px-1 text-[9px]">
-                {k}
-              </Kbd>
-            ))}
-        </span>
-      </HardwareKey>
-      <button
-        type="button"
-        title={t("voice.editPreset")}
-        onClick={onEdit}
-        className="absolute top-2.5 right-1.5 flex size-6 cursor-default items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground [&_svg]:size-3.5"
-      >
-        <PencilSimple />
-      </button>
-    </div>
-  );
-}
-
-/**
- * Display über der Tastenbank, wie das Leuchtdisplay eines Effektgeräts:
- * immer dunkel, Symbol und Name in der Farbe des laufenden Presets, dazu
- * eine Pegelkette der Stimme.
- */
-function BankDisplay({ running, modified }: { running: Preset | undefined; modified: boolean }) {
-  const enabled = useStore((s) => s.effects.voice.enabled);
-  const peak = useStore((s) => (s.info ? (s.meters?.channels.find((c) => c.id === "mic")?.peak ?? 0) : 0));
-  const color = running ? soundColor(running.color) : "oklch(70% 0.01 70)";
-  const level = Math.min(1, Math.max(0, (20 * Math.log10(Math.max(peak, 1e-5)) + 60) / 60));
-  return (
-    <div
-      className="flex h-[76px] shrink-0 items-center gap-5 rounded-xl bg-[oklch(16%_0.006_60)] px-5 shadow-[inset_0_2px_10px_oklch(0%_0_0/55%),0_0_0_1px_oklch(0%_0_0/30%)]"
-      style={{ "--ch": color } as CSSProperties}
-    >
-      <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-white/5 text-[var(--ch)] [&_svg]:size-7">
-        <PresetIcon name={running?.icon ?? "microphone"} weight={running ? "fill" : "duotone"} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="font-mono text-[9px] font-semibold tracking-[0.18em] text-white/45 uppercase">
-          {running ? t("voice.playing") : t("voice.presets")}
-          {modified && <span className="ml-2 text-[var(--ch)]">· {t("voice.modified")}</span>}
-        </div>
-        <div className="truncate font-mono text-2xl leading-tight font-semibold tracking-[0.1em] text-[var(--ch)] uppercase">
-          {running ? presetName(running) : enabled ? t("voice.custom") : t("voice.off")}
-        </div>
-      </div>
-      {running?.hotkey && (
-        <div className="flex gap-1">
-          {hotkeyLabel(running.hotkey, running.hotkeyLabel).map((k, i) => (
-            <span key={`${i}-${k}`} className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-white/80">
-              {k}
-            </span>
-          ))}
-        </div>
-      )}
-      {/* Pegelkette der Stimme */}
-      <div className="hidden w-40 flex-col gap-1 md:flex">
-        <div className="flex h-3 gap-[3px]">
-          {Array.from({ length: 16 }, (_, i) => {
-            const on = level > i / 16;
-            return (
-              <span
-                key={i}
-                className="flex-1 rounded-[2px] transition-colors duration-75"
-                style={{ background: on ? (i >= 14 ? "var(--error)" : "var(--ch)") : "oklch(100% 0 0 / 8%)" }}
-              />
-            );
-          })}
-        </div>
-        <span className="font-mono text-[9px] tracking-[0.18em] text-white/45 uppercase">{t("voice.input")}</span>
-      </div>
-      <HelpIcon topic="presets" className="text-white/50 hover:bg-white/10 hover:text-white" />
-    </div>
-  );
 }
 
 /** Name, Symbol und Hotkey eines Presets; „überschreiben“ nimmt die aktuelle Einstellung. */
@@ -286,63 +159,150 @@ export function PresetEditor({ preset, onClose }: { preset: Preset; onClose: () 
 }
 
 /**
- * Presets als Tastenbank wie an einem Effektgerät: oben das Display mit dem
- * laufenden Preset, darunter die Tasten, seitenweise in Bänken. Drücken
- * schaltet ein, nochmal drücken aus.
+ * Eine Taste der Preset-Reihe: Symbol in der Preset-Farbe und Name.
+ * Gewählt hebt sie sich hell heraus und trägt einen Rahmen in ihrer Farbe.
+ */
+function BankKey({
+  active,
+  color,
+  icon,
+  label,
+  title,
+  onClick,
+  onEdit,
+}: {
+  active: boolean;
+  color: string;
+  icon: ReactNode;
+  label: string;
+  title?: string;
+  onClick: () => void;
+  onEdit?: () => void;
+}) {
+  return (
+    <div className="group relative min-w-0 flex-1" style={{ "--key": color } as CSSProperties}>
+      <button
+        type="button"
+        title={title ?? label}
+        aria-pressed={active}
+        onClick={onClick}
+        onContextMenu={(e) => {
+          if (!onEdit) return;
+          e.preventDefault();
+          onEdit();
+        }}
+        className={cn(
+          // Rundung der Mulde (16) minus Innenabstand (6).
+          "flex h-[clamp(60px,9vh,80px)] w-full cursor-default flex-col items-center justify-center gap-1.5 rounded-[10px] px-2 transition-all duration-200 [&_svg]:size-6",
+          active
+            ? "bg-panel-raised shadow-[inset_0_0_0_2px_var(--key),0_4px_12px_-6px_oklch(0%_0_0/45%)]"
+            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+        )}
+      >
+        <span className="text-[var(--key)]">{icon}</span>
+        <span className={cn("w-full truncate text-center text-xs", active ? "font-semibold text-foreground" : "font-medium")}>{label}</span>
+      </button>
+      {onEdit && (
+        <button
+          type="button"
+          title={t("voice.editPreset")}
+          onClick={onEdit}
+          className="absolute top-1 right-1 flex size-6 cursor-default items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground [&_svg]:size-3.5"
+        >
+          <PencilSimple />
+        </button>
+      )}
+    </div>
+  );
+}
+
+const KEY_MIN_WIDTH = 96;
+
+/** Wie viele Tasten nebeneinander passen. */
+function useKeyCount() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [count, setCount] = useState(8);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setCount(Math.max(1, Math.floor(entry.contentRect.width / KEY_MIN_WIDTH))));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, count };
+}
+
+/**
+ * Die Stimme als eine Reihe von Wahltasten: „Aus“, „Eigene“ (die gerade
+ * eingestellte Stimme) und die Presets. Genau eine gilt; mehr Presets als
+ * Platz blättern seitenweise. Rechtsklick auf ein Preset bearbeitet es.
  */
 export function PresetBank({ onEdit }: { onEdit: (preset: Preset) => void }) {
   const presets = useStore((s) => s.presets);
   const active = useStore((s) => s.activePreset);
   const voice = useStore((s) => s.effects.voice);
-  const bank = useBankSize();
+  const fit = useKeyCount();
   const [page, setPage] = useState(0);
-  const perBank = bank.cols * bank.rows;
-  const banks = Math.max(1, Math.ceil(presets.length / perBank));
-  const current = Math.min(page, banks - 1);
-  const shown = presets.slice(current * perBank, (current + 1) * perBank);
-  // Die belegten Reihen teilen sich die Höhe.
-  const usedRows = Math.max(1, Math.min(bank.rows, Math.ceil(shown.length / bank.cols)));
-  const keyHeight = Math.min(KEY_MAX_HEIGHT, Math.floor((bank.space - GAP * (usedRows - 1)) / usedRows));
-  const turn = (delta: number) => setPage(Math.min(banks - 1, Math.max(0, current + delta)));
+  // Aus und Eigene sind immer da, der Rest der Reihe gehört den Presets.
+  const perPage = Math.max(1, fit.count - 2);
+  const pages = Math.max(1, Math.ceil(presets.length / perPage));
+  const current = Math.min(page, pages - 1);
+  const shown = presets.slice(current * perPage, (current + 1) * perPage);
   const running = presets.find((p) => p.id === active && voice.enabled);
-  const modified = !!running && !sameVoice(running.voice, voice);
+  const own = voice.enabled && !running;
+  const turn = (delta: number) => setPage(Math.min(pages - 1, Math.max(0, current + delta)));
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 pr-3 pb-3 pl-6">
-      <Card className="flex min-h-0 flex-1 flex-col gap-4 p-4">
-        <div className="flex items-center gap-4">
-          <div className="min-w-0 flex-1">
-            <BankDisplay running={running} modified={modified} />
-          </div>
-          {banks > 1 && (
-            <PushButtons
-              label={t("voice.bank")}
-              value={current}
-              className="w-[clamp(96px,14vw,180px)]"
-              options={Array.from({ length: banks }, (_, i) => ({ value: i, label: String.fromCharCode(65 + i) }))}
-              onChange={setPage}
-            />
-          )}
+    <div className="panel flex shrink-0 items-center gap-1 rounded-2xl p-1.5">
+      <div ref={fit.ref} onWheel={(e) => pages > 1 && Math.abs(e.deltaY) > 20 && turn(e.deltaY > 0 ? 1 : -1)} className="flex min-w-0 flex-1 gap-1">
+        <BankKey active={!voice.enabled} color="var(--muted-foreground)" icon={<Prohibit />} label={t("voice.off")} onClick={() => void actions.presetOff()} />
+        <BankKey
+          active={own}
+          color="var(--ch-mic)"
+          icon={<SlidersHorizontal />}
+          label={t("voice.own")}
+          onClick={() => actions.setVoiceEnabled(true)}
+        />
+        <div className="mx-1 w-px self-stretch bg-hairline" />
+        {shown.map((p) => (
+          <BankKey
+            key={p.id}
+            active={running?.id === p.id}
+            color={soundColor(p.color)}
+            icon={<PresetIcon name={p.icon} weight={running?.id === p.id ? "fill" : "duotone"} />}
+            label={presetName(p)}
+            title={p.hotkey ? `${presetName(p)} · ${hotkeyLabel(p.hotkey, p.hotkeyLabel).join(" + ")}` : undefined}
+            onClick={() => void actions.applyPreset(p.id)}
+            onEdit={() => onEdit(p)}
+          />
+        ))}
+        {/* Leere Plätze halten die Tastenbreite auf der letzten Seite. */}
+        {Array.from({ length: perPage - shown.length }, (_, i) => (
+          <div key={i} className="min-w-0 flex-1" />
+        ))}
+      </div>
+      {pages > 1 && (
+        <div className="flex shrink-0 flex-col gap-1">
+          <button
+            type="button"
+            title={t("common.previousPage")}
+            disabled={current === 0}
+            onClick={() => turn(-1)}
+            className="flex size-7 cursor-default items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:size-4"
+          >
+            <CaretUp />
+          </button>
+          <button
+            type="button"
+            title={t("common.nextPage")}
+            disabled={current === pages - 1}
+            onClick={() => turn(1)}
+            className="flex size-7 cursor-default items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30 [&_svg]:size-4"
+          >
+            <CaretDown />
+          </button>
         </div>
-
-        <div ref={bank.ref} onWheel={(e) => banks > 1 && Math.abs(e.deltaY) > 20 && turn(e.deltaY > 0 ? 1 : -1)} className="min-h-0 flex-1 overflow-hidden">
-          {presets.length === 0 ? (
-            <EmptyState icon={<PresetIcon name="microphone" weight="duotone" />} title={t("voice.emptyTitle")}>
-              {t("voice.emptyHint")}
-            </EmptyState>
-          ) : (
-            <div
-              key={current}
-              className="grid animate-[layout-in_260ms_var(--ease-drawer)]"
-              style={{ gap: GAP, gridTemplateColumns: `repeat(${bank.cols}, minmax(0, 1fr))`, gridAutoRows: keyHeight }}
-            >
-              {shown.map((p) => (
-                <PresetKey key={p.id} preset={p} active={voice.enabled && active === p.id} onEdit={() => onEdit(p)} />
-              ))}
-            </div>
-          )}
-        </div>
-      </Card>
+      )}
     </div>
   );
 }

@@ -29,6 +29,9 @@ export default {
     frequency: "Ab Frequenz",
     exciter: "Exciter",
     amount: "Stärke",
+    ratioSoft: "Sanft",
+    ratioMedium: "Mittel",
+    ratioHard: "Kräftig",
   },
   en: {
     gate: "Noise gate",
@@ -59,5 +62,8 @@ export default {
     frequency: "Above",
     exciter: "Exciter",
     amount: "Amount",
+    ratioSoft: "Gentle",
+    ratioMedium: "Medium",
+    ratioHard: "Strong",
   },
 };

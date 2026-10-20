@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { GridLine, Module, PLOT, Reading, Tick, Wide, freqX } from "~/components/effects/rack";
+import { GridLine, Module, PLOT, freqX } from "~/components/effects/rack";
+import { StripToggle } from "~/components/mixer/ChannelStrip";
 import { Bars, cssColor } from "~/components/ui/canvas";
-import { Caption, PushButton, PushButtons, SlideFader } from "~/components/ui/hardware";
-import { Knob, Needle } from "~/components/ui/knob";
+import { PushButtons, SlideFader } from "~/components/ui/hardware";
 import type { Chord, Scale } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -32,12 +32,7 @@ function envelope(f: number) {
   return Math.min(1, v);
 }
 
-const SPEC_TICKS: [number, string][] = [
-  [100, "100"],
-  [500, "500"],
-  [1000, "1k"],
-  [5000, "5k"],
-];
+const SPEC_GRID = [100, 500, 1000, 5000];
 
 /**
  * Obertöne der Stimme als Striche (ihr Abstand ist die Tonhöhe) unter der
@@ -58,7 +53,7 @@ function PitchDisplay({ semitones, formant, pitchHz }: { semitones: number; form
     <>
       <div className={PLOT}>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
-          {SPEC_TICKS.map(([f]) => (
+          {SPEC_GRID.map((f) => (
             <GridLine key={f} x={freqX(f)} />
           ))}
           {harmonics.map((f) => (
@@ -78,13 +73,6 @@ function PitchDisplay({ semitones, formant, pitchHz }: { semitones: number; form
           <polyline points={curve(k)} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
         </svg>
       </div>
-      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
-        {SPEC_TICKS.map(([f, label]) => (
-          <Tick key={f} axis="x" at={freqX(f)}>
-            {label}
-          </Tick>
-        ))}
-      </div>
     </>
   );
 }
@@ -92,48 +80,34 @@ function PitchDisplay({ semitones, formant, pitchHz }: { semitones: number; form
 export function PitchModule() {
   const p = useStore((s) => s.effects.voice.pitch);
   const pitchHz = usePitch();
-  const sung = pitchHz > 0 ? noteOf(pitchHz) : null;
   return (
     <Module
       title={t("voice.pitch")}
       help="pitch"
-      side
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("pitch", { enabled })}
-      status={
-        p.enabled &&
-        sung !== null && (
-          <Reading tone="primary">
-            {noteName(sung)} → {noteName(sung + p.semitones)}
-          </Reading>
-        )
-      }
       display={<PitchDisplay semitones={p.enabled ? p.semitones : 0} formant={p.enabled ? p.formant : 0} pitchHz={pitchHz} />}
     >
-      <Knob
+      <SlideFader
         label={t("voice.semitones")}
         value={p.semitones}
         min={-12}
         max={12}
         step={1}
+        reset={0}
         bipolar
-        ticks={25}
-        size="lg"
         format={(v) => signed(v)}
-        disabled={!p.enabled}
         onChange={(semitones) => actions.setVoice("pitch", { semitones })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.formant")}
         value={p.formant}
         min={-8}
         max={8}
         step={0.5}
+        reset={0}
         bipolar
-        ticks={17}
-        size="lg"
         format={(v) => signed(v, 1)}
-        disabled={!p.enabled}
         onChange={(formant) => actions.setVoice("pitch", { formant })}
       />
     </Module>
@@ -196,7 +170,7 @@ function TuneDisplay({ keyNote, scale, enabled }: { keyNote: number; scale: Scal
   const notes = Array.from({ length: SPAN * 2 + 1 }, (_, i) => lo + i);
   return (
     <>
-      <div className={PLOT}>
+      <div className="absolute inset-3">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
           {notes.map((n) => (
             <line
@@ -217,15 +191,6 @@ function TuneDisplay({ keyNote, scale, enabled }: { keyNote: number; scale: Scal
             <polyline key={`c${i}`} points={pts} fill="none" stroke="var(--ch-mic)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
           ))}
         </svg>
-      </div>
-      <div className="pointer-events-none absolute top-3 bottom-6 left-0 w-9">
-        {notes
-          .filter((n) => inScale(n, keyNote, scale) && (scale !== "chromatic" || n % 2 === 0))
-          .map((n) => (
-            <Tick key={n} axis="y" at={y(n)}>
-              {noteName(n)}
-            </Tick>
-          ))}
       </div>
     </>
   );
@@ -280,52 +245,33 @@ function Keyboard({
     );
   };
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1", disabled && "opacity-45")}>
-      <div className="relative flex h-[76px] gap-px">
-        {whites.map((n) => key(n, false))}
-        {[...BLACK_KEYS].map((n) => key(n, true))}
-      </div>
-      <Caption label={t("voice.key")} />
+    <div className={cn("relative flex h-[clamp(40px,6vh,64px)] min-w-0 gap-px", disabled && "opacity-45")} title={t("voice.key")}>
+      {whites.map((n) => key(n, false))}
+      {[...BLACK_KEYS].map((n) => key(n, true))}
     </div>
   );
 }
 
 export function AutotuneModule() {
   const p = useStore((s) => s.effects.voice.autotune);
-  const target = useStore((s) => (s.info ? (s.meters?.effects.targetNote ?? -1) : -1));
-  const cents = useStore((s) => s.meters?.effects.correctionCents ?? 0);
   return (
     <Module
       title={t("voice.autotune")}
       help="autotune"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("autotune", { enabled })}
-      status={
-        p.enabled && (
-          <Reading tone={target >= 0 ? "primary" : "default"}>
-            {target >= 0 ? `${noteName(target)} ${signed(Math.round(cents))} ct` : t("voice.noPitch")}
-          </Reading>
-        )
-      }
-      display={
-        <div className="absolute inset-0 flex">
-          <div className="relative min-w-0 flex-[3]">
-            <TuneDisplay keyNote={p.key} scale={p.scale} enabled={p.enabled} />
-          </div>
-          <div className="relative min-w-0 flex-[2] border-l border-hairline">
-            <Needle
-              className="absolute inset-2"
-              value={0.5 + Math.max(-50, Math.min(50, p.enabled && target >= 0 ? cents : 0)) / 100}
-              label={target >= 0 && p.enabled ? noteName(target) : "CENT"}
-              scale={[-50, -25, 0, 25, 50].map((c) => [0.5 + c / 100, c > 0 ? `+${c}` : String(c)])}
-            />
-          </div>
-        </div>
+      display={<TuneDisplay keyNote={p.key} scale={p.scale} enabled={p.enabled} />}
+      keys={
+        <>
+          <Keyboard value={p.key} keyNote={p.key} scale={p.scale} onChange={(key) => actions.setVoice("autotune", { key })} />
+          <PushButtons
+            value={p.scale}
+            onChange={(scale: Scale) => actions.setVoice("autotune", { scale })}
+            options={SCALES.map((s) => ({ value: s, label: t(`voice.scaleShort.${s}`), title: t(`voice.scale.${s}`) }))}
+          />
+        </>
       }
     >
-      <Wide grow={4}>
-        <Keyboard value={p.key} keyNote={p.key} scale={p.scale} disabled={!p.enabled} onChange={(key) => actions.setVoice("autotune", { key })} />
-      </Wide>
       <SlideFader
         label={t("voice.speed")}
         value={p.speed}
@@ -334,17 +280,7 @@ export function AutotuneModule() {
         step={0.01}
         reset={0.3}
         format={(v) => (v < 0.05 ? t("voice.instant") : `${Math.round(v * v * 400)} ms`)}
-        disabled={!p.enabled}
         onChange={(speed) => actions.setVoice("autotune", { speed })}
-      />
-      <PushButtons
-        label={t("voice.scale")}
-        value={p.scale}
-        columns={3}
-        className="w-40"
-        disabled={!p.enabled}
-        onChange={(scale: Scale) => actions.setVoice("autotune", { scale })}
-        options={SCALES.map((s) => ({ value: s, label: t(`voice.scaleShort.${s}`), title: t(`voice.scale.${s}`) }))}
       />
     </Module>
   );
@@ -358,7 +294,7 @@ const BLACK = new Set([1, 3, 6, 8, 10]);
 /** Halbtöne um die eigene Stimme als Tasten; die Harmonien als Balken mit ihrer Lautstärke. */
 function HarmonyDisplay({ voices, enabled }: { voices: { enabled: boolean; semitones: number; level: number }[]; enabled: boolean }) {
   return (
-    <div className="absolute inset-x-3 top-3 bottom-6 flex items-end gap-px">
+    <div className="absolute inset-3 flex items-end gap-px">
       {INTERVALS.map((i) => {
         const voice = voices.find((v) => v.enabled && Math.round(v.semitones) === i);
         const own = i === 0;
@@ -373,11 +309,6 @@ function HarmonyDisplay({ voices, enabled }: { voices: { enabled: boolean; semit
                 opacity: own ? 0.7 : height > 0 ? 1 : BLACK.has(((i % 12) + 12) % 12) ? 0.5 : 1,
               }}
             />
-            {(i % 12 === 0 || i === 7 || i === -5 || i === 4 || i === -8) && (
-              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 font-mono text-[9px] text-muted-foreground/70 tabular-nums">
-                {i > 0 ? `+${i}` : i}
-              </span>
-            )}
           </div>
         );
       })}
@@ -399,43 +330,38 @@ export function HarmonizerModule() {
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("harmonizer", { enabled })}
       display={<HarmonyDisplay voices={p.voices} enabled={p.enabled} />}
+      extra={([0, 1] as const).map((i) => (
+        <StripToggle key={i} title={t("voice.voiceN", { n: i + 1 })} on={p.voices[i].enabled} onClick={() => setVoice(i, { enabled: !p.voices[i].enabled })}>
+          {i + 1}
+        </StripToggle>
+      ))}
     >
-      {([0, 1] as const).map((i) => {
+      {([0, 1] as const).flatMap((i) => {
         const v = p.voices[i];
-        const off = !p.enabled || !v.enabled;
         return [
-          <PushButton
-            key={`t${i}`}
-            label={String(i + 1)}
-            caption={t("voice.voiceN", { n: i + 1 })}
-            on={v.enabled}
-            disabled={!p.enabled}
-            onChange={(enabled) => setVoice(i, { enabled })}
-          />,
-          <Knob
+          <SlideFader
             key={`i${i}`}
-            label={t("voice.interval")}
+            label={t("voice.intervalN", { n: i + 1 })}
             value={v.semitones}
             min={-12}
             max={12}
             step={1}
-            bipolar
             reset={0}
-            ticks={25}
+            bipolar
             format={(x) => signed(x)}
-            disabled={off}
+            disabled={!v.enabled}
             onChange={(semitones) => setVoice(i, { semitones })}
           />,
           <SlideFader
             key={`l${i}`}
-            label={t("voice.level")}
+            label={t("voice.levelN", { n: i + 1 })}
             value={v.level}
             min={0}
             max={1}
             step={0.01}
             reset={0.6}
             format={(x) => `${Math.round(x * 100)} %`}
-            disabled={off}
+            disabled={!v.enabled}
             onChange={(level) => setVoice(i, { level })}
           />,
         ];
@@ -451,7 +377,6 @@ const CHORDS: Chord[] = ["single", "fifth", "major", "minor"];
 export function VocoderModule() {
   const p = useStore((s) => s.effects.voice.vocoder);
   const bands = useStore((s) => (s.info ? s.meters?.effects.vocoder : undefined));
-  const pitchHz = usePitch();
   const values = (bands ?? Array(16).fill(0)).map((v) => Math.min(1, Math.sqrt(v * 6)));
   return (
     <Module
@@ -459,11 +384,6 @@ export function VocoderModule() {
       help="vocoder"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("vocoder", { enabled })}
-      status={
-        p.enabled && (
-          <Reading tone="primary">{p.follow ? (pitchHz > 0 ? noteName(noteOf(pitchHz)) : "—") : noteName(p.note)}</Reading>
-        )
-      }
       display={
         <div className="absolute inset-0 p-3">
           <Bars
@@ -479,24 +399,20 @@ export function VocoderModule() {
           />
         </div>
       }
-    >
-      <Wide grow={3}>
+      keys={
         <PushButtons
-          label={t("voice.chord")}
           value={p.chord}
-          disabled={!p.enabled}
           onChange={(chord: Chord) => actions.setVoice("vocoder", { chord })}
           options={CHORDS.map((c) => ({ value: c, label: t(`voice.chordShort.${c}`), title: t(`voice.chord.${c}`) }))}
         />
-      </Wide>
-      <PushButton
-        label={t("voice.followShort")}
-        caption={t("voice.follow")}
-        on={p.follow}
-        disabled={!p.enabled}
-        onChange={(follow) => actions.setVoice("vocoder", { follow })}
-      />
-      <Knob
+      }
+      extra={
+        <StripToggle title={t("voice.follow")} on={p.follow} onClick={() => actions.setVoice("vocoder", { follow: !p.follow })}>
+          {t("voice.followShort")}
+        </StripToggle>
+      }
+    >
+      <SlideFader
         label={t("voice.note")}
         value={p.note}
         min={28}
@@ -504,10 +420,10 @@ export function VocoderModule() {
         step={1}
         reset={48}
         format={(v) => noteName(v)}
-        disabled={!p.enabled || p.follow}
+        disabled={p.follow}
         onChange={(note) => actions.setVoice("vocoder", { note })}
       />
-      <Knob
+      <SlideFader
         label={t("voice.breath")}
         value={p.breath}
         min={0}
@@ -515,7 +431,6 @@ export function VocoderModule() {
         step={0.01}
         reset={0.2}
         format={(v) => `${Math.round(v * 100)} %`}
-        disabled={!p.enabled}
         onChange={(breath) => actions.setVoice("vocoder", { breath })}
       />
       <SlideFader
@@ -526,7 +441,6 @@ export function VocoderModule() {
         step={0.01}
         reset={1}
         format={(v) => `${Math.round(v * 100)} %`}
-        disabled={!p.enabled}
         onChange={(mix) => actions.setVoice("vocoder", { mix })}
       />
     </Module>
