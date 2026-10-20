@@ -5,7 +5,7 @@ pub mod downloader;
 pub mod i18n;
 pub mod library;
 pub mod music;
-mod plugins;
+pub mod plugins;
 mod presets;
 mod shell;
 mod soundboard;

@@ -1,16 +1,26 @@
 //! Externe Effekt-Plugins (Prototyp). Mit dem Cargo-Feature `plugins` lädt
-//! Ode CLAP-Plugins in den Plugin-Slot der Mikrofon-Kette (siehe
-//! `audio::insert`); ohne das Feature melden die Befehle nur, dass es nicht
+//! Ode CLAP-Plugins in einen unsichtbaren Hilfsprozess (`ode --plugin-host`)
+//! und schickt die Stimme im Plugin-Slot der Mikrofon-Kette (siehe
+//! `audio::insert`) dort hindurch. Stürzt ein Plugin ab, trifft es nur den
+//! Hilfsprozess. Ohne das Feature melden die Befehle nur, dass es nicht
 //! eingebaut ist. Hintergrund und offene Punkte: docs/plugins.md.
 
-#[cfg(feature = "plugins")]
+#[cfg(all(feature = "plugins", windows))]
+mod child;
+#[cfg(all(feature = "plugins", windows))]
 mod clap;
+#[cfg(all(feature = "plugins", windows))]
+mod remote;
+#[cfg(all(feature = "plugins", windows))]
+mod shm;
+#[cfg(all(feature = "plugins", windows))]
+pub mod test_plugin;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 /// Ein Plugin in einer Bibliotheksdatei.
-#[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginInfo {
     pub path: String,
@@ -21,7 +31,7 @@ pub struct PluginInfo {
 }
 
 /// Ein Parameter des geladenen Plugins.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParamDesc {
     pub id: u32,
@@ -38,8 +48,8 @@ pub struct ParamDesc {
     pub stepped: bool,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct PluginStatus {
     /// In diesen Build eingebaut.
     pub available: bool,
@@ -50,18 +60,59 @@ pub struct PluginStatus {
     pub gui_open: bool,
     /// Vom Plugin gemeldete Verzögerung.
     pub latency_ms: f32,
-    /// Rechenzeit des Plugins im letzten Block.
+    /// Rechenzeit des Plugins im letzten Block (in Ode: Hin- und Rückweg).
     pub load_ms: f32,
+    /// Der Hilfsprozess ist abgestürzt oder hing; die Meldung dazu.
+    pub crashed: Option<String>,
+    /// Zuletzt geladenes Plugin, zum Neu-Laden nach einem Absturz.
+    pub last: Option<PluginInfo>,
 }
 
-#[cfg(feature = "plugins")]
-pub use clap::PluginHost as Plugins;
+/// Anfrage an den Hilfsprozess, eine JSON-Zeile auf seinem stdin.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "cmd", rename_all = "camelCase")]
+pub enum Request {
+    Status,
+    Scan,
+    Entries { path: String },
+    Load { path: String, id: String },
+    Unload,
+    Params,
+    SetParam { id: u32, value: f64 },
+    Gui { open: bool },
+}
+
+/// Antwort des Hilfsprozesses, eine JSON-Zeile auf seinem stdout.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Response {
+    Ok(serde_json::Value),
+    Err(String),
+}
+
+/// Einstieg für `ode --plugin-host <name>`; liefert den Exit-Code.
+pub fn host_main(name: Option<&str>) -> i32 {
+    #[cfg(all(feature = "plugins", windows))]
+    {
+        match name {
+            Some(name) => child::run(name),
+            None => 2,
+        }
+    }
+    #[cfg(not(all(feature = "plugins", windows)))]
+    {
+        let _ = name;
+        1
+    }
+}
+
+#[cfg(all(feature = "plugins", windows))]
+pub use remote::PluginHost as Plugins;
 
 /// Platzhalter, wenn das Feature fehlt.
-#[cfg(not(feature = "plugins"))]
+#[cfg(not(all(feature = "plugins", windows)))]
 pub struct Plugins;
 
-#[cfg(not(feature = "plugins"))]
+#[cfg(not(all(feature = "plugins", windows)))]
 impl Plugins {
     pub fn spawn(_mixer: std::sync::Arc<crate::audio::mixer::Mixer>) -> Self {
         Self

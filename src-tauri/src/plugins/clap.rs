@@ -1,15 +1,15 @@
-//! CLAP-Host. Alle Aufrufe, die CLAP dem „Main-Thread“ vorbehält (Laden,
-//! Aktivieren, Parameter lesen, Fenster), laufen auf einem eigenen Thread mit
-//! Win32-Nachrichtenschleife; die Oberfläche schickt ihm Befehle. Die
-//! Audio-Verarbeitung steckt im Plugin-Slot der Mikrofon-Kette und startet
-//! dort im Audio-Thread.
+//! CLAP-Host im Plugin-Hilfsprozess. Alle Aufrufe, die CLAP dem
+//! „Main-Thread“ vorbehält (Laden, Aktivieren, Parameter lesen, Fenster),
+//! laufen auf dessen Haupt-Thread mit Win32-Nachrichtenschleife; Ode schickt
+//! ihm Anfragen (siehe `child`). Das Audio rechnet ein Slot im Audio-Thread
+//! des Hilfsprozesses (siehe `shm`), die Verarbeitung startet dort.
 
 use std::any::Any;
 use std::ffi::{CStr, CString};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
+
 use std::time::Duration;
 
 use clack_extensions::audio_ports::{AudioPortInfoBuffer, PluginAudioPorts};
@@ -18,12 +18,11 @@ use clack_extensions::latency::PluginLatency;
 use clack_extensions::params::{ParamInfoBuffer, ParamInfoFlags, PluginParams};
 use clack_host::events::event_types::ParamValueEvent;
 use clack_host::prelude::*;
-use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, bounded, unbounded};
+use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, bounded};
 
-use super::{ParamDesc, PluginInfo, PluginStatus};
+use super::{ParamDesc, PluginInfo, PluginStatus, Request, test_plugin};
 use crate::audio::ENGINE_RATE;
-use crate::audio::insert::Insert;
-use crate::audio::mixer::Mixer;
+use crate::audio::insert::{Insert, InsertSlot};
 
 /// Größter Block, den das Plugin auf einmal bekommt; längere werden geteilt.
 const MAX_BLOCK: usize = 1024;
@@ -348,7 +347,7 @@ mod window {
     }
 }
 
-// ------------------------------------------------------------ Plugin-Thread
+// ------------------------------------------------------------ Main-Thread des Hilfsprozesses
 
 struct Loaded {
     info: PluginInfo,
@@ -364,114 +363,30 @@ struct Loaded {
     _entry: PluginEntry,
 }
 
-enum Command {
-    Scan(Sender<Vec<PluginInfo>>),
-    Entries(String, Sender<Result<Vec<PluginInfo>, String>>),
-    Load(String, String, Sender<Result<(), String>>),
-    Unload(Sender<()>),
-    Params(Sender<Result<Vec<ParamDesc>, String>>),
-    SetParam(u32, f64),
-    Gui(bool, Sender<Result<(), String>>),
-    Status(Sender<PluginStatus>),
-}
-
-/// Griff zum Plugin-Thread; als Tauri-State verwaltet.
-pub struct PluginHost {
-    commands: Sender<Command>,
-    mixer: Arc<Mixer>,
-}
-
-impl PluginHost {
-    pub fn spawn(mixer: Arc<Mixer>) -> Self {
-        let (tx, rx) = unbounded();
-        let thread_mixer = mixer.clone();
-        thread::Builder::new()
-            .name("ode-plugins".into())
-            .spawn(move || Worker::new(thread_mixer).run(rx))
-            .expect("Plugin-Thread konnte nicht starten");
-        Self {
-            commands: tx,
-            mixer,
-        }
-    }
-
-    fn ask<T>(&self, make: impl FnOnce(Sender<T>) -> Command) -> Result<T, String> {
-        let (reply, response) = bounded(1);
-        self.commands
-            .send(make(reply))
-            .map_err(|_| crate::tr!("Plugin-Thread läuft nicht", "Plugin thread is not running"))?;
-        response.recv().map_err(|_| {
-            crate::tr!(
-                "Plugin-Thread antwortet nicht",
-                "Plugin thread does not respond"
-            )
-        })
-    }
-
-    pub fn status(&self) -> PluginStatus {
-        self.ask(Command::Status).unwrap_or_default()
-    }
-
-    pub fn scan(&self) -> Result<Vec<PluginInfo>, String> {
-        self.ask(Command::Scan)
-    }
-
-    pub fn entries(&self, path: String) -> Result<Vec<PluginInfo>, String> {
-        self.ask(|r| Command::Entries(path, r))?
-    }
-
-    pub fn load(&self, path: String, id: String) -> Result<PluginStatus, String> {
-        self.ask(|r| Command::Load(path, id, r))??;
-        Ok(self.status())
-    }
-
-    pub fn unload(&self) {
-        let _ = self.ask(Command::Unload);
-    }
-
-    pub fn params(&self) -> Result<Vec<ParamDesc>, String> {
-        self.ask(Command::Params)?
-    }
-
-    pub fn set_param(&self, id: u32, value: f64) -> Result<(), String> {
-        self.commands
-            .send(Command::SetParam(id, value))
-            .map_err(|_| crate::tr!("Plugin-Thread läuft nicht", "Plugin thread is not running"))
-    }
-
-    pub fn set_bypass(&self, on: bool) {
-        self.mixer
-            .effects
-            .insert
-            .bypass
-            .store(on, Ordering::Relaxed);
-    }
-
-    pub fn gui(&self, open: bool) -> Result<PluginStatus, String> {
-        self.ask(|r| Command::Gui(open, r))??;
-        Ok(self.status())
-    }
-}
-
-struct Worker {
-    mixer: Arc<Mixer>,
+/// Besitzt das geladene Plugin. Läuft auf dem Main-Thread des
+/// Hilfsprozesses; das Audio rechnet der Slot im Audio-Thread.
+pub(crate) struct Worker {
+    slot: Arc<InsertSlot>,
     loaded: Option<Loaded>,
 }
 
 impl Worker {
-    fn new(mixer: Arc<Mixer>) -> Self {
-        Self {
-            mixer,
-            loaded: None,
-        }
+    pub(crate) fn new(slot: Arc<InsertSlot>) -> Self {
+        Self { slot, loaded: None }
     }
 
-    fn run(mut self, commands: Receiver<Command>) {
+    /// Arbeitet Anfragen ab, bis der Kanal schließt; jede bekommt genau eine
+    /// Antwort über `reply`.
+    pub(crate) fn run(
+        mut self,
+        requests: Receiver<Result<Request, String>>,
+        mut reply: impl FnMut(Result<serde_json::Value, String>),
+    ) {
         loop {
             // Mit offenem Plugin-Fenster öfter nach Nachrichten sehen.
             let wait = if self.window_open() { 8 } else { 30 };
-            match commands.recv_timeout(Duration::from_millis(wait)) {
-                Ok(command) => self.handle(command),
+            match requests.recv_timeout(Duration::from_millis(wait)) {
+                Ok(request) => reply(request.and_then(|r| self.handle(r))),
                 Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
@@ -512,53 +427,52 @@ impl Worker {
         }
     }
 
-    fn handle(&mut self, command: Command) {
-        match command {
-            Command::Scan(reply) => {
-                let _ = reply.send(scan());
+    pub(crate) fn handle(&mut self, request: Request) -> Result<serde_json::Value, String> {
+        fn json(value: impl serde::Serialize) -> Result<serde_json::Value, String> {
+            serde_json::to_value(value).map_err(|e| e.to_string())
+        }
+        match request {
+            Request::Status => json(self.status()),
+            Request::Scan => json(scan()),
+            Request::Entries { path } => json(entries(Path::new(&path))?),
+            Request::Load { path, id } => {
+                self.load(&path, &id)?;
+                json(self.status())
             }
-            Command::Entries(path, reply) => {
-                let _ = reply.send(entries(Path::new(&path)));
-            }
-            Command::Load(path, id, reply) => {
-                let _ = reply.send(self.load(&path, &id));
-            }
-            Command::Unload(reply) => {
+            Request::Unload => {
                 self.unload();
-                let _ = reply.send(());
+                json(self.status())
             }
-            Command::Params(reply) => {
-                let _ = reply.send(self.params());
+            Request::Params => json(self.params()?),
+            Request::SetParam { id, value } => {
+                self.set_param(id, value);
+                json(())
             }
-            Command::SetParam(id, value) => {
-                if let Some(l) = &mut self.loaded {
-                    let _ = l.params_tx.try_send((id, value));
-                    l.pending.retain(|(p, _)| *p != id);
-                    l.pending.push((id, value));
-                }
-            }
-            Command::Gui(open, reply) => {
-                let result = if open {
-                    self.open_gui()
+            Request::Gui { open } => {
+                if open {
+                    self.open_gui()?;
                 } else {
                     self.close_gui();
-                    Ok(())
-                };
-                let _ = reply.send(result);
-            }
-            Command::Status(reply) => {
-                let _ = reply.send(self.status());
+                }
+                json(self.status())
             }
         }
     }
 
+    fn set_param(&mut self, id: u32, value: f64) {
+        if let Some(l) = &mut self.loaded {
+            let _ = l.params_tx.try_send((id, value));
+            l.pending.retain(|(p, _)| *p != id);
+            l.pending.push((id, value));
+        }
+    }
+
     fn status(&mut self) -> PluginStatus {
-        let slot = &self.mixer.effects.insert;
+        let load_ms = self.slot.load_ms.load();
         let window_open = self.window_open();
         let Some(l) = &mut self.loaded else {
             return PluginStatus {
                 available: true,
-                bypass: slot.bypass.load(Ordering::Relaxed),
                 ..Default::default()
             };
         };
@@ -567,16 +481,24 @@ impl Worker {
         PluginStatus {
             available: true,
             loaded: Some(l.info.clone()),
-            bypass: slot.bypass.load(Ordering::Relaxed),
             has_gui,
             gui_open: window_open,
             latency_ms: l.latency as f32 * 1000.0 / ENGINE_RATE as f32,
-            load_ms: slot.load_ms.load(),
+            load_ms,
+            ..Default::default()
         }
     }
 
     fn load(&mut self, path: &str, id: &str) -> Result<(), String> {
         self.unload();
+        if path == test_plugin::PATH {
+            let entry = test_plugin::entry()?;
+            let info = descriptors(&entry, Path::new(path))
+                .into_iter()
+                .next()
+                .ok_or("Test-Plugin fehlt")?;
+            return self.load_entry(entry, info);
+        }
         // SAFETY: Eine Plugin-Bibliothek führt beim Laden eigenen Code aus;
         // der Nutzer hat sie selbst ausgewählt.
         let entry = unsafe { PluginEntry::load(path) }.map_err(err)?;
@@ -621,7 +543,7 @@ impl Worker {
             .map_err(err)?;
         let (params_tx, params_rx) = bounded(1024);
         let insert = ClapInsert::new(processor, channels, params_rx);
-        self.mixer.effects.insert.replace(Some(Box::new(insert)));
+        self.slot.replace(Some(Box::new(insert)));
         self.loaded = Some(Loaded {
             info,
             instance,
@@ -638,7 +560,7 @@ impl Worker {
 
     fn unload(&mut self) {
         self.close_gui();
-        let previous = self.mixer.effects.insert.replace(None);
+        let previous = self.slot.replace(None);
         let Some(mut loaded) = self.loaded.take() else {
             return;
         };
@@ -825,220 +747,34 @@ fn scan() -> Vec<PluginInfo> {
 
 #[cfg(test)]
 mod tests {
-    //! Ein kleines Gain-Plugin, gebaut mit clack-plugin, läuft hier ohne
-    //! Datei durch denselben Host.
-
     use super::*;
-    use clack_extensions::audio_ports::{
-        AudioPortFlags, AudioPortInfo, AudioPortInfoWriter, AudioPortType, PluginAudioPortsImpl,
-    };
-    use clack_extensions::params::{
-        ParamDisplayWriter, ParamInfo, ParamInfoWriter, PluginAudioProcessorParams,
-        PluginMainThreadParams,
-    };
-    use clack_plugin::prelude as p;
-    use clack_plugin::prelude::{
-        Audio, ChannelPair, Events, HostAudioProcessorHandle, HostMainThreadHandle,
-        HostSharedHandle, Plugin, PluginAudioProcessor as PluginProcessor, PluginDescriptor,
-        PluginError, PluginExtensions, Process, SinglePluginEntry,
-    };
-    use std::sync::atomic::AtomicU64;
-
-    const GAIN: u32 = 1;
-
-    pub struct TestGain;
-
-    #[derive(Default)]
-    pub struct GainShared {
-        /// f64-Bits des aktuellen Gains.
-        gain: AtomicU64,
-    }
-
-    impl GainShared {
-        fn get(&self) -> f64 {
-            f64::from_bits(self.gain.load(Ordering::Relaxed))
-        }
-        fn set(&self, v: f64) {
-            self.gain.store(v.to_bits(), Ordering::Relaxed);
-        }
-    }
-
-    impl p::PluginShared<'_> for GainShared {}
-
-    pub struct GainMain<'a> {
-        shared: &'a GainShared,
-    }
-
-    impl<'a> p::PluginMainThread<'a, GainShared> for GainMain<'a> {}
-
-    pub struct GainProcessor<'a> {
-        shared: &'a GainShared,
-    }
-
-    impl Plugin for TestGain {
-        type AudioProcessor<'a> = GainProcessor<'a>;
-        type Shared<'a> = GainShared;
-        type MainThread<'a> = GainMain<'a>;
-
-        fn declare_extensions(builder: &mut PluginExtensions<Self>, _shared: Option<&GainShared>) {
-            builder
-                .register::<PluginAudioPorts>()
-                .register::<PluginParams>();
-        }
-    }
-
-    impl p::DefaultPluginFactory for TestGain {
-        fn get_descriptor() -> PluginDescriptor {
-            PluginDescriptor::new("app.ode.test-gain", "Test Gain")
-        }
-
-        fn new_shared(_host: HostSharedHandle<'_>) -> Result<GainShared, PluginError> {
-            let shared = GainShared::default();
-            shared.set(1.0);
-            Ok(shared)
-        }
-
-        fn new_main_thread<'a>(
-            _host: HostMainThreadHandle<'a>,
-            shared: &'a GainShared,
-        ) -> Result<GainMain<'a>, PluginError> {
-            Ok(GainMain { shared })
-        }
-    }
-
-    impl<'a> PluginProcessor<'a, GainShared, GainMain<'a>> for GainProcessor<'a> {
-        fn activate(
-            _host: HostAudioProcessorHandle<'a>,
-            _main: &GainMain<'a>,
-            shared: &'a GainShared,
-            _config: PluginAudioConfiguration,
-        ) -> Result<Self, PluginError> {
-            Ok(Self { shared })
-        }
-
-        fn process(
-            &mut self,
-            _process: Process,
-            mut audio: Audio,
-            events: Events,
-        ) -> Result<ProcessStatus, PluginError> {
-            for event in events.input {
-                if let Some(e) = event.as_event::<ParamValueEvent>()
-                    && e.param_id().map(|i| i.get()) == Some(GAIN)
-                {
-                    self.shared.set(e.value());
-                }
-            }
-            let gain = self.shared.get() as f32;
-            for mut port in &mut audio {
-                let Some(pairs) = port.channels()?.into_f32() else {
-                    continue;
-                };
-                for pair in pairs {
-                    match pair {
-                        ChannelPair::InputOutput(i, o) => {
-                            for (i, o) in i.iter().zip(o) {
-                                *o = i * gain;
-                            }
-                        }
-                        ChannelPair::InPlace(b) => b.iter_mut().for_each(|s| *s *= gain),
-                        ChannelPair::OutputOnly(b) => b.fill(0.0),
-                        ChannelPair::InputOnly(_) => {}
-                    }
-                }
-            }
-            Ok(ProcessStatus::Continue)
-        }
-    }
-
-    impl PluginAudioPortsImpl for GainMain<'_> {
-        fn count(&self, _is_input: bool) -> u32 {
-            1
-        }
-
-        fn get(&self, index: u32, _is_input: bool, writer: &mut AudioPortInfoWriter) {
-            if index == 0 {
-                writer.set(&AudioPortInfo {
-                    id: ClapId::new(0),
-                    name: b"main",
-                    channel_count: 1,
-                    flags: AudioPortFlags::IS_MAIN,
-                    port_type: Some(AudioPortType::MONO),
-                    in_place_pair: None,
-                });
-            }
-        }
-    }
-
-    impl PluginMainThreadParams for GainMain<'_> {
-        fn count(&self) -> u32 {
-            1
-        }
-
-        fn get_info(&self, index: u32, info: &mut ParamInfoWriter) {
-            if index == 0 {
-                info.set(&ParamInfo {
-                    id: ClapId::new(GAIN),
-                    flags: ParamInfoFlags::IS_AUTOMATABLE,
-                    cookie: Default::default(),
-                    name: b"Gain",
-                    module: b"",
-                    min_value: 0.0,
-                    max_value: 2.0,
-                    default_value: 1.0,
-                });
-            }
-        }
-
-        fn get_value(&self, id: ClapId) -> Option<f64> {
-            (id.get() == GAIN).then(|| self.shared.get())
-        }
-
-        fn value_to_text(
-            &self,
-            _id: ClapId,
-            value: f64,
-            writer: &mut ParamDisplayWriter,
-        ) -> std::fmt::Result {
-            use std::fmt::Write;
-            write!(writer, "{value:.2}x")
-        }
-
-        fn text_to_value(&self, _id: ClapId, _text: &CStr) -> Option<f64> {
-            None
-        }
-
-        fn flush(&self, _input: &InputEvents, _output: &mut OutputEvents) {}
-    }
-
-    impl PluginAudioProcessorParams for GainProcessor<'_> {
-        fn flush(&mut self, _input: &InputEvents, _output: &mut OutputEvents) {}
-    }
 
     fn loaded_worker() -> Worker {
-        let entry =
-            PluginEntry::load_from_clack::<SinglePluginEntry<TestGain>>(c"test-gain").unwrap();
-        let info = descriptors(&entry, Path::new("test-gain"))
-            .into_iter()
-            .next()
+        let mut worker = Worker::new(Arc::new(InsertSlot::default()));
+        worker
+            .handle(Request::Load {
+                path: test_plugin::PATH.into(),
+                id: test_plugin::ID.into(),
+            })
             .unwrap();
-        assert_eq!(info.name, "Test Gain");
-        let mut worker = Worker::new(Arc::new(Mixer::default()));
-        worker.load_entry(entry, info).unwrap();
         worker
     }
 
     #[test]
     fn hosts_a_plugin_in_the_slot() {
         let mut worker = loaded_worker();
-        let mixer = worker.mixer.clone();
-        let slot = &mixer.effects.insert;
+        let slot = worker.slot.clone();
         let mut buf = vec![0.5f32; 2000];
         slot.process(&mut buf);
         assert!(buf.iter().all(|&s| (s - 0.5).abs() < 1e-6));
 
         // Parameter: Gain halbieren, über den Event-Weg im Audio-Thread.
-        worker.handle(Command::SetParam(GAIN, 0.5));
+        worker
+            .handle(Request::SetParam {
+                id: test_plugin::GAIN,
+                value: 0.5,
+            })
+            .unwrap();
         let mut buf = vec![0.5f32; 480];
         slot.process(&mut buf);
         assert!(buf.iter().all(|&s| (s - 0.25).abs() < 1e-6));
@@ -1050,20 +786,33 @@ mod tests {
         assert_eq!(params[0].text, "0.50x");
 
         let status = worker.status();
-        assert_eq!(status.loaded.unwrap().id, "app.ode.test-gain");
+        assert_eq!(status.loaded.unwrap().id, test_plugin::ID);
         assert!(!status.has_gui);
 
-        worker.unload();
-        assert!(!worker.mixer.effects.insert.is_filled());
+        worker.handle(Request::Unload).unwrap();
+        assert!(!slot.is_filled());
         let mut buf = vec![0.5f32; 16];
-        worker.mixer.effects.insert.process(&mut buf);
+        slot.process(&mut buf);
         assert_eq!(buf, vec![0.5; 16]);
     }
 
     #[test]
     fn missing_gui_is_reported() {
         let mut worker = loaded_worker();
-        assert!(worker.open_gui().is_err());
+        assert!(worker.handle(Request::Gui { open: true }).is_err());
         worker.unload();
+    }
+
+    #[test]
+    fn unknown_plugin_is_an_error() {
+        let mut worker = Worker::new(Arc::new(InsertSlot::default()));
+        assert!(
+            worker
+                .handle(Request::Load {
+                    path: "C:/gibt/es/nicht.clap".into(),
+                    id: "x".into(),
+                })
+                .is_err()
+        );
     }
 }

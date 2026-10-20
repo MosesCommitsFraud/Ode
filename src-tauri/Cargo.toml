@@ -37,7 +37,7 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-clipboard-manager = "2"
-windows = { version = "0.62.2", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Foundation", "Win32_System_Threading", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader"] }
+windows = { version = "0.62.2", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_Foundation", "Win32_System_Threading", "Win32_Security", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Memory"] }
 windows-core = "0.62"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
@@ -45,6 +45,7 @@ png = "0.18.1"
 base64 = "0.22.1"
 clack-host = { version = "0.2", optional = true }
 clack-extensions = { version = "0.2", optional = true, features = ["clack-host", "audio-ports", "gui", "params", "latency"] }
+clack-plugin = { version = "0.2", optional = true }
 
 
 # Audio-Bibliotheken auch im Debug-Build optimieren, sonst dekodiert symphonia
@@ -62,10 +63,12 @@ strip = true
 
 [features]
 # Prototyp: CLAP-Plugins in der Mikrofon-Kette (siehe docs/plugins.md).
-plugins = ["dep:clack-host", "dep:clack-extensions"]
+plugins = [
+    "dep:clack-host",
+    "dep:clack-extensions",
+    "dep:clack-plugin",
+    "clack-host/clack-plugin",
+    "clack-extensions/clack-plugin",
+]
 
-[dev-dependencies]
-clack-plugin = "0.2"
-clack-host = { version = "0.2", features = ["clack-plugin"] }
-clack-extensions = { version = "0.2", features = ["clack-host", "clack-plugin", "audio-ports", "gui", "params", "latency"] }
 
