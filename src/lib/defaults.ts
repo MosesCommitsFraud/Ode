@@ -1,4 +1,4 @@
-import type { BusParams, ChannelFx, EffectsParams, EqSettings, Preset, VoiceParams } from "./engine";
+import type { BusParams, ChannelFx, EffectsParams, EqBand, EqSettings, Preset, VoiceParams } from "./engine";
 
 /* Auslieferungszustand, wie in der Engine (src-tauri/src/audio/…). */
 
@@ -20,18 +20,12 @@ export const VOICE_DEFAULTS: VoiceParams = {
   reverb: { enabled: false, size: 0.6, damping: 0.5, predelayMs: 20, lowCutHz: 200, mix: 0.25 },
 };
 
-/** Wie `EqSettings::default` in eq.rs: alle Bänder flach, Cuts aus. */
-export const EQ_DEFAULTS: EqSettings = {
-  bands: [
-    { freqHz: 100, gainDb: 0, q: 0.707 },
-    { freqHz: 300, gainDb: 0, q: 1 },
-    { freqHz: 1000, gainDb: 0, q: 1 },
-    { freqHz: 3000, gainDb: 0, q: 1 },
-    { freqHz: 10000, gainDb: 0, q: 0.707 },
-  ],
-  lowCutHz: 20,
-  highCutHz: 20000,
-};
+/** Plätze für Bänder im EQ (eq.rs `SLOTS`). */
+export const EQ_SLOTS = 8;
+export const EMPTY_BAND: EqBand = { enabled: false, shape: "bell", freqHz: 1000, gainDb: 0, q: 1 };
+
+/** Wie `EqSettings::default` in eq.rs: kein Band gesetzt. */
+export const EQ_DEFAULTS: EqSettings = { bands: Array.from({ length: EQ_SLOTS }, () => EMPTY_BAND) };
 
 export const EFFECTS_DEFAULTS: EffectsParams = {
   gate: { enabled: false, thresholdDb: -50 },

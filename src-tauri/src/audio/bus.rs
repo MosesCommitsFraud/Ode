@@ -327,7 +327,13 @@ mod tests {
         let shared = BusShared::default();
         let mut params = BusParams::default();
         params.channels.live.eq_enabled = true;
-        params.channels.live.eq.low_cut_hz = 400.0;
+        params.channels.live.eq.bands[0] = crate::audio::eq::EqBand {
+            enabled: true,
+            shape: crate::audio::eq::BandShape::LowCut,
+            freq_hz: 400.0,
+            gain_db: 0.0,
+            q: 0.707,
+        };
         shared.set(params);
         let mut chain = BusChain::new();
         chain.sync(&shared);

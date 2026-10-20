@@ -5,7 +5,7 @@
  * Engine (Befehl `eq_curve`).
  */
 
-import type { EqSettings } from "./engine";
+import type { BandShape, EqSettings } from "./engine";
 
 const RATE = 48_000;
 
@@ -76,21 +76,14 @@ function responseDb([b0, b1, b2, a1, a2]: Coefs, freq: number) {
 export const EQ_GAIN_LIMIT = 15;
 /** Höhe der EQ-Anzeige je Richtung: etwas mehr als der Regelweg. */
 export const EQ_RANGE_DB = 18;
-/** Unter- und Obergrenze, ab der Low- und High-Cut aus sind. */
-export const LOW_CUT_OFF = 20;
-export const HIGH_CUT_OFF = 20_000;
+const SHAPES: Record<BandShape, Shape> = { bell: "peak", lowShelf: "lowShelf", highShelf: "highShelf", lowCut: "highPass", highCut: "lowPass" };
 
-/** Form eines Bands wie in eq.rs: das erste und das letzte sind Kuhschwänze. */
-export function bandShape(index: number, count: number): Shape {
-  return index === 0 ? "lowShelf" : index === count - 1 ? "highShelf" : "peak";
-}
+/** Größte Güte einer Form (eq.rs `max_q`): Glocken bis 10, sonst bis 2. */
+export const maxQ = (shape: BandShape) => (shape === "bell" ? 10 : 2);
 
 /** Gesamter Frequenzgang des EQs in dB an den Frequenzen `freqs`. */
 export function eqResponse(eq: EqSettings, freqs: number[]) {
-  const filters: Coefs[] = eq.bands.map((b, i) => design(bandShape(i, eq.bands.length), b.freqHz, b.q, b.gainDb));
-  // Cuts nur, wenn sie etwas abschneiden.
-  if (eq.lowCutHz > LOW_CUT_OFF) filters.push(design("highPass", eq.lowCutHz, 0.707, 0));
-  if (eq.highCutHz < HIGH_CUT_OFF) filters.push(design("lowPass", eq.highCutHz, 0.707, 0));
+  const filters: Coefs[] = eq.bands.filter((b) => b.enabled).map((b) => design(SHAPES[b.shape], b.freqHz, b.q, b.gainDb));
   return freqs.map((f) => filters.reduce((sum, c) => sum + responseDb(c, f), 0));
 }
 

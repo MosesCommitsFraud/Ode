@@ -107,20 +107,20 @@ export interface VoiceParams {
   reverb: ReverbParams;
 }
 
-/** Ein Band des parametrischen EQs; das erste und letzte sind Kuhschwänze, die anderen Glocken. */
+export type BandShape = "bell" | "lowShelf" | "highShelf" | "lowCut" | "highCut";
+
+/** Ein Band des parametrischen EQs; `gainDb` wirkt nicht bei Cuts. */
 export interface EqBand {
+  enabled: boolean;
+  shape: BandShape;
   freqHz: number;
   gainDb: number;
   q: number;
 }
 
-/** Einstellung eines EQs (src-tauri/src/audio/eq.rs `EqSettings`). */
+/** Einstellung eines EQs (src-tauri/src/audio/eq.rs `EqSettings`): feste Plätze, die an- und ausgehen. */
 export interface EqSettings {
   bands: EqBand[];
-  /** 20 = aus. */
-  lowCutHz: number;
-  /** 20000 = aus. */
-  highCutHz: number;
 }
 
 export interface EffectsParams {

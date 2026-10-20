@@ -812,7 +812,13 @@ mod tests {
     fn eq_boosts_bass() {
         let mut p = EffectsParams::default();
         p.eq.enabled = true;
-        p.eq.eq.bands[0].gain_db = 6.0;
+        p.eq.eq.bands[0] = crate::audio::eq::EqBand {
+            enabled: true,
+            shape: crate::audio::eq::BandShape::LowShelf,
+            freq_hz: 100.0,
+            gain_db: 6.0,
+            q: 0.707,
+        };
         let input = sine(60.0, 0.1, 48_000);
         let out = run(p, &input);
         let gain = to_db(rms(&out[24_000..]) / rms(&input[24_000..]));
