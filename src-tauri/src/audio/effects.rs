@@ -13,8 +13,10 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use super::ENGINE_RATE;
-use super::dsp::{AtomicF32, Biquad, Shape, coef, db_to_gain, to_db};
-use fundsp::prelude32::{Shared, Tanh, dc, highpass, limiter, mul, pass, shape, shared, var};
+use super::dsp::{AtomicF32, coef, db_to_gain, to_db};
+use fundsp::prelude32::{
+    Shared, Tanh, afollow, dc, highpass, limiter, lowpass, mul, pass, shape, shared, var,
+};
 
 use super::eq::Eq3;
 use super::fund::Fixed;
@@ -459,18 +461,16 @@ impl Agc {
     }
 }
 
+/// Kompressor: Pegel über den Hüllkurvenfolger von fundsp (5 ms an, 150 ms
+/// ab), darüber die Kennlinie (Schwelle, Verhältnis) und Aufholverstärkung.
 struct Compressor {
-    envelope_db: f32,
-    attack: f32,
-    release: f32,
+    follower: Fixed,
 }
 
 impl Compressor {
     fn new() -> Self {
         Self {
-            envelope_db: -120.0,
-            attack: coef(5.0),
-            release: coef(150.0),
+            follower: Fixed::new(Box::new(afollow(0.005f32, 0.15f32))),
         }
     }
 
@@ -480,15 +480,9 @@ impl Compressor {
         let makeup = db_to_gain(p.makeup_db);
         let mut most = 0.0f32;
         for s in buf.iter_mut() {
-            let level = to_db(s.abs());
-            let c = if level > self.envelope_db {
-                self.attack
-            } else {
-                self.release
-            };
-            self.envelope_db = level + (self.envelope_db - level) * c;
-            let reduction = if self.envelope_db > p.threshold_db {
-                (p.threshold_db - self.envelope_db) * slope
+            let envelope_db = to_db(self.follower.tick(s.abs()));
+            let reduction = if envelope_db > p.threshold_db {
+                (p.threshold_db - envelope_db) * slope
             } else {
                 0.0
             };
@@ -499,56 +493,45 @@ impl Compressor {
     }
 }
 
-/// Senkt nur die Zischlaute oberhalb der Trennfrequenz ab. Die Weiche
-/// (Linkwitz-Riley, 24 dB/Oktave) ergibt zusammengesetzt einen flachen
-/// Frequenzgang; ohne Absenkung klingt das Signal unverändert.
+/// Senkt nur die Zischlaute oberhalb der Trennfrequenz ab. Die Weiche aus
+/// je zwei Butterworth-Filtern von fundsp (Linkwitz-Riley, 24 dB/Oktave)
+/// ergibt zusammen einen flachen Frequenzgang; ohne Absenkung klingt das
+/// Signal unverändert. Pegel der Höhen über den Hüllkurvenfolger von fundsp.
 struct DeEsser {
-    low: [Biquad; 2],
-    high: [Biquad; 2],
-    envelope: f32,
+    frequency: Shared,
+    low: Fixed,
+    high: Fixed,
+    follower: Fixed,
     gain_db: f32,
-    attack: f32,
-    release: f32,
 }
 
 impl DeEsser {
     fn new() -> Self {
-        let mut d = Self {
-            low: [Biquad::default(); 2],
-            high: [Biquad::default(); 2],
-            envelope: 0.0,
+        let frequency = shared(DeEsserParams::default().frequency_hz);
+        let lp = || (pass() | var(&frequency) | dc(0.707)) >> lowpass();
+        let hp = || (pass() | var(&frequency) | dc(0.707)) >> highpass();
+        Self {
+            low: Fixed::new(Box::new(lp() >> lp())),
+            high: Fixed::new(Box::new(hp() >> hp())),
+            follower: Fixed::new(Box::new(afollow(0.001f32, 0.06f32))),
+            frequency,
             gain_db: 0.0,
-            attack: coef(1.0),
-            release: coef(60.0),
-        };
-        d.configure(&DeEsserParams::default());
-        d
+        }
     }
 
     fn configure(&mut self, p: &DeEsserParams) {
-        for f in &mut self.low {
-            f.design(Shape::LowPass, p.frequency_hz, 0.707, 0.0);
-        }
-        for f in &mut self.high {
-            f.design(Shape::HighPass, p.frequency_hz, 0.707, 0.0);
-        }
+        self.frequency.set_value(p.frequency_hz);
     }
 
     /// Liefert die stärkste Absenkung des Blocks in dB.
     fn process(&mut self, buf: &mut [f32], p: &DeEsserParams) -> f32 {
         let mut most = 0.0f32;
         for s in buf.iter_mut() {
-            let low = self.low.iter_mut().fold(*s, |x, f| f.process(x));
-            let high = self.high.iter_mut().fold(*s, |x, f| f.process(x));
-            let level = high.abs();
-            let c = if level > self.envelope {
-                self.attack
-            } else {
-                self.release
-            };
-            self.envelope = level + (self.envelope - level) * c;
+            let low = self.low.tick(*s);
+            let high = self.high.tick(*s);
+            let envelope = self.follower.tick(high.abs());
             // Verhältnis 4:1, höchstens 18 dB.
-            let over = to_db(self.envelope) - p.threshold_db;
+            let over = to_db(envelope) - p.threshold_db;
             let target = if over > 0.0 {
                 (-over * 0.75).max(-18.0)
             } else {
@@ -556,13 +539,12 @@ impl DeEsser {
             };
             self.gain_db = target + (self.gain_db - target) * 0.99;
             most = most.min(self.gain_db);
-            *s = low + high * 10f32.powf(self.gain_db / 20.0);
+            *s = low + high * db_to_gain(self.gain_db);
         }
         most
     }
 }
 
-/// Ergänzt Obertöne in den Höhen: Hochpass, Sättigung, nochmals Hochpass.
 /// Exciter aus fundsp: Höhen abzweigen, sanft sättigen (Obertöne), nochmals
 /// hochpassen und zum Original mischen. Frequenz läuft live.
 struct Exciter {

@@ -55,6 +55,8 @@ pub fn render(preview: Preview) -> Vec<f32> {
         Preview::Character { params } => {
             let mut character = Character::new();
             character.configure(&params);
+            // Frisch gebaut statt nach kurzer Ruhe übergeblendet.
+            character.clear();
             let period = RATE / 150;
             // Einschwingen lassen, dann zwei Schwingungen nehmen.
             let mut buf: Vec<f32> = (0..period * 12)

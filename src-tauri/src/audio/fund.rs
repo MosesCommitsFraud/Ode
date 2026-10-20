@@ -108,6 +108,12 @@ impl Fixed {
         self.unit.filter_mono(x)
     }
 
+    /// Nächstes Sample eines Generators ohne Eingang (z. B. Oszillator).
+    #[inline]
+    pub fn generate(&mut self) -> f32 {
+        self.unit.get_mono()
+    }
+
     pub fn reset(&mut self) {
         self.unit.reset();
     }

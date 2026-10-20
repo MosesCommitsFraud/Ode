@@ -1,14 +1,13 @@
-//! Kanal-Vocoder: Die Stimme steuert in 16 Bändern die Lautstärke eines
+//! Kanal-Vocoder aus fundsp-Bausteinen: Die Stimme steuert in 16 Bändern die Lautstärke eines
 //! Synthesizer-Trägers (Sägezahn-Akkord mit etwas Rauschen). Der Träger
 //! spielt eine feste Note oder folgt der erkannten Tonhöhe.
 
 use serde::{Deserialize, Serialize};
 
-use super::pitch::hz_of;
-use crate::audio::ENGINE_RATE;
-use crate::audio::dsp::{Biquad, Shape, coef};
+use fundsp::prelude32::{Shared, afollow, bandpass_hz, mul, shared, var};
 
-const RATE: f32 = ENGINE_RATE as f32;
+use super::pitch::hz_of;
+use crate::audio::fund::Fixed;
 pub const BANDS: usize = 16;
 const LOWEST: f32 = 120.0;
 const HIGHEST: f32 = 7_500.0;
@@ -72,47 +71,24 @@ impl VocoderParams {
     }
 }
 
-/// Bandbegrenzter Sägezahn (PolyBLEP).
-#[derive(Debug, Clone, Copy, Default)]
-struct Saw {
-    phase: f32,
-}
-
-impl Saw {
-    #[inline]
-    fn next(&mut self, freq: f32) -> f32 {
-        let dt = (freq / RATE).min(0.5);
-        self.phase += dt;
-        if self.phase >= 1.0 {
-            self.phase -= 1.0;
-        }
-        let t = self.phase;
-        let mut y = 2.0 * t - 1.0;
-        if t < dt {
-            let x = t / dt;
-            y -= x + x - x * x - 1.0;
-        } else if t > 1.0 - dt {
-            let x = (t - 1.0) / dt;
-            y -= x * x + x + x + 1.0;
-        }
-        y
-    }
-}
-
 pub fn band_frequency(i: usize) -> f32 {
     LOWEST * (HIGHEST / LOWEST).powf(i as f32 / (BANDS - 1) as f32)
 }
 
+/// Kanal-Vocoder aus fundsp-Bausteinen: Bandpässe für Stimme und Träger,
+/// Hüllkurvenfolger je Band und bandbegrenzte Sägezähne als Träger.
 pub struct Vocoder {
-    analysis: [Biquad; BANDS],
-    synthesis: [Biquad; BANDS],
-    envelope: [f32; BANDS],
-    saws: [Saw; 3],
-    /// Geglättete Trägerfrequenz, damit Notenwechsel nicht knacken.
+    analysis: Vec<Fixed>,
+    followers: Vec<Fixed>,
+    synthesis: Vec<Fixed>,
+    carrier: Fixed,
+    /// Frequenz und Pegel der drei Sägezähne, Anteil Säge und Rauschen.
+    freqs: [Shared; 3],
+    gains: [Shared; 3],
+    saw: Shared,
+    noise: Shared,
+    /// Geglättete Grundfrequenz, damit Notenwechsel nicht knacken.
     freq: f32,
-    noise: u32,
-    attack: f32,
-    release: f32,
     /// Höchste Hüllkurve je Band seit dem letzten Auslesen, für die Anzeige.
     pub levels: [f32; BANDS],
 }
@@ -125,16 +101,27 @@ impl Default for Vocoder {
 
 impl Vocoder {
     pub fn new() -> Self {
-        let filter = |i| Biquad::new(Shape::BandPass, band_frequency(i), Q, 0.0);
+        // fundsps Bandpass verstärkt in der Mitte um Q; normiert auf 0 dB wie zuvor.
+        let band = |i| Fixed::new(Box::new(bandpass_hz(band_frequency(i), Q) >> mul(1.0 / Q)));
+        let freqs: [Shared; 3] = std::array::from_fn(|_| shared(hz_of(48.0)));
+        let gains: [Shared; 3] = std::array::from_fn(|i| shared(if i == 0 { 1.0 } else { 0.0 }));
+        let (saw, noise) = (shared(1.0), shared(0.0));
+        let voice = |i: usize| (var(&freqs[i]) >> fundsp::prelude32::saw()) * var(&gains[i]);
+        let carrier = Fixed::new(Box::new(
+            (voice(0) + voice(1) + voice(2)) * var(&saw) + fundsp::prelude32::noise() * var(&noise),
+        ));
         Self {
-            analysis: std::array::from_fn(filter),
-            synthesis: std::array::from_fn(filter),
-            envelope: [0.0; BANDS],
-            saws: [Saw::default(); 3],
+            analysis: (0..BANDS).map(band).collect(),
+            followers: (0..BANDS)
+                .map(|_| Fixed::new(Box::new(afollow(0.003f32, 0.03f32))))
+                .collect(),
+            synthesis: (0..BANDS).map(band).collect(),
+            carrier,
+            freqs,
+            gains,
+            saw,
+            noise,
             freq: hz_of(48.0),
-            noise: 0x2545_f491,
-            attack: coef(3.0),
-            release: coef(30.0),
             levels: [0.0; BANDS],
         }
     }
@@ -148,33 +135,24 @@ impl Vocoder {
             (false, _) => hz_of(p.note),
         };
         let intervals = p.chord.intervals();
-        let voices = intervals.len() as f32;
+        let level = 1.0 / (intervals.len() as f32).sqrt();
+        for (i, gain) in self.gains.iter().enumerate() {
+            gain.set_value(if i < intervals.len() { level } else { 0.0 });
+        }
+        self.saw.set_value(1.0 - p.breath * 0.5);
+        self.noise.set_value(p.breath);
         for s in buf.iter_mut() {
             let x = *s;
             self.freq += (target - self.freq) * 0.002;
-            let mut carrier = 0.0;
-            for (saw, &interval) in self.saws.iter_mut().zip(intervals) {
-                carrier += saw.next(self.freq * 2f32.powf(interval / 12.0));
+            for (shared, &interval) in self.freqs.iter().zip(intervals) {
+                shared.set_value(self.freq * 2f32.powf(interval / 12.0));
             }
-            carrier /= voices.sqrt();
-            self.noise ^= self.noise << 13;
-            self.noise ^= self.noise >> 17;
-            self.noise ^= self.noise << 5;
-            let noise = self.noise as f32 / u32::MAX as f32 * 2.0 - 1.0;
-            carrier = carrier * (1.0 - p.breath * 0.5) + noise * p.breath;
-
+            let carrier = self.carrier.generate();
             let mut out = 0.0;
             for b in 0..BANDS {
-                let level = self.analysis[b].process(x).abs();
-                let env = &mut self.envelope[b];
-                let c = if level > *env {
-                    self.attack
-                } else {
-                    self.release
-                };
-                *env = level + (*env - level) * c;
-                self.levels[b] = self.levels[b].max(*env);
-                out += self.synthesis[b].process(carrier) * *env;
+                let envelope = self.followers[b].tick(self.analysis[b].tick(x).abs());
+                self.levels[b] = self.levels[b].max(envelope);
+                out += self.synthesis[b].tick(carrier) * envelope;
             }
             *s = x * (1.0 - p.mix) + out * 4.0 * p.mix;
         }
@@ -185,15 +163,17 @@ impl Vocoder {
     }
 
     pub fn clear(&mut self) {
-        self.analysis.iter_mut().for_each(Biquad::reset);
-        self.synthesis.iter_mut().for_each(Biquad::reset);
-        self.envelope = [0.0; BANDS];
+        self.analysis.iter_mut().for_each(Fixed::reset);
+        self.followers.iter_mut().for_each(Fixed::reset);
+        self.synthesis.iter_mut().for_each(Fixed::reset);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const RATE: f32 = crate::audio::ENGINE_RATE as f32;
 
     fn rms(v: &[f32]) -> f32 {
         (v.iter().map(|x| x * x).sum::<f32>() / v.len() as f32).sqrt()

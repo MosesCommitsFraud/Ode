@@ -1,15 +1,12 @@
-//! Klangcharakter: Roboter (Ringmodulator), Radio, Telefon, Megafon,
-//! Verzerrung, Bitcrusher und Lo-Fi (Kassette). Jeder Modus hat zwei Regler, `amount` (wie
+//! Klangcharakter aus fundsp: Roboter (Ringmodulator), Radio, Telefon,
+//! Megafon, Verzerrung, Bitcrusher und Lo-Fi (Kassette). Jeder Modus hat zwei Regler, `amount` (wie
 //! stark) und `tone` (Farbe), deren Bedeutung der Modus festlegt.
 
-use std::f32::consts::TAU;
-
+use fundsp::prelude32::*;
 use serde::{Deserialize, Serialize};
 
 use crate::audio::ENGINE_RATE;
-use crate::audio::dsp::{Biquad, DelayLine, Shape};
-
-const RATE: f32 = ENGINE_RATE as f32;
+use crate::audio::fund::Rebuilt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,24 +68,129 @@ impl CharacterParams {
     }
 }
 
-/// Weiche Sättigung, bei großem Eingang gegen ±1.
-#[inline]
-fn soft_clip(x: f32) -> f32 {
-    x.tanh()
+/// Feste Teile eines Charakter-Graphen (Werte in Hundertsteln).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Voice {
+    mode: CharacterMode,
+    amount: u16,
+    tone: u16,
 }
 
+impl Voice {
+    fn of(p: &CharacterParams) -> Self {
+        Self {
+            mode: p.mode,
+            amount: (p.amount * 100.0).round() as u16,
+            tone: (p.tone * 100.0).round() as u16,
+        }
+    }
+}
+
+/// Jeder Modus als fundsp-Graph aus Filtern, Sättigung, Ringmodulator,
+/// Sample-and-Hold und Rauschen; Ausgabe ist das bearbeitete Signal.
+fn graph(v: Voice) -> Box<dyn AudioUnit> {
+    let a = v.amount as f32 / 100.0;
+    let t = v.tone as f32 / 100.0;
+    match v.mode {
+        CharacterMode::Robot => {
+            let carrier = CharacterParams {
+                tone: t,
+                ..Default::default()
+            }
+            .robot_hz();
+            // Ringmodulator plus kurzer Kamm bei 6 ms für den metallischen Klang.
+            let ring = ((pass() * sine_hz(carrier)) >> mul(0.5 + a * 0.5)) & mul((1.0 - a) * 0.5);
+            let comb = pass() & (feedback(delay(0.006) >> mul(0.55 * a)) >> mul(0.6 * a));
+            Box::new(ring >> comb >> mul(1.4))
+        }
+        CharacterMode::Radio => {
+            let center = 800.0 * 2f32.powf(t * 2.0);
+            let drive = 1.0 + a * 8.0;
+            Box::new(
+                (highpass_hz(center * 0.4, 0.8)
+                    >> lowpass_hz(center * 3.0, 0.9)
+                    >> bell_hz(center, 1.2, db_amp(4.0))
+                    >> shape(Tanh(drive))
+                    >> mul(1.0 / drive.sqrt()))
+                    + (noise() >> mul(0.004 * a)),
+            )
+        }
+        CharacterMode::Telephone => {
+            let narrow = 1.0 - t * 0.5;
+            // Abtasten mit 8 kHz, Stufen mit 6–12 Bit.
+            let steps = 2f32.powf(12.0 - a * 6.0);
+            Box::new(
+                highpass_hz(300.0 / narrow, 0.9)
+                    >> lowpass_hz(3_400.0 * narrow, 0.9)
+                    >> highpass_hz(300.0 / narrow, 0.9)
+                    >> (pass() | dc(8_000.0))
+                    >> hold(0.0)
+                    >> shape(Crush(steps))
+                    >> shape(Tanh(1.0 + a * 3.0))
+                    >> mul(1.2),
+            )
+        }
+        CharacterMode::Megaphone => {
+            let drive = 2.0 + a * 14.0;
+            Box::new(
+                highpass_hz(650.0, 0.9)
+                    >> bell_hz(1_800.0, 2.0, db_amp(4.0 + t * 10.0))
+                    >> shape(Tanh(drive))
+                    >> mul(0.7)
+                    >> lowpass_hz(4_500.0, 0.8),
+            )
+        }
+        CharacterMode::Distortion => {
+            let drive = 1.0 + a * 40.0;
+            // Leicht unsymmetrisch für mehr gerade Obertöne.
+            Box::new(
+                highpass_hz(80.0, 0.7)
+                    >> (pass() + dc(0.1 / drive))
+                    >> shape(Tanh(drive))
+                    >> (pass() - dc(0.1f32.tanh()))
+                    >> lowpass_hz(1_000.0 * 12f32.powf(t), 0.7)
+                    >> mul(1.0 / (1.0 + a * 1.5)),
+            )
+        }
+        CharacterMode::Bitcrusher => {
+            let factor = 1.0 + (t * t * 31.0).floor();
+            let bits = 16.0 - a * 14.0;
+            Box::new(
+                (pass() | dc(ENGINE_RATE as f32 / factor))
+                    >> hold(0.0)
+                    >> shape(Crush(2f32.powf(bits - 1.0))),
+            )
+        }
+        CharacterMode::Lofi => {
+            // Leiern (0,5 Hz) und Flattern (6 Hz) über eine gleitende Verzögerung.
+            let wobble = move |time: f32| {
+                let samples = 160.0
+                    + (std::f32::consts::TAU * 0.5 * time).sin() * 30.0 * a
+                    + (std::f32::consts::TAU * 6.0 * time).sin() * 3.0 * a;
+                samples / ENGINE_RATE as f32
+            };
+            let warmth = 1.8f32;
+            Box::new(
+                (((pass() | lfo(wobble))
+                    >> tap(0.001, 0.01)
+                    >> highpass_hz(180.0, 0.7)
+                    >> lowpass_hz(2_000.0 * 3f32.powf(t), 0.6)
+                    >> bell_hz(400.0, 0.8, db_amp(2.5))
+                    >> shape(Tanh(warmth))
+                    >> mul(1.0 / warmth.tanh()))
+                    + (pink() >> mul(0.012 * a)))
+                    >> shape(Crush(2_048.0))
+                    >> mul(1.1),
+            )
+        }
+    }
+}
+
+/// Klangcharakter aus fundsp: Modus, Stärke und Farbe bauen den Graphen
+/// (weich übergeblendet), der Anteil mischt live.
 pub struct Character {
     params: CharacterParams,
-    filters: [Biquad; 3],
-    comb: DelayLine,
-    phase: f32,
-    /// Zweiter Oszillator: schnelles Flattern des Bandes.
-    flutter: f32,
-    /// Abklingendes Knacken.
-    crackle: f32,
-    hold: f32,
-    hold_count: usize,
-    noise: u32,
+    unit: Rebuilt<Voice>,
 }
 
 impl Default for Character {
@@ -99,186 +201,44 @@ impl Default for Character {
 
 impl Character {
     pub fn new() -> Self {
-        let mut c = Self {
-            params: CharacterParams {
-                mode: CharacterMode::Bitcrusher,
-                ..Default::default()
-            },
-            filters: [Biquad::default(); 3],
-            comb: DelayLine::new(1024),
-            phase: 0.0,
-            flutter: 0.0,
-            crackle: 0.0,
-            hold: 0.0,
-            hold_count: 0,
-            noise: 0x1234_5678,
-        };
-        c.configure(&CharacterParams::default());
-        c
+        let p = CharacterParams::default();
+        Self {
+            params: p,
+            unit: Rebuilt::new(Voice::of(&p), graph),
+        }
     }
 
     pub fn configure(&mut self, p: &CharacterParams) {
-        let mode_changed = p.mode != self.params.mode;
+        // Neuer Modus klingt ganz anders: sofort wechseln statt langsam überblenden.
+        if p.mode != self.params.mode {
+            self.unit.set_now(Voice::of(p));
+        } else {
+            self.unit.want(Voice::of(p));
+        }
         self.params = *p;
-        let flat = (Shape::Peak, 1000.0, 1.0, 0.0);
-        let designs: [(Shape, f32, f32, f32); 3] = match p.mode {
-            CharacterMode::Robot | CharacterMode::Bitcrusher => [flat; 3],
-            CharacterMode::Radio => {
-                let center = 800.0 * 2f32.powf(p.tone * 2.0);
-                [
-                    (Shape::HighPass, center * 0.4, 0.8, 0.0),
-                    (Shape::LowPass, center * 3.0, 0.9, 0.0),
-                    (Shape::Peak, center, 1.2, 4.0),
-                ]
-            }
-            CharacterMode::Telephone => {
-                let narrow = 1.0 - p.tone * 0.5;
-                [
-                    (Shape::HighPass, 300.0 / narrow, 0.9, 0.0),
-                    (Shape::LowPass, 3_400.0 * narrow, 0.9, 0.0),
-                    (Shape::HighPass, 300.0 / narrow, 0.9, 0.0),
-                ]
-            }
-            CharacterMode::Megaphone => [
-                (Shape::HighPass, 650.0, 0.9, 0.0),
-                (Shape::Peak, 1_800.0, 2.0, 4.0 + p.tone * 10.0),
-                (Shape::LowPass, 4_500.0, 0.8, 0.0),
-            ],
-            CharacterMode::Distortion => [
-                (Shape::HighPass, 80.0, 0.7, 0.0),
-                (Shape::LowPass, 1_000.0 * 12f32.powf(p.tone), 0.7, 0.0),
-                flat,
-            ],
-            CharacterMode::Lofi => [
-                (Shape::HighPass, 180.0, 0.7, 0.0),
-                (Shape::LowPass, 2_000.0 * 3f32.powf(p.tone), 0.6, 0.0),
-                // Etwas Wärme in den unteren Mitten, wie bei Band.
-                (Shape::Peak, 400.0, 0.8, 2.5),
-            ],
-        };
-        // Nur die Koeffizienten tauschen, damit Regler nicht knacken.
-        for (filter, (shape, freq, q, gain)) in self.filters.iter_mut().zip(designs) {
-            filter.design(shape, freq, q, gain);
-        }
-        if mode_changed {
-            self.clear();
-        }
-    }
-
-    #[inline]
-    fn noise(&mut self) -> f32 {
-        self.noise ^= self.noise << 13;
-        self.noise ^= self.noise >> 17;
-        self.noise ^= self.noise << 5;
-        self.noise as f32 / u32::MAX as f32 * 2.0 - 1.0
     }
 
     pub fn process(&mut self, buf: &mut [f32]) {
-        let p = self.params;
+        let mix = self.params.mix;
         for s in buf.iter_mut() {
             let x = *s;
-            let wet = match p.mode {
-                CharacterMode::Robot => {
-                    self.phase = (self.phase + p.robot_hz() / RATE).fract();
-                    let ring = x * (TAU * self.phase).sin();
-                    // Kurzer Kamm bei 6 ms für den metallischen Klang.
-                    let comb = self.comb.tap(288);
-                    let y = ring * (0.5 + p.amount * 0.5) + x * (1.0 - p.amount) * 0.5;
-                    self.comb.push(y + comb * 0.55 * p.amount);
-                    (y + comb * 0.6 * p.amount) * 1.4
-                }
-                CharacterMode::Radio => {
-                    let mut y = x;
-                    for f in &mut self.filters {
-                        y = f.process(y);
-                    }
-                    let drive = 1.0 + p.amount * 8.0;
-                    let hiss = self.noise() * 0.004 * p.amount;
-                    soft_clip(y * drive) / drive.sqrt() + hiss
-                }
-                CharacterMode::Telephone => {
-                    let mut y = x;
-                    for f in &mut self.filters {
-                        y = f.process(y);
-                    }
-                    // Abtasten mit 8 kHz, Stufen mit 6–12 Bit.
-                    if self.hold_count == 0 {
-                        self.hold = y;
-                        self.hold_count = 6;
-                    }
-                    self.hold_count -= 1;
-                    let steps = 2f32.powf(12.0 - p.amount * 6.0);
-                    let q = (self.hold * steps).round() / steps;
-                    soft_clip(q * (1.0 + p.amount * 3.0)) * 1.2
-                }
-                CharacterMode::Megaphone => {
-                    let mut y = x;
-                    for f in &mut self.filters[..2] {
-                        y = f.process(y);
-                    }
-                    let drive = 2.0 + p.amount * 14.0;
-                    let y = soft_clip(y * drive) * 0.7;
-                    self.filters[2].process(y)
-                }
-                CharacterMode::Distortion => {
-                    let y = self.filters[0].process(x);
-                    let drive = 1.0 + p.amount * 40.0;
-                    // Leicht unsymmetrisch für mehr gerade Obertöne.
-                    let d = soft_clip(y * drive + 0.1) - 0.1f32.tanh();
-                    self.filters[1].process(d) / (1.0 + p.amount * 1.5)
-                }
-                CharacterMode::Lofi => {
-                    // Leiern (0,5 Hz) und Flattern (6 Hz) über eine gleitende Verzögerung.
-                    self.phase = (self.phase + 0.5 / RATE).fract();
-                    self.flutter = (self.flutter + 6.0 / RATE).fract();
-                    let wobble = (TAU * self.phase).sin() * 30.0 * p.amount
-                        + (TAU * self.flutter).sin() * 3.0 * p.amount;
-                    self.comb.push(x);
-                    let mut y = self.comb.read(160.0 + wobble);
-                    for f in &mut self.filters {
-                        y = f.process(y);
-                    }
-                    // Warme Sättigung, Pegel bleibt gleich.
-                    let y = soft_clip(y * 1.8) / 1.8f32.tanh();
-                    // Bandrauschen, leise und dunkel.
-                    let hiss = self.noise() * 0.006 * p.amount;
-                    // Seltenes Knistern wie Staub auf der Platte.
-                    if self.noise() > 1.0 - 0.0004 * p.amount {
-                        self.crackle = self.noise() * 0.25 * p.amount;
-                    }
-                    self.crackle *= 0.85;
-                    // 12 Bit.
-                    let q = ((y + hiss + self.crackle) * 2048.0).round() / 2048.0;
-                    q * 1.1
-                }
-                CharacterMode::Bitcrusher => {
-                    let factor = 1 + (p.tone * p.tone * 31.0) as usize;
-                    if self.hold_count == 0 {
-                        self.hold = x;
-                        self.hold_count = factor;
-                    }
-                    self.hold_count -= 1;
-                    let bits = 16.0 - p.amount * 14.0;
-                    let steps = 2f32.powf(bits - 1.0);
-                    (self.hold * steps).round() / steps
-                }
-            };
-            *s = x * (1.0 - p.mix) + wet * p.mix;
+            let wet = self.unit.tick(x);
+            *s = x * (1.0 - mix) + wet * mix;
         }
     }
 
     pub fn clear(&mut self) {
-        self.filters.iter_mut().for_each(Biquad::reset);
-        self.comb.clear();
-        self.hold = 0.0;
-        self.hold_count = 0;
-        self.crackle = 0.0;
+        self.unit.set_now(Voice::of(&self.params));
+        self.unit.reset();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::f32::consts::TAU;
+
+    const RATE: f32 = ENGINE_RATE as f32;
 
     #[test]
     fn every_mode_produces_sound_without_blowing_up() {
