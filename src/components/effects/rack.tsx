@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { Toggle } from "~/components/ui/hardware";
 import { HelpIcon } from "./HelpDrawer";
 import { t } from "~/lib/i18n";
@@ -7,12 +8,10 @@ import { cn, formatDb } from "~/lib/utils";
 /* Bausteine der Effekt-Seiten: Module als Karten mit Anzeige und Reglern. */
 
 /**
- * Ein Effekt als Gerät: Name mit Schalter rechts, darunter die Regler. Geräte,
- * bei denen ein Bild hilft (EQ, Kompressor, Gate …), haben eine Anzeige, in
- * der sich oft direkt ziehen lässt; ist das Gerät breit und flach, stehen die
- * Regler daneben. Kompakte Geräte zeigen nur Regler, höchstens ein schmales
- * Meter (`meter`) oder eine Lampe am Titel (`indicator`). Aus ist das Gerät
- * blass und grau, an trägt es seine Farbe.
+ * Ein Effekt als Karte: Name mit Schalter rechts, eine Anzeige, in der sich
+ * oft direkt ziehen lässt, und die Regler. Die Karte passt sich ihrem Platz
+ * an: groß Anzeige und Regler, breit und flach Regler neben der Anzeige,
+ * klein nur die Regler.
  */
 export function Module({
   title,
@@ -25,16 +24,16 @@ export function Module({
   help,
   keys,
   meter,
-  indicator,
   highlight,
   stacked,
+  name,
 }: {
   title: string;
   enabled: boolean;
   onToggle: (on: boolean) => void;
-  /** Große Anzeige; ohne ist das Gerät kompakt. */
+  /** Anzeige; fällt weg, wenn die Karte klein ist. */
   display?: ReactNode;
-  /** Platz im Raster, z. B. `col-span-2 row-span-2`. */
+  /** Platz im Raster, z. B. `row-span-2`. */
   className?: string;
   /** Regler. */
   children?: ReactNode;
@@ -44,23 +43,18 @@ export function Module({
   help?: string;
   /** Wahltasten, z. B. Modus oder Tonart. */
   keys?: ReactNode;
-  /** Schmales Meter rechts neben den Reglern, z. B. die Absenkung. */
+  /** Schmales Meter neben den Reglern, z. B. die Absenkung. */
   meter?: ReactNode;
-  /** Kleine Anzeige am Titel, z. B. eine Lampe für erkannte Sprache. */
-  indicator?: ReactNode;
-  /** Kurz hervorheben, z. B. wenn es in der Liste gewählt wurde. */
+  /** Kurz hervorheben, z. B. wenn es in der Liste angeklickt wurde. */
   highlight?: boolean;
   /** Regler immer unter der Anzeige, z. B. wenn die Anzeige ihre Breite braucht. */
   stacked?: boolean;
+  /** Name für weiche Übergänge, wenn Karten kommen und gehen. */
+  name?: string;
 }) {
   // Ohne eigene Farbe bleibt --ch-mic geerbt; sich selbst zuweisen wäre ungültig.
   const style: Record<string, string> = accent ? { "--ch-mic": accent, "--ch": accent } : { "--ch": "var(--ch-mic)" };
-  const controls = (keys || children) && (
-    <div className="device-controls flex min-w-0 flex-1 flex-col justify-center gap-3">
-      {keys && <div className="flex flex-col gap-2">{keys}</div>}
-      {children && <div className="flex flex-wrap items-start justify-center gap-x-1 gap-y-2">{children}</div>}
-    </div>
-  );
+  if (name) style.viewTransitionName = name;
   return (
     <section
       style={style}
@@ -75,31 +69,27 @@ export function Module({
           {title}
         </h3>
         {help && <HelpIcon topic={help} />}
-        {indicator}
         <div className="flex-1" />
         <Toggle label={title} on={enabled} onChange={onToggle} />
       </div>
-      <div className={cn("min-h-0 flex-1 transition-[opacity,filter] duration-300", display && !stacked && "device-body", !enabled && "opacity-50 grayscale")}>
-        {display ? (
-          <div className="device-layout flex size-full flex-col gap-3">
-            {/* Mulde: Rundung der Karte (16) minus Innenabstand, damit beide konzentrisch wirken. */}
-            <div className="well relative min-h-[72px] min-w-0 flex-1 overflow-hidden rounded-[10px]">{display}</div>
-            {(controls || meter) && (
-              <div className="flex min-h-0 w-full shrink-0 items-stretch gap-3">
-                {controls}
-                {meter}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex size-full items-stretch justify-center gap-3">
-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-3">
-              {keys && <div className="flex flex-col gap-2">{keys}</div>}
-              {children && <div className="flex flex-wrap content-center items-start justify-center gap-x-1 gap-y-2">{children}</div>}
+      <div className={cn("device-body min-h-0 flex-1 transition-[opacity,filter] duration-300", !enabled && "opacity-50 grayscale")}>
+        <div className={cn("device-layout flex size-full flex-col justify-center gap-3", stacked && "device-stacked")}>
+          {display && (
+            // Mulde: Rundung der Karte (16) minus Innenabstand, damit beide konzentrisch wirken.
+            <div className="device-display well relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-[10px]">{display}</div>
+          )}
+          {(keys || children || meter) && (
+            <div className="device-side flex min-h-0 min-w-0 shrink-0 items-stretch justify-center gap-3">
+              {(keys || children) && (
+                <div className="flex min-w-0 flex-1 flex-col justify-center gap-3">
+                  {keys && <div className="flex flex-col gap-2">{keys}</div>}
+                  {children && <div className="flex flex-wrap content-center items-start justify-center gap-x-1 gap-y-2">{children}</div>}
+                </div>
+              )}
+              {meter}
             </div>
-            {meter}
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </section>
   );
@@ -152,111 +142,173 @@ export function Divider() {
   return <div aria-hidden className="w-px self-stretch bg-hairline" />;
 }
 
-/** Mehrere Geräte nebeneinander auf einem Pult, getrennt durch feine Linien. */
-export function Console({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("panel flex min-h-0 flex-1 divide-x divide-hairline rounded-2xl p-1.5", className)}>{children}</div>;
+/**
+ * Zustandswechsel mit weichem Übergang: Karten, die kommen oder gehen,
+ * blenden ein und aus, die übrigen gleiten an ihren neuen Platz.
+ */
+export function smooth(update: () => void) {
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (!doc.startViewTransition || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    update();
+    return;
+  }
+  // Nur die Karten bewegen sich; die übrige Seite wechselt ohne Überblendung.
+  const root = document.documentElement;
+  root.classList.add("vt-devices");
+  const transition = doc.startViewTransition(() => flushSync(update)) as { finished?: Promise<void> };
+  void transition.finished?.finally(() => root.classList.remove("vt-devices"));
 }
 
-export type BenchDevice = { id: string; title: string; enabled: boolean; onToggle?: (on: boolean) => void; accent?: string };
-export type BenchGroup = { id: string; title: string; devices: BenchDevice[] };
+export type ChainDevice = { id: string; title: string; icon: ReactNode; enabled: boolean; onToggle: (on: boolean) => void; accent?: string };
 
 /**
- * Links eine schmale Liste aller Geräte in Gruppen, jedes mit Schalter;
- * rechts alle Geräte der gewählten Gruppe zusammen im Raster. Ein Klick auf
- * ein Gerät öffnet seine Gruppe und hebt es kurz hervor; der Wechsel
- * zwischen Gruppen blendet weich über.
+ * Die Kette als Signalweg: eine Linie vom Eingang zum Ausgang, jedes Gerät
+ * ein Knoten darauf. Aktive Knoten tragen ihre Farbe; ein Klick auf die Zeile
+ * schaltet das Gerät ein oder hebt seine Karte hervor.
  */
-export function Bench({
+export function ChainList({
+  start,
+  end,
   groups,
-  open,
-  focus,
-  onOpen,
-  children,
+  onFocus,
   className,
 }: {
-  groups: BenchGroup[];
-  /** Gewählte Gruppe. */
-  open: string;
-  /** Zuletzt angeklicktes Gerät. */
-  focus?: string;
-  onOpen: (group: string, device?: string) => void;
-  children: ReactNode;
+  start: { label: string; icon: ReactNode };
+  end: { label: string; icon: ReactNode };
+  groups: { title: string; devices: ChainDevice[] }[];
+  onFocus: (id: string) => void;
   className?: string;
 }) {
-  const order = groups.map((g) => g.id);
-  const devices = groups.flatMap((g) => g.devices.map((d) => ({ ...d, group: g.id })));
-  const rows = useRef(new Map<string, HTMLElement>());
-  const step = (delta: number) => {
-    const index = Math.max(0, devices.findIndex((d) => d.id === focus));
-    const next = devices[(index + delta + devices.length) % devices.length];
-    onOpen(next.group, next.id);
-    rows.current.get(next.id)?.focus();
-  };
+  const endpoint = (p: { label: string; icon: ReactNode }) => (
+    <div className="relative flex h-8 items-center gap-2.5 pl-1.5 text-xs text-muted-foreground">
+      <span className="flex size-7 items-center justify-center rounded-full bg-panel text-muted-foreground shadow-[inset_0_0_0_1.5px_var(--hairline)] [&_svg]:size-3.5">
+        {p.icon}
+      </span>
+      {p.label}
+    </div>
+  );
   return (
-    <div className={cn("flex min-h-0 flex-1 gap-3", className)}>
-      <nav
-        role="listbox"
-        aria-orientation="vertical"
-        className="panel flex w-52 shrink-0 flex-col gap-px self-start overflow-hidden rounded-2xl p-1.5"
-        onKeyDown={(e) => {
-          if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-          e.preventDefault();
-          step(e.key === "ArrowDown" ? 1 : -1);
-        }}
-      >
-        {groups.map((g) => (
-          <div key={g.id} className="flex flex-col gap-px">
-            <button
-              type="button"
-              onClick={() => onOpen(g.id)}
-              className={cn(
-                "cursor-default rounded-[10px] px-2.5 pt-2.5 pb-1 text-left font-mono text-3xs tracking-[0.16em] uppercase transition-colors",
-                open === g.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
+    <nav className={cn("panel relative flex w-56 shrink-0 flex-col self-start rounded-2xl px-2 py-2.5", className)}>
+      {/* Die Leitung hinter den Knoten. */}
+      <span aria-hidden className="absolute top-6 bottom-6 left-[27px] w-0.5 rounded-full bg-hairline" />
+      {endpoint(start)}
+      {groups.map((g) => (
+        <div key={g.title} className="flex flex-col">
+          <div className="relative py-1.5 pl-12 font-mono text-3xs tracking-[0.16em] text-muted-foreground uppercase">{g.title}</div>
+          {g.devices.map((d) => (
+            <div
+              key={d.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => (d.enabled ? onFocus(d.id) : d.onToggle(true))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  d.onToggle(!d.enabled);
+                }
+              }}
+              style={d.accent ? ({ "--ch-mic": d.accent } as React.CSSProperties) : undefined}
+              className="group relative flex h-9 cursor-default items-center gap-2.5 rounded-[10px] pr-1.5 pl-1.5 outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {g.title}
-            </button>
-            {g.devices.map((d) => (
-              <div
-                key={d.id}
-                ref={(el) => {
-                  if (el) rows.current.set(d.id, el);
-                  else rows.current.delete(d.id);
-                }}
-                role="option"
-                aria-selected={open === g.id}
-                tabIndex={focus === d.id ? 0 : -1}
-                onClick={() => onOpen(g.id, d.id)}
-                style={d.accent ? ({ "--ch-mic": d.accent } as React.CSSProperties) : undefined}
+              <span
                 className={cn(
-                  // Rundung der Liste (16) minus Innenabstand (6).
-                  "flex h-9 shrink-0 cursor-default items-center gap-2 rounded-[10px] pr-2 pl-2.5 text-[13px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring",
-                  open === g.id ? "bg-accent/70 text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                  focus === d.id && open === g.id && "bg-accent font-semibold",
+                  "flex size-7 shrink-0 items-center justify-center rounded-full transition-[background-color,color,box-shadow,transform] duration-300 group-active:scale-90 [&_svg]:size-3.5",
+                  d.enabled
+                    ? "bg-[var(--ch-mic)] text-white shadow-[0_2px_6px_-2px_var(--ch-mic)]"
+                    : "bg-panel text-muted-foreground shadow-[inset_0_0_0_1.5px_var(--hairline)]",
                 )}
               >
-                <span className="min-w-0 flex-1 truncate">{d.title}</span>
-                {d.onToggle && <Toggle size="sm" label={d.title} on={d.enabled} onChange={d.onToggle} />}
-              </div>
-            ))}
-          </div>
-        ))}
-      </nav>
-      <Crossfade id={open} order={order} axis="y">
-        {children}
-      </Crossfade>
-    </div>
+                {d.icon}
+              </span>
+              <span className={cn("min-w-0 flex-1 truncate text-[13px] transition-colors", d.enabled ? "font-medium text-foreground" : "text-muted-foreground")}>
+                {d.title}
+              </span>
+              <Toggle size="sm" label={d.title} on={d.enabled} onChange={d.onToggle} />
+            </div>
+          ))}
+        </div>
+      ))}
+      {endpoint(end)}
+    </nav>
   );
 }
 
-/** Geräte einer Gruppe im Raster; Platzierung über `className` der Geräte (z. B. `col-span-2`). */
-export function DeviceGrid({ children, cols, rows }: { children: ReactNode; cols: number; rows: number }) {
+/** Mindestmaße einer Karte, damit Titel und Regler lesbar bleiben. */
+const CARD_MIN = { width: 250, height: 150 };
+type CardMin = typeof CARD_MIN;
+
+/**
+ * Wie viele Spalten und Reihen: die Aufteilung, in der jede Karte am größten
+ * ist (gemessen an ihrer kürzeren Seite, bei einem Seitenverhältnis von etwa
+ * 1,4), ohne unter das Mindestmaß zu fallen.
+ */
+function arrange(n: number, width: number, height: number, min: CardMin) {
+  let best = { cols: Math.min(n, 2), rows: Math.ceil(n / Math.min(n, 2)), score: -1 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const w = (width - (cols - 1) * 12) / cols;
+    const h = (height - (rows - 1) * 12) / rows;
+    const fits = w >= min.width && h >= min.height;
+    const score = (fits ? 10_000 : 0) + Math.min(w / 1.4, h);
+    if (score > best.score) best = { cols, rows, score };
+  }
+  return best;
+}
+
+/**
+ * Nur die eingeschalteten Geräte, so groß wie der Platz erlaubt. Spalten und
+ * Reihen richten sich nach Anzahl und Fläche; übrige Zellen bekommen die
+ * Geräte mit der wichtigsten Anzeige (`weight`), die dann doppelt so groß
+ * werden. Kleine Karten zeigen nur ihre Regler.
+ */
+export function ActiveGrid({
+  items,
+  empty,
+  min = CARD_MIN,
+}: {
+  items: { id: string; weight: number; render: (className: string) => ReactNode }[];
+  empty: ReactNode;
+  /** Mindestmaße je Karte; Geräte mit vielen Reglern brauchen mehr Höhe. */
+  min?: CardMin;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 900, height: 560 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const n = items.length;
+  const { cols, rows } = arrange(Math.max(1, n), size.width, size.height, min);
+  const spare = cols * rows - n;
+  const big = new Set(
+    [...items]
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, spare)
+      .map((i) => i.id),
+  );
+  // Mehrere Reihen: doppelt hoch; nur eine Reihe: doppelt breit.
+  const span = rows > 1 ? "row-span-2" : "col-span-2";
   return (
-    <div
-      className="grid min-h-0 min-w-0 flex-1 gap-3"
-      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
-    >
-      {children}
+    <div ref={ref} className="flex min-h-0 min-w-0 flex-1">
+      {n === 0 ? (
+        <div className="flex flex-1 items-center justify-center">{empty}</div>
+      ) : (
+        <div
+          className="grid min-h-0 min-w-0 flex-1 grid-flow-dense gap-3"
+          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
+        >
+          {/* Große Karten zuerst, damit das dichte Raster keine Reihe anhängt. */}
+          {items.map((i) => (
+            <div key={i.id} className={cn("flex min-h-0 min-w-0 [&>*]:flex-1", big.has(i.id) && span)} style={{ order: big.has(i.id) ? -1 : 0 }}>
+              {i.render("")}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -452,8 +504,8 @@ const EQ_FREQ_TICKS: [number, string][] = [
 /** Wo die drei Regler des EQ greifen, mit ihren Namen statt Frequenzen. */
 const EQ_BANDS: [number, string][] = [
   [120, "effects.bass"],
-  [2500, "effects.presence"],
-  [8000, "effects.treble"],
+  [2000, "effects.presence"],
+  [11000, "effects.treble"],
 ];
 
 /** 20 Hz … 20 kHz logarithmisch auf 0–100. */

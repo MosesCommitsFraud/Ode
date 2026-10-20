@@ -1,7 +1,8 @@
-import { ArrowCounterClockwise, FloppyDisk, X } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowsDownUp, Church, FloppyDisk, MaskHappy, Microphone, MusicNotes, Repeat, Robot, SpeakerHigh, UsersThree, WaveSine, X } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { HelpIcon } from "~/components/effects/HelpDrawer";
-import { Bench, DeviceGrid } from "~/components/effects/rack";
+import { ActiveGrid, ChainList, smooth } from "~/components/effects/rack";
+import { EmptyState } from "~/components/ui/misc";
 import { ActionGroup, ActionPill } from "~/components/ui/pills";
 import { AutotuneModule, HarmonizerModule, PitchModule, VocoderModule } from "~/components/voice/PitchModules";
 import { PresetBank, PresetEditor } from "~/components/voice/Presets";
@@ -30,33 +31,25 @@ function newPreset(): Preset {
   };
 }
 
-const KEY = "ode.voice-open";
 const GROUPS = {
   pitch: ["pitch", "autotune", "harmonizer", "vocoder"],
   sound: ["character", "modulation", "echo", "reverb"],
 } as const;
-type GroupId = keyof typeof GROUPS;
-type DeviceId = (typeof GROUPS)[GroupId][number];
+type DeviceId = (typeof GROUPS)[keyof typeof GROUPS][number];
 
-function readOpen(): { group: GroupId; device?: string } {
-  try {
-    const value = JSON.parse(localStorage.getItem(KEY) ?? "") as { group: string; device?: string };
-    return { group: value.group === "sound" ? "sound" : "pitch", device: value.device };
-  } catch {
-    return { group: "pitch" };
-  }
-}
-
-const PLACE: Record<DeviceId, string> = {
-  autotune: "col-start-1 row-start-1 row-span-2",
-  pitch: "col-start-2 row-start-1",
-  harmonizer: "col-start-3 row-start-1",
-  vocoder: "col-start-2 col-span-2 row-start-2",
-  reverb: "col-start-1 row-start-1 row-span-2",
-  character: "col-start-2 row-start-1",
-  modulation: "col-start-3 row-start-1",
-  echo: "col-start-2 col-span-2 row-start-2",
+const ICONS: Record<DeviceId, React.ReactNode> = {
+  pitch: <ArrowsDownUp />,
+  autotune: <MusicNotes />,
+  harmonizer: <UsersThree />,
+  vocoder: <Robot />,
+  character: <MaskHappy />,
+  modulation: <WaveSine />,
+  echo: <Repeat />,
+  reverb: <Church />,
 };
+
+/** Welche Anzeige am meisten Platz verdient, wenn welcher übrig ist. */
+const WEIGHT: Record<DeviceId, number> = { autotune: 8, reverb: 7, pitch: 6, vocoder: 5, harmonizer: 4, echo: 3, character: 2, modulation: 1 };
 
 const MODULES: Record<DeviceId, (props: { highlight?: boolean; className?: string }) => React.ReactNode> = {
   pitch: PitchModule,
@@ -70,7 +63,6 @@ const MODULES: Record<DeviceId, (props: { highlight?: boolean; className?: strin
 };
 
 export function VoiceView() {
-  const [state, setState] = useState(readOpen);
   const [flash, setFlash] = useState<string | null>(null);
   const [editing, setEditing] = useState<Preset | null>(null);
   const voice = useStore((s) => s.effects.voice);
@@ -81,27 +73,14 @@ export function VoiceView() {
     return () => window.clearTimeout(timer);
   }, [flash]);
 
-  const open = (group: string, device?: string) => {
-    const value = { group: group === "sound" ? ("sound" as const) : ("pitch" as const), device };
-    setState(value);
-    if (device) setFlash(device);
-    try {
-      localStorage.setItem(KEY, JSON.stringify(value));
-    } catch {
-      // Nur Komfort.
-    }
-  };
   const save = async () => {
     const preset = newPreset();
     await actions.savePreset(preset);
     setEditing(preset);
   };
-  const device = (id: DeviceId) => ({
-    id,
-    title: t(`voice.${id}`),
-    enabled: voice[id].enabled,
-    onToggle: (enabled: boolean) => actions.setVoice(id, { enabled }),
-  });
+  const toggle = (id: DeviceId, enabled: boolean) => smooth(() => actions.setVoice(id, { enabled }));
+  const chain = (id: DeviceId) => ({ id, title: t(`voice.${id}`), icon: ICONS[id], enabled: voice[id].enabled, onToggle: (on: boolean) => toggle(id, on) });
+  const active = [...GROUPS.pitch, ...GROUPS.sound].filter((id) => voice[id].enabled);
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-hidden pt-3 pr-3 pb-3 pl-6">
@@ -132,24 +111,30 @@ export function VoiceView() {
       />
 
       {/* Bei ausgeschalteter Stimme bleibt alles bedienbar, wirkt aber erst mit „Eigene“ oder einem Preset. */}
-      <Bench
-        className={cn("transition-opacity duration-300", !voice.enabled && "opacity-60")}
-        open={state.group}
-        focus={state.device}
-        onOpen={open}
-        groups={[
-          { id: "pitch", title: t("voice.pitchPage"), devices: GROUPS.pitch.map(device) },
-          { id: "sound", title: t("voice.soundPage"), devices: GROUPS.sound.map(device) },
-        ]}
-      >
-        {/* Je Gruppe ein Gerät mit Anzeige hoch links, die kompakten daneben. */}
-        <DeviceGrid cols={3} rows={2}>
-          {GROUPS[state.group].map((id) => {
+      <div className={cn("flex min-h-0 flex-1 gap-3 transition-opacity duration-300", !voice.enabled && "opacity-60")}>
+        <ChainList
+          start={{ label: t("effects.input"), icon: <Microphone /> }}
+          end={{ label: t("effects.output"), icon: <SpeakerHigh /> }}
+          groups={[
+            { title: t("voice.pitchPage"), devices: GROUPS.pitch.map(chain) },
+            { title: t("voice.soundPage"), devices: GROUPS.sound.map(chain) },
+          ]}
+          onFocus={setFlash}
+        />
+        <ActiveGrid
+          // Stimm-Geräte haben viele Regler: lieber schmaler als zu flach.
+          min={{ width: 180, height: 220 }}
+          empty={
+            <EmptyState icon={<Microphone weight="duotone" />} title={t("voice.noneTitle")}>
+              {t("voice.noneHint")}
+            </EmptyState>
+          }
+          items={active.map((id) => {
             const Device = MODULES[id];
-            return <Device key={id} highlight={flash === id} className={PLACE[id]} />;
+            return { id, weight: WEIGHT[id], render: (className: string) => <Device highlight={flash === id} className={className} /> };
           })}
-        </DeviceGrid>
-      </Bench>
+        />
+      </div>
 
       {editing && <PresetEditor key={editing.id} preset={editing} onClose={() => setEditing(null)} />}
     </div>

@@ -45,6 +45,8 @@ pub struct DenoiseParams {
     /// Senkt alles ab, was RNNoise nicht als Sprache erkennt (Klicks, Tippen
     /// zwischen den Wörtern).
     pub voice_gate: bool,
+    /// Wie viel vom entrauschten Signal: 0 = unbearbeitet, 1 = ganz entrauscht.
+    pub strength: f32,
 }
 
 impl Default for DenoiseParams {
@@ -52,6 +54,7 @@ impl Default for DenoiseParams {
         Self {
             enabled: false,
             voice_gate: true,
+            strength: 1.0,
         }
     }
 }
@@ -333,7 +336,8 @@ impl Denoiser {
     }
 
     /// Gibt zurück, ob das Sprach-Gate gerade offen ist.
-    fn process(&mut self, buf: &mut [f32], voice_gate: bool) -> bool {
+    fn process(&mut self, buf: &mut [f32], voice_gate: bool, strength: f32) -> bool {
+        let strength = strength.clamp(0.0, 1.0);
         self.input.extend(buf.iter().map(|s| s * 32_768.0));
         while self.input.len() >= DenoiseState::FRAME_SIZE {
             for (dst, src) in self
@@ -365,9 +369,11 @@ impl Denoiser {
             };
             let step = (end - self.gate_gain) / DenoiseState::FRAME_SIZE as f32;
             let mut gain = self.gate_gain;
-            for s in self.frame_out.iter() {
+            // Stärke: entrauschtes und unbearbeitetes Signal desselben Rahmens mischen.
+            for (wet, dry) in self.frame_out.iter().zip(self.frame_in.iter()) {
                 gain += step;
-                self.output.push_back(s / 32_768.0 * gain);
+                let mixed = wet * strength + dry * (1.0 - strength);
+                self.output.push_back(mixed / 32_768.0 * gain);
             }
             self.gate_gain = end;
         }
@@ -674,7 +680,9 @@ impl EffectChain {
                 self.denoise.reset();
                 self.denoise_active = true;
             }
-            voice_open = self.denoise.process(buf, p.denoise.voice_gate);
+            voice_open = self
+                .denoise
+                .process(buf, p.denoise.voice_gate, p.denoise.strength);
             shared.voice.store(self.denoise.voice);
         } else {
             self.denoise_active = false;

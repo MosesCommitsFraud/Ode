@@ -22,7 +22,7 @@ export const VOICE_DEFAULTS: VoiceParams = {
 
 export const EFFECTS_DEFAULTS: EffectsParams = {
   gate: { enabled: false, thresholdDb: -50 },
-  denoise: { enabled: false, voiceGate: true },
+  denoise: { enabled: false, voiceGate: true, strength: 1 },
   eq: { enabled: false, lowDb: 0, midDb: 0, highDb: 0 },
   agc: { enabled: false, targetDb: -20, maxGainDb: 18 },
   compressor: { enabled: false, thresholdDb: -20, ratio: 3, makeupDb: 4 },

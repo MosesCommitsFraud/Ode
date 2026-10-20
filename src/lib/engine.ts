@@ -110,7 +110,7 @@ export interface VoiceParams {
 export interface EffectsParams {
   gate: { enabled: boolean; thresholdDb: number };
   /** voiceGate: senkt alles ab, was RNNoise nicht als Sprache erkennt (Klicks, Tippen). */
-  denoise: { enabled: boolean; voiceGate: boolean };
+  denoise: { enabled: boolean; voiceGate: boolean; strength: number };
   eq: { enabled: boolean; lowDb: number; midDb: number; highDb: number };
   /** Automatische Lautstärke: Ziel −30…−10 dBFS, Anhebung höchstens 0…30 dB. */
   agc: { enabled: boolean; targetDb: number; maxGainDb: number };

@@ -248,19 +248,51 @@
   }
 }
 
-/* Geräte (Module in rack.tsx): ist der Platz breit und flach, rücken die
-   Regler neben die Anzeige statt darunter. */
+/* Geräte (Module in rack.tsx) passen sich ihrem Platz an: wenig Höhe →
+   nur Regler; breit und flach → Regler neben der Anzeige. */
 .device-body {
   container-type: size;
 }
 
-@container (min-aspect-ratio: 1.6) {
-  .device-layout {
+@container (max-height: 190px) {
+  .device-display {
+    display: none;
+  }
+}
+
+/* Kleine Karten: kleinere Drehregler und Klaviatur, damit alles hineinpasst. */
+@container (max-height: 260px) or (max-width: 280px) {
+  .knob {
+    width: 3.75rem;
+  }
+  .knob-dial {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+  .piano {
+    height: 48px;
+  }
+}
+
+@container (min-aspect-ratio: 1.6) and (min-height: 191px) {
+  .device-layout:not(.device-stacked) {
     flex-direction: row;
   }
-  .device-layout > :last-child {
-    max-width: min(46%, 300px);
+  .device-layout:not(.device-stacked) > .device-side {
+    flex: 0 0 auto;
+    max-width: 50%;
   }
+}
+
+/* Karten, die kommen und gehen (smooth in rack.tsx). */
+::view-transition-group(*) {
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.vt-devices::view-transition-old(root),
+.vt-devices::view-transition-new(root) {
+  animation: none;
 }
 
 /* Seitenwechsel als Überblendung; --dir gibt die Richtung (siehe Crossfade). */

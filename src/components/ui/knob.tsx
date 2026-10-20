@@ -151,7 +151,7 @@ export function Knob({
 
   return (
     // Feste Breite: wechselnde Werte unter dem Regler verschieben nichts daneben.
-    <div className={cn("relative flex shrink-0 flex-col items-center gap-1 select-none", size === "sm" ? "w-16" : size === "lg" ? "w-24" : "w-20", disabled && "opacity-45")}>
+    <div className={cn("knob relative flex shrink-0 flex-col items-center gap-1 select-none", size === "sm" ? "w-16" : size === "lg" ? "w-24" : "w-20", disabled && "opacity-45")}>
       <div
         role="slider"
         tabIndex={disabled ? -1 : 0}
@@ -169,7 +169,7 @@ export function Knob({
         onKeyDown={onKeyDown}
         onDoubleClick={() => !disabled && set(reset)}
         className={cn(
-          "relative shrink-0 cursor-default touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "knob-dial relative shrink-0 cursor-default touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
           size === "sm" ? "size-9" : size === "lg" ? "size-16" : "size-12",
         )}
       >

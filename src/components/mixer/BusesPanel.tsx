@@ -1,5 +1,7 @@
+import { Church, Equalizer, Microphone, Repeat, SpeakerHigh } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { Bench, DeviceGrid, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
+import { EmptyState } from "~/components/ui/misc";
+import { ActiveGrid, ChainList, smooth, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
 import { Knob, parseNumber } from "~/components/ui/knob";
 import { EchoControls, ReverbControls } from "~/components/voice/SoundModules";
 import type { ChannelId } from "~/lib/engine";
@@ -51,7 +53,8 @@ function ReverbBus({ highlight }: { highlight: boolean }) {
       title={t("mixer.reverbBus")}
       accent="var(--ch-out)"
       enabled={p.enabled}
-      onToggle={(enabled) => actions.setBus("reverb", { enabled })}
+      name="bus-reverb"
+      onToggle={(enabled) => smooth(() => actions.setBus("reverb", { enabled }))}
       display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} color="var(--ch-out)" />}
     >
       <ReverbControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("reverb", patch)} />
@@ -68,7 +71,8 @@ function EchoBus({ highlight }: { highlight: boolean }) {
       title={t("mixer.echoBus")}
       accent="var(--ch-out)"
       enabled={p.enabled}
-      onToggle={(enabled) => actions.setBus("echo", { enabled })}
+      name="bus-echo"
+      onToggle={(enabled) => smooth(() => actions.setBus("echo", { enabled }))}
       display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.3, p.mix)} color="var(--ch-out)" />}
     >
       <EchoControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("echo", patch)} />
@@ -86,7 +90,8 @@ function ChannelTone({ id, highlight }: { id: ChannelId; highlight: boolean }) {
       title={`${channel.name()} · ${t("mixer.tone")}`}
       accent={channel.color}
       enabled={fx.eqEnabled}
-      onToggle={(eqEnabled) => actions.setChannelFx(id, { eqEnabled })}
+      name={`tone-${id}`}
+      onToggle={(eqEnabled) => smooth(() => actions.setChannelFx(id, { eqEnabled }))}
       display={<EqDisplay low={fx.lowDb} mid={fx.midDb} high={fx.highDb} lowCut={fx.lowCutHz} highCut={fx.highCutHz} color={channel.color} />}
     >
       <Stack>
@@ -151,81 +156,73 @@ function ChannelTone({ id, highlight }: { id: ChannelId; highlight: boolean }) {
   );
 }
 
-const KEY = "ode.buses-open";
-type GroupId = "buses" | "tone";
-
-function readOpen(): { group: GroupId; device?: string } {
-  try {
-    const value = JSON.parse(localStorage.getItem(KEY) ?? "") as { group: string; device?: string };
-    return { group: value.group === "tone" ? "tone" : "buses", device: value.device };
-  } catch {
-    return { group: "buses" };
-  }
-}
-
-/**
- * Effekt-Busse wie die Effekt-Seiten: links die Liste mit Schaltern, rechts
- * die Geräte der Gruppe nebeneinander (Hall und Echo, oder die drei Klang-EQs).
- */
+/** Effekt-Busse wie die Effekt-Seiten: links der Signalweg mit Schaltern, rechts nur, was an ist. */
 export function BusesPanel() {
   const buses = useStore((s) => s.buses);
-  const [state, setState] = useState(readOpen);
   const [flash, setFlash] = useState<string | null>(null);
   useEffect(() => {
     if (!flash) return;
     const timer = window.setTimeout(() => setFlash(null), 900);
     return () => window.clearTimeout(timer);
   }, [flash]);
-  const open = (group: string, device?: string) => {
-    const value = { group: group === "tone" ? ("tone" as const) : ("buses" as const), device };
-    setState(value);
-    if (device) setFlash(device);
-    try {
-      localStorage.setItem(KEY, JSON.stringify(value));
-    } catch {
-      // Nur Komfort.
-    }
-  };
   const tone = (id: "soundboard" | "music" | "live") => {
     const channel = CHANNELS.find((c) => c.id === id)!;
     return {
       id,
       title: channel.name(),
+      icon: <Equalizer />,
       accent: channel.color,
       enabled: buses.channels[id].eqEnabled,
-      onToggle: (eqEnabled: boolean) => actions.setChannelFx(id, { eqEnabled }),
+      onToggle: (eqEnabled: boolean) => smooth(() => actions.setChannelFx(id, { eqEnabled })),
     };
   };
+  const items = [
+    ...(buses.reverb.enabled ? [{ id: "reverb", weight: 3, render: () => <ReverbBus highlight={flash === "reverb"} /> }] : []),
+    ...(buses.echo.enabled ? [{ id: "echo", weight: 2, render: () => <EchoBus highlight={flash === "echo"} /> }] : []),
+    ...(["soundboard", "music", "live"] as const)
+      .filter((id) => buses.channels[id].eqEnabled)
+      .map((id) => ({ id, weight: 1, render: () => <ChannelTone id={id} highlight={flash === id} /> })),
+  ];
 
   return (
-    <Bench
-      open={state.group}
-      focus={state.device}
-      onOpen={open}
-      groups={[
-        {
-          id: "buses",
-          title: t("mixer.buses"),
-          devices: [
-            { id: "reverb", title: t("mixer.reverbBus"), accent: "var(--ch-out)", enabled: buses.reverb.enabled, onToggle: (enabled: boolean) => actions.setBus("reverb", { enabled }) },
-            { id: "echo", title: t("mixer.echoBus"), accent: "var(--ch-out)", enabled: buses.echo.enabled, onToggle: (enabled: boolean) => actions.setBus("echo", { enabled }) },
-          ],
-        },
-        { id: "tone", title: t("mixer.tone"), devices: [tone("soundboard"), tone("music"), tone("live")] },
-      ]}
-    >
-      {state.group === "buses" ? (
-        <DeviceGrid cols={2} rows={1}>
-          <ReverbBus highlight={flash === "reverb"} />
-          <EchoBus highlight={flash === "echo"} />
-        </DeviceGrid>
-      ) : (
-        <DeviceGrid cols={3} rows={1}>
-          {(["soundboard", "music", "live"] as const).map((id) => (
-            <ChannelTone key={id} id={id} highlight={flash === id} />
-          ))}
-        </DeviceGrid>
-      )}
-    </Bench>
+    <div className="flex min-h-0 flex-1 gap-3">
+      <ChainList
+        start={{ label: t("mixer.inputs"), icon: <Microphone /> }}
+        end={{ label: t("mixer.outputs"), icon: <SpeakerHigh /> }}
+        groups={[
+          {
+            title: t("mixer.buses"),
+            devices: [
+              {
+                id: "reverb",
+                title: t("mixer.reverbBus"),
+                icon: <Church />,
+                accent: "var(--ch-out)",
+                enabled: buses.reverb.enabled,
+                onToggle: (enabled: boolean) => smooth(() => actions.setBus("reverb", { enabled })),
+              },
+              {
+                id: "echo",
+                title: t("mixer.echoBus"),
+                icon: <Repeat />,
+                accent: "var(--ch-out)",
+                enabled: buses.echo.enabled,
+                onToggle: (enabled: boolean) => smooth(() => actions.setBus("echo", { enabled })),
+              },
+            ],
+          },
+          { title: t("mixer.tone"), devices: [tone("soundboard"), tone("music"), tone("live")] },
+        ]}
+        onFocus={setFlash}
+      />
+      <ActiveGrid
+        empty={
+          <EmptyState icon={<Church weight="duotone" />} title={t("mixer.noBusTitle")}>
+            {t("mixer.noBusHint")}
+          </EmptyState>
+        }
+        items={items}
+      />
+    </div>
   );
 }

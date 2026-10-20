@@ -1,4 +1,4 @@
-import { Module, ReverbDisplay, Stack } from "~/components/effects/rack";
+import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Stack, smooth } from "~/components/effects/rack";
 import { CassetteTape, Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
 import { PushButtons } from "~/components/ui/hardware";
 import { Knob, parseNumber } from "~/components/ui/knob";
@@ -43,6 +43,61 @@ function toneOf(mode: CharacterMode, tone: number): { label: string; value: stri
   }
 }
 
+/** Eine Sinusschwingung einer 150-Hz-Stimme vor (gestrichelt) und nach dem Effekt. */
+function CharacterDisplay({ mode, amount, tone, mix }: { mode: CharacterMode; amount: number; tone: number; mix: number }) {
+  const N = 240;
+  const sat = (x: number, drive: number) => Math.tanh(x * drive) / Math.tanh(drive);
+  const shape = (i: number) => {
+    const phase = (i / N) * 2;
+    const s = Math.sin(Math.PI * 2 * phase);
+    switch (mode) {
+      case "robot": {
+        const carrier = (30 * Math.pow(10, tone)) / 150;
+        const ring = s * Math.sin(Math.PI * 2 * phase * carrier);
+        return ring * (0.5 + amount * 0.5) + s * (1 - amount) * 0.5;
+      }
+      case "radio":
+        return sat(s, 1 + amount * 8) * 0.8;
+      case "megaphone":
+        return sat(s, 2 + amount * 14) * 0.85;
+      case "distortion":
+        return sat(s + 0.1 * amount, 1 + amount * 40) * 0.9;
+      case "telephone": {
+        const levels = Math.round(16 - amount * 12);
+        const held = Math.sin(Math.PI * 2 * (Math.floor(phase * 24) / 24));
+        return sat(Math.round(held * levels) / levels, 1 + amount * 3) * 0.9;
+      }
+      case "lofi": {
+        // Leiernde, abgerundete Welle mit etwas Rauschen.
+        const wobble = Math.sin(Math.PI * 2 * phase + Math.sin(phase * 3) * amount * 0.6);
+        return sat(wobble, 1.8) * 0.85 + (Math.sin(i * 12.9898) * 43758.5453 % 1) * 0.04 * amount;
+      }
+      case "bitcrusher": {
+        const levels = Math.min(64, Math.pow(2, 15 - amount * 14));
+        const steps = 320 / (1 + Math.floor(tone * tone * 31));
+        const held = Math.sin(Math.PI * 2 * (Math.floor(phase * steps) / steps));
+        return Math.round(held * levels) / levels;
+      }
+    }
+  };
+  const y = (v: number) => 50 - v * 42;
+  const dry = Array.from({ length: N + 1 }, (_, i) => `${(i / N) * 100},${y(Math.sin((Math.PI * 4 * i) / N))}`).join(" ");
+  const wet = Array.from({ length: N + 1 }, (_, i) => {
+    const s = Math.sin((Math.PI * 4 * i) / N);
+    return `${(i / N) * 100},${y(s * (1 - mix) + shape(i) * mix)}`;
+  }).join(" ");
+  return (
+    <div className="absolute inset-3">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
+        <GridLine y={50} />
+        <polyline points={dry} fill="none" stroke="var(--muted-foreground)" strokeOpacity=".4" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+        <polyline points={wet} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+      </svg>
+      <span className="absolute top-0 right-0 font-mono text-[9px] text-muted-foreground/80">{t(`voice.mode.${mode}`)}</span>
+    </div>
+  );
+}
+
 export function CharacterModule({ highlight, className }: { highlight?: boolean; className?: string }) {
   const p = useStore((s) => s.effects.voice.character);
   const tone = toneOf(p.mode, p.tone);
@@ -53,7 +108,9 @@ export function CharacterModule({ highlight, className }: { highlight?: boolean;
       title={t("voice.character")}
       help="character"
       enabled={p.enabled}
-      onToggle={(enabled) => actions.setVoice("character", { enabled })}
+      name="voice-character"
+      onToggle={(enabled) => smooth(() => actions.setVoice("character", { enabled }))}
+      display={<CharacterDisplay mode={p.mode} amount={p.amount} tone={p.tone} mix={p.mix} />}
       keys={
         <PushButtons
           value={p.mode}
@@ -104,6 +161,45 @@ export function CharacterModule({ highlight, className }: { highlight?: boolean;
 /* ---------- Modulation ---------- */
 
 const MOD_MODES: ModulationMode[] = ["chorus", "flanger", "phaser"];
+const MOD_SPAN = 2;
+
+/** Verlauf des LFO über 2 s; beim Chorus die drei versetzten Stimmen. */
+function ModulationDisplay({ mode, rateHz, depth }: { mode: ModulationMode; rateHz: number; depth: number }) {
+  const N = 200;
+  const voices = mode === "chorus" ? [0, 1 / 3, 2 / 3] : [0];
+  const curve = (offset: number) =>
+    Array.from({ length: N + 1 }, (_, i) => {
+      const time = (i / N) * MOD_SPAN;
+      const v = Math.sin(Math.PI * 2 * (time * rateHz + offset));
+      return `${(i / N) * 100},${50 - v * depth * 40}`;
+    }).join(" ");
+  const ticks = [0, 0.5, 1, 1.5, 2];
+  return (
+    <>
+      <div className={PLOT}>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
+          {ticks.map((s) => (
+            <GridLine key={s} x={(s / MOD_SPAN) * 100} />
+          ))}
+          <GridLine y={50} strong />
+          {voices.map((o, i) => (
+            <polyline
+              key={o}
+              points={curve(o)}
+              fill="none"
+              stroke="var(--ch-mic)"
+              strokeOpacity={i === 0 ? 1 : 0.45}
+              strokeWidth="2"
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+            />
+          ))}
+        </svg>
+      </div>
+    </>
+  );
+}
+
 export function ModulationModule({ highlight, className }: { highlight?: boolean; className?: string }) {
   const p = useStore((s) => s.effects.voice.modulation);
   return (
@@ -113,7 +209,9 @@ export function ModulationModule({ highlight, className }: { highlight?: boolean
       title={t("voice.modulation")}
       help="modulation"
       enabled={p.enabled}
-      onToggle={(enabled) => actions.setVoice("modulation", { enabled })}
+      name="voice-modulation"
+      onToggle={(enabled) => smooth(() => actions.setVoice("modulation", { enabled }))}
+      display={<ModulationDisplay mode={p.mode} rateHz={p.rateHz} depth={p.depth} />}
       keys={
         <PushButtons
           value={p.mode}
@@ -327,7 +425,9 @@ export function EchoModule({ highlight, className }: { highlight?: boolean; clas
       title={t("voice.echo")}
       help="echo"
       enabled={p.enabled}
-      onToggle={(enabled) => actions.setVoice("echo", { enabled })}
+      name="voice-echo"
+      onToggle={(enabled) => smooth(() => actions.setVoice("echo", { enabled }))}
+      display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.15, p.mix)} />}
     >
       <EchoControls params={p} onChange={(patch) => actions.setVoice("echo", patch)} />
     </Module>
@@ -343,7 +443,8 @@ export function ReverbModule({ highlight, className }: { highlight?: boolean; cl
       title={t("voice.reverb")}
       help="reverb"
       enabled={p.enabled}
-      onToggle={(enabled) => actions.setVoice("reverb", { enabled })}
+      name="voice-reverb"
+      onToggle={(enabled) => smooth(() => actions.setVoice("reverb", { enabled }))}
       display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} />}
     >
       <ReverbControls params={p} onChange={(patch) => actions.setVoice("reverb", patch)} />
