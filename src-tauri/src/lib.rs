@@ -101,7 +101,16 @@ struct EffectMeters {
     voice_open: bool,
     agc_gain_db: f32,
     compressor_db: f32,
+    de_esser_db: f32,
     limiter_db: f32,
+    /// Erkannte Tonhöhe in Hz, 0 = keine.
+    pitch_hz: f32,
+    /// Zielnote des Autotune (Midi), −1 = keine.
+    target_note: f32,
+    correction_cents: f32,
+    /// Zusätzliche Verzögerung der Stimm-Effekte.
+    voice_latency_ms: f32,
+    vocoder: Vec<f32>,
 }
 
 fn frames_to_ms(frames: u32, rate: u32) -> f32 {
@@ -142,8 +151,9 @@ fn snapshot(engine: &Engine) -> Meters {
         .collect();
     let out_a = output_meters(&mixer.out_a);
     let out_b = output_meters(&mixer.out_b);
+    let voice = &mixer.effects.voice_fx;
     let latency_ms = if running {
-        input_callback_ms + out_b.buffered_ms + out_b.callback_ms
+        input_callback_ms + out_b.buffered_ms + out_b.callback_ms + voice.latency_ms.load()
     } else {
         0.0
     };
@@ -168,7 +178,13 @@ fn snapshot(engine: &Engine) -> Meters {
             voice_open: mixer.effects.voice_open.load(Ordering::Relaxed),
             agc_gain_db: mixer.effects.agc_gain_db.load(),
             compressor_db: mixer.effects.compressor_reduction_db.load(),
+            de_esser_db: mixer.effects.de_esser_reduction_db.load(),
             limiter_db: mixer.effects.limiter_reduction_db.load(),
+            pitch_hz: voice.pitch_hz.load(),
+            target_note: voice.target_note.load(),
+            correction_cents: voice.correction_cents.load(),
+            voice_latency_ms: voice.latency_ms.load(),
+            vocoder: voice.vocoder.iter().map(|b| b.take()).collect(),
         },
         ducking_db: if running {
             mixer.ducking.reduction_db.load()

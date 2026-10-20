@@ -1,7 +1,8 @@
 //! Mikrofon-Effektkette in fester Reihenfolge: Noise Gate → Rauschunterdrückung
 //! (RNNoise mit Sprach-Gate) → Equalizer → automatische Lautstärke (AGC) →
-//! Kompressor → Limiter. Jeder Effekt ist einzeln
-//! schaltbar. Die Kette läuft im Eingangs-Callback in Engine-Rate.
+//! Kompressor → De-Esser → Exciter → Stimm-Effekte (siehe `voice`) → Limiter.
+//! Jeder Effekt ist einzeln schaltbar. Die Kette läuft im Eingangs-Callback
+//! in Engine-Rate.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -12,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ENGINE_RATE;
 use super::dsp::{AtomicF32, Biquad, Limiter, Shape, coef, db_to_gain, to_db};
+use super::voice::{VoiceChain, VoiceMeters, VoiceParams};
 
 const RATE: f32 = ENGINE_RATE as f32;
 
@@ -120,6 +122,46 @@ impl Default for LimiterParams {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DeEsserParams {
+    pub enabled: bool,
+    /// Ab diesem Pegel der Zischlaute wird abgesenkt.
+    pub threshold_db: f32,
+    /// Darüber liegen die Zischlaute (Hz).
+    pub frequency_hz: f32,
+}
+
+impl Default for DeEsserParams {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            threshold_db: -30.0,
+            frequency_hz: 6_000.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ExciterParams {
+    pub enabled: bool,
+    /// Ab dieser Frequenz werden Obertöne ergänzt (Hz).
+    pub frequency_hz: f32,
+    /// Stärke 0–1.
+    pub amount: f32,
+}
+
+impl Default for ExciterParams {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            frequency_hz: 3_000.0,
+            amount: 0.3,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct EffectsParams {
@@ -128,7 +170,10 @@ pub struct EffectsParams {
     pub eq: EqParams,
     pub agc: AgcParams,
     pub compressor: CompressorParams,
+    pub de_esser: DeEsserParams,
+    pub exciter: ExciterParams,
     pub limiter: LimiterParams,
+    pub voice: VoiceParams,
 }
 
 impl EffectsParams {
@@ -147,6 +192,11 @@ impl EffectsParams {
         self.compressor.ratio = self.compressor.ratio.clamp(1.0, 20.0);
         self.compressor.makeup_db = self.compressor.makeup_db.clamp(0.0, 24.0);
         self.limiter.ceiling_db = self.limiter.ceiling_db.clamp(-20.0, 0.0);
+        self.de_esser.threshold_db = self.de_esser.threshold_db.clamp(-60.0, 0.0);
+        self.de_esser.frequency_hz = self.de_esser.frequency_hz.clamp(3_000.0, 10_000.0);
+        self.exciter.frequency_hz = self.exciter.frequency_hz.clamp(1_000.0, 8_000.0);
+        self.exciter.amount = self.exciter.amount.clamp(0.0, 1.0);
+        self.voice = self.voice.clamped();
         self
     }
 }
@@ -164,7 +214,9 @@ pub struct EffectsShared {
     /// Aktuelle Verstärkung der AGC in dB.
     pub agc_gain_db: AtomicF32,
     pub compressor_reduction_db: AtomicF32,
+    pub de_esser_reduction_db: AtomicF32,
     pub limiter_reduction_db: AtomicF32,
+    pub voice_fx: VoiceMeters,
 }
 
 impl EffectsShared {
@@ -175,6 +227,14 @@ impl EffectsShared {
 
     pub fn params(&self) -> EffectsParams {
         *self.params.lock()
+    }
+
+    /// Ersetzt nur die Stimm-Effekte, z. B. beim Wechsel des Presets.
+    pub fn set_voice(&self, voice: VoiceParams) -> EffectsParams {
+        let mut params = self.params.lock();
+        params.voice = voice.clamped();
+        self.version.fetch_add(1, Ordering::Release);
+        *params
     }
 }
 
@@ -428,6 +488,101 @@ impl Compressor {
     }
 }
 
+/// Senkt nur die Zischlaute oberhalb der Trennfrequenz ab. Die Weiche
+/// (Linkwitz-Riley, 24 dB/Oktave) ergibt zusammengesetzt einen flachen
+/// Frequenzgang; ohne Absenkung klingt das Signal unverändert.
+struct DeEsser {
+    low: [Biquad; 2],
+    high: [Biquad; 2],
+    envelope: f32,
+    gain_db: f32,
+    attack: f32,
+    release: f32,
+}
+
+impl DeEsser {
+    fn new() -> Self {
+        let mut d = Self {
+            low: [Biquad::default(); 2],
+            high: [Biquad::default(); 2],
+            envelope: 0.0,
+            gain_db: 0.0,
+            attack: coef(1.0),
+            release: coef(60.0),
+        };
+        d.configure(&DeEsserParams::default());
+        d
+    }
+
+    fn configure(&mut self, p: &DeEsserParams) {
+        for f in &mut self.low {
+            f.design(Shape::LowPass, p.frequency_hz, 0.707, 0.0);
+        }
+        for f in &mut self.high {
+            f.design(Shape::HighPass, p.frequency_hz, 0.707, 0.0);
+        }
+    }
+
+    /// Liefert die stärkste Absenkung des Blocks in dB.
+    fn process(&mut self, buf: &mut [f32], p: &DeEsserParams) -> f32 {
+        let mut most = 0.0f32;
+        for s in buf.iter_mut() {
+            let low = self.low.iter_mut().fold(*s, |x, f| f.process(x));
+            let high = self.high.iter_mut().fold(*s, |x, f| f.process(x));
+            let level = high.abs();
+            let c = if level > self.envelope {
+                self.attack
+            } else {
+                self.release
+            };
+            self.envelope = level + (self.envelope - level) * c;
+            // Verhältnis 4:1, höchstens 18 dB.
+            let over = to_db(self.envelope) - p.threshold_db;
+            let target = if over > 0.0 {
+                (-over * 0.75).max(-18.0)
+            } else {
+                0.0
+            };
+            self.gain_db = target + (self.gain_db - target) * 0.99;
+            most = most.min(self.gain_db);
+            *s = low + high * 10f32.powf(self.gain_db / 20.0);
+        }
+        most
+    }
+}
+
+/// Ergänzt Obertöne in den Höhen: Hochpass, Sättigung, nochmals Hochpass.
+struct Exciter {
+    before: Biquad,
+    after: Biquad,
+}
+
+impl Exciter {
+    fn new() -> Self {
+        let mut e = Self {
+            before: Biquad::default(),
+            after: Biquad::default(),
+        };
+        e.configure(&ExciterParams::default());
+        e
+    }
+
+    fn configure(&mut self, p: &ExciterParams) {
+        self.before
+            .design(Shape::HighPass, p.frequency_hz, 0.707, 0.0);
+        self.after
+            .design(Shape::HighPass, p.frequency_hz, 0.707, 0.0);
+    }
+
+    fn process(&mut self, buf: &mut [f32], p: &ExciterParams) {
+        for s in buf.iter_mut() {
+            let high = self.before.process(*s);
+            let harmonics = self.after.process((high * 4.0).tanh() * 0.25);
+            *s += harmonics * p.amount * 2.0;
+        }
+    }
+}
+
 // ------------------------------------------------------------ Kette
 
 pub struct EffectChain {
@@ -439,6 +594,9 @@ pub struct EffectChain {
     eq: Equalizer,
     agc: Agc,
     compressor: Compressor,
+    de_esser: DeEsser,
+    exciter: Exciter,
+    voice: VoiceChain,
     limiter: Limiter,
 }
 
@@ -461,6 +619,9 @@ impl EffectChain {
             eq: Equalizer::new(),
             agc: Agc::new(),
             compressor: Compressor::new(),
+            de_esser: DeEsser::new(),
+            exciter: Exciter::new(),
+            voice: VoiceChain::new(),
         }
     }
 
@@ -479,6 +640,15 @@ impl EffectChain {
         }
         if params.limiter.ceiling_db != self.params.limiter.ceiling_db {
             self.limiter = Limiter::new(params.limiter.ceiling_db, 80.0, ENGINE_RATE);
+        }
+        if params.de_esser != self.params.de_esser {
+            self.de_esser.configure(&params.de_esser);
+        }
+        if params.exciter != self.params.exciter {
+            self.exciter.configure(&params.exciter);
+        }
+        if params.voice != self.params.voice {
+            self.voice.configure(&params.voice);
         }
         self.params = params;
     }
@@ -532,6 +702,19 @@ impl EffectChain {
             0.0
         };
         shared.compressor_reduction_db.store(reduction);
+
+        let de_essed = if p.de_esser.enabled {
+            self.de_esser.process(buf, &p.de_esser)
+        } else {
+            0.0
+        };
+        shared.de_esser_reduction_db.store(de_essed);
+
+        if p.exciter.enabled {
+            self.exciter.process(buf, &p.exciter);
+        }
+
+        self.voice.process(buf, &shared.voice_fx);
 
         if p.limiter.enabled {
             self.limiter.process(buf);
@@ -595,6 +778,51 @@ mod tests {
         let out = run(p, &input);
         let gain = to_db(rms(&out[24_000..]) / rms(&input[24_000..]));
         assert!((gain - 6.0).abs() < 1.0, "{gain}");
+    }
+
+    #[test]
+    fn de_esser_tames_only_the_highs() {
+        let p = EffectsParams {
+            de_esser: DeEsserParams {
+                enabled: true,
+                threshold_db: -30.0,
+                frequency_hz: 6_000.0,
+            },
+            ..Default::default()
+        };
+        let hiss = sine(8_000.0, 0.3, 48_000);
+        let out = run(p, &hiss);
+        assert!(rms(&out[24_000..]) < rms(&hiss[24_000..]) * 0.5);
+        let bass = sine(200.0, 0.3, 48_000);
+        let out = run(p, &bass);
+        let gain = rms(&out[24_000..]) / rms(&bass[24_000..]);
+        assert!((gain - 1.0).abs() < 0.05, "{gain}");
+    }
+
+    #[test]
+    fn exciter_adds_highs() {
+        let p = EffectsParams {
+            exciter: ExciterParams {
+                enabled: true,
+                frequency_hz: 3_000.0,
+                amount: 1.0,
+            },
+            ..Default::default()
+        };
+        // Die Sättigung erzeugt die dritte Harmonische bei 12 kHz.
+        let input = sine(4_000.0, 0.3, 48_000);
+        let out = run(p, &input);
+        let at = |v: &[f32], freq: f32| {
+            let w = std::f32::consts::TAU * freq / RATE;
+            let (re, im) = v
+                .iter()
+                .enumerate()
+                .fold((0.0f32, 0.0f32), |(re, im), (i, &x)| {
+                    (re + x * (w * i as f32).cos(), im + x * (w * i as f32).sin())
+                });
+            (re * re + im * im).sqrt() / v.len() as f32
+        };
+        assert!(at(&out[24_000..], 12_000.0) > at(&input[24_000..], 12_000.0) * 100.0 + 1e-3);
     }
 
     #[test]
