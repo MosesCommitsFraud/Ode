@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
+use super::bus::{BusParams, BusShared};
 use super::dsp::{AtomicF32, db_to_gain};
 use super::effects::{EffectsParams, EffectsShared};
 
@@ -248,6 +249,8 @@ pub struct Mixer {
     pub ducking: Ducking,
     /// Effektkette des Mikrofons.
     pub effects: EffectsShared,
+    /// Hall- und Echo-Bus sowie Klang-EQ der Kanäle.
+    pub buses: BusShared,
     /// Eigene Lautstärke des Players (0–1), vor dem Musik-Fader.
     pub player_volume: AtomicF32,
     pub out_a: Output,
@@ -272,6 +275,7 @@ impl Default for Mixer {
             // Die eigene Stimme hört man standardmäßig nicht mit.
             channels: [channel(false), channel(true), channel(true), channel(true)],
             effects: EffectsShared::default(),
+            buses: BusShared::default(),
             player_volume: AtomicF32::new(DEFAULT_PLAYER_VOLUME),
             ducking: Ducking::new(DuckingParams {
                 enabled: false,
@@ -305,6 +309,8 @@ pub struct MixerSettings {
     pub ducking: DuckingParams,
     #[serde(default)]
     pub effects: EffectsParams,
+    #[serde(default)]
+    pub buses: BusParams,
     #[serde(default = "default_player_volume")]
     pub player_volume: f32,
 }
@@ -332,6 +338,7 @@ impl Mixer {
             out_b: self.out_b.params(),
             ducking: self.ducking.params(),
             effects: self.effects.params(),
+            buses: self.buses.params(),
             player_volume: self.player_volume.load(),
         }
     }
@@ -344,6 +351,7 @@ impl Mixer {
         self.out_b.set(settings.out_b);
         self.ducking.set(settings.ducking);
         self.effects.set(settings.effects);
+        self.buses.set(settings.buses);
         self.player_volume
             .store(settings.player_volume.clamp(0.0, 1.0));
     }

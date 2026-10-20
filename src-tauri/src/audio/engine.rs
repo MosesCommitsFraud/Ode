@@ -18,6 +18,7 @@ use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 use serde::{Deserialize, Serialize};
 
+use super::bus::{BusChain, EqChannel};
 use super::deck::{Deck, DeckCommand, DeckStatus};
 use super::dsp::{Ducker, Limiter, SmoothedGain, peak};
 use super::effects::EffectChain;
@@ -569,6 +570,8 @@ struct OutputProcessor {
     /// Geglättete Player-Lautstärke.
     player: f32,
     ducker: Ducker,
+    /// Hall- und Echo-Bus und Klang-EQ der Kanäle für diesen Ausgang.
+    bus: BusChain,
     /// Erst ausgeben, wenn der Puffer einmal den Zielwert erreicht hat.
     primed: bool,
     mono: Vec<f32>,
@@ -630,6 +633,12 @@ impl OutputProcessor {
             (ducking.enabled(), ducking.threshold(), ducking.reduction());
         let ducker = &mut self.ducker;
         let mut duck_min = 1.0f32;
+        self.bus.sync(&self.mixer.buses);
+        let bus = &mut self.bus;
+        let (mic_reverb, mic_echo) = bus.sends(ChannelId::Mic);
+        let (soundboard_reverb, soundboard_echo) = bus.sends(ChannelId::Soundboard);
+        let (music_reverb, music_echo) = bus.sends(ChannelId::Music);
+        let (live_reverb, live_echo) = bus.sends(ChannelId::Live);
 
         self.mono.resize(frames, 0.0);
         let mut starved = false;
@@ -666,11 +675,18 @@ impl OutputProcessor {
             // Ducking hört auf das Mikrofon nach dem Fader, vor dem Routing.
             let duck = ducker.next(mic, duck_threshold, duck_reduction, duck_on);
             duck_min = duck_min.min(duck);
-            let mut sum = mic * *mic_send;
+            let mic_out = mic * *mic_send;
+            let mut sum = mic_out;
+            // Sends nach Fader und Routing, damit sie dem Kanal folgen.
+            let mut reverb_in = mic_out * mic_reverb;
+            let mut echo_in = mic_out * mic_echo;
             if !sampler.is_idle() {
-                let sound = sampler.next_sample() * duck;
+                let sound = bus.eq(EqChannel::Soundboard, sampler.next_sample()) * duck;
                 soundboard_peak = soundboard_peak.max((sound * soundboard_fader).abs());
-                sum += sound * *soundboard_send;
+                let out = sound * *soundboard_send;
+                sum += out;
+                reverb_in += out * soundboard_reverb;
+                echo_in += out * soundboard_echo;
             }
             if let Some(preview) = preview.as_mut()
                 && !preview.is_idle()
@@ -678,23 +694,29 @@ impl OutputProcessor {
                 sum += preview.next_sample();
             }
             if !deck.is_idle() {
-                let song = deck.next_sample() * *player * duck;
+                let song = bus.eq(EqChannel::Music, deck.next_sample()) * *player * duck;
                 music_peak = music_peak.max((song * music_fader).abs());
-                sum += song * *music_send;
+                let out = song * *music_send;
+                sum += out;
+                reverb_in += out * music_reverb;
+                echo_in += out * music_echo;
             }
             // Live-Quelle: eigener Kanal mit Fader, Routing und Ducking.
             if *live_primed {
                 match live.try_pop() {
                     Some(s) => {
-                        let s = s * duck;
+                        let s = bus.eq(EqChannel::Live, s) * duck;
                         live_peak = live_peak.max((s * live_fader).abs());
-                        sum += s * *live_send;
+                        let out = s * *live_send;
+                        sum += out;
+                        reverb_in += out * live_reverb;
+                        echo_in += out * live_echo;
                     }
                     // Quelle beendet oder Lücke: neu vorlaufen lassen.
                     None => *live_primed = false,
                 }
             }
-            sum
+            sum + bus.returns(reverb_in, echo_in)
         };
         if self.resampler.is_passthrough() {
             self.mono.iter_mut().for_each(|s| *s = next());
@@ -777,6 +799,7 @@ fn build_output(
         live_send: 0.0,
         player: 0.0,
         ducker: Ducker::new(ENGINE_RATE),
+        bus: BusChain::new(),
         primed: false,
         mono: Vec::with_capacity(MAX_CALLBACK_FRAMES),
         gain: SmoothedGain::new(0.0),

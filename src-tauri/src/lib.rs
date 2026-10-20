@@ -282,6 +282,12 @@ fn set_effects(engine: State<Engine>, dirty: State<MixerDirty>, params: EffectsP
 }
 
 #[tauri::command]
+fn set_buses(engine: State<Engine>, dirty: State<MixerDirty>, params: audio::bus::BusParams) {
+    engine.mixer.buses.set(params);
+    dirty.0.store(true, Ordering::Relaxed);
+}
+
+#[tauri::command]
 fn set_player_volume(engine: State<Engine>, dirty: State<MixerDirty>, volume: f32) {
     engine.mixer.player_volume.store(volume.clamp(0.0, 1.0));
     dirty.0.store(true, Ordering::Relaxed);
@@ -369,6 +375,7 @@ pub fn run() {
             set_output,
             set_ducking,
             set_effects,
+            set_buses,
             set_player_volume,
             live_sources,
             live_start,

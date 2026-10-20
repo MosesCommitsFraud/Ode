@@ -2,6 +2,7 @@
 //! die Engine nur über Befehle; Audio selbst läuft nie durch die Oberfläche.
 
 pub mod app_icon;
+pub mod bus;
 pub mod deck;
 pub mod decode;
 pub mod devices;
