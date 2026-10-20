@@ -5,6 +5,7 @@ pub mod downloader;
 pub mod i18n;
 pub mod library;
 pub mod music;
+mod plugins;
 mod presets;
 mod shell;
 mod soundboard;
@@ -322,6 +323,7 @@ fn live_status(live: State<audio::live::Live>) -> audio::live::LiveStatus {
 pub fn run() {
     let engine = Engine::spawn();
     let live = audio::live::Live::new(engine.live_producers.clone());
+    let plugins = plugins::Plugins::spawn(engine.mixer.clone());
     tauri::Builder::default()
         // Ein zweiter Start holt nur das laufende Fenster nach vorn.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -339,6 +341,7 @@ pub fn run() {
         .plugin(soundboard::hotkey_plugin())
         .manage(engine)
         .manage(live)
+        .manage(plugins)
         .manage(soundboard::Hotkeys::default())
         .manage(MixerDirty::default())
         .manage(presets::Presets::default())
@@ -424,6 +427,15 @@ pub fn run() {
             presets::preset_delete,
             presets::presets_reorder,
             presets::presets_restore,
+            plugins::plugins_status,
+            plugins::plugins_scan,
+            plugins::plugins_entries,
+            plugins::plugin_load,
+            plugins::plugin_unload,
+            plugins::plugin_params,
+            plugins::plugin_set_param,
+            plugins::plugin_bypass,
+            plugins::plugin_gui,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

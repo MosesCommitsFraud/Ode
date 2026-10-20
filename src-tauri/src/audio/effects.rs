@@ -1,6 +1,7 @@
 //! Mikrofon-Effektkette in fester Reihenfolge: Noise Gate → Rauschunterdrückung
 //! (RNNoise mit Sprach-Gate) → Equalizer → automatische Lautstärke (AGC) →
-//! Kompressor → De-Esser → Exciter → Stimm-Effekte (siehe `voice`) → Limiter.
+//! Kompressor → De-Esser → Exciter → Stimm-Effekte (siehe `voice`) → Plugin-Slot
+//! (siehe `insert`) → Limiter.
 //! Jeder Effekt ist einzeln schaltbar. Die Kette läuft im Eingangs-Callback
 //! in Engine-Rate.
 
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ENGINE_RATE;
 use super::dsp::{AtomicF32, Biquad, Limiter, Shape, coef, db_to_gain, to_db};
+use super::insert::InsertSlot;
 use super::voice::{VoiceChain, VoiceMeters, VoiceParams};
 
 const RATE: f32 = ENGINE_RATE as f32;
@@ -217,6 +219,8 @@ pub struct EffectsShared {
     pub de_esser_reduction_db: AtomicF32,
     pub limiter_reduction_db: AtomicF32,
     pub voice_fx: VoiceMeters,
+    /// Platz für ein externes Plugin vor dem Limiter.
+    pub insert: InsertSlot,
 }
 
 impl EffectsShared {
@@ -715,6 +719,7 @@ impl EffectChain {
         }
 
         self.voice.process(buf, &shared.voice_fx);
+        shared.insert.process(buf);
 
         if p.limiter.enabled {
             self.limiter.process(buf);

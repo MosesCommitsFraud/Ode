@@ -9,6 +9,7 @@ pub mod devices;
 pub mod dsp;
 pub mod effects;
 pub mod engine;
+pub mod insert;
 pub mod live;
 pub mod mixer;
 pub mod resample;
