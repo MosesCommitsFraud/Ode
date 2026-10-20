@@ -44,7 +44,7 @@ export interface KnobProps {
   bipolar?: boolean;
   /** Anzahl Skalenstriche; bei Stufenschaltern eine pro Stufe. */
   ticks?: number;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
 }
 
 export function Knob({
@@ -140,7 +140,7 @@ export function Knob({
         onDoubleClick={() => !disabled && set(reset)}
         className={cn(
           "relative shrink-0 cursor-default touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          size === "sm" ? "size-9" : "size-12",
+          size === "sm" ? "size-9" : size === "lg" ? "size-16" : "size-12",
         )}
       >
         <svg viewBox="0 0 100 100" className="size-full overflow-visible">

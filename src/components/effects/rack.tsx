@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { PowerSwitch } from "~/components/ui/hardware";
+import { HelpIcon } from "./HelpDrawer";
 import { Badge, Card } from "~/components/ui/misc";
 import { cn } from "~/lib/utils";
 
@@ -20,6 +21,7 @@ export function Module({
   children,
   accent,
   side,
+  help,
 }: {
   title: string;
   enabled: boolean;
@@ -35,15 +37,29 @@ export function Module({
    * `"wide"`: nur wenn die Karte breit genug ist, sonst darunter.
    */
   side?: boolean | "wide";
+  /** Werkzeug für die Erklärung hinter dem „?“ am Titel (siehe i18n/help.ts). */
+  help?: string;
 }) {
   return (
     <Card
-      className={cn("@container flex min-h-0 min-w-0 flex-col gap-3 p-4 pt-3", className)}
+      className={cn("@container relative flex min-h-0 min-w-0 flex-col gap-3 p-3.5", className)}
       style={accent ? ({ "--ch-mic": accent } as React.CSSProperties) : undefined}
     >
-      <div className="flex h-7 items-center gap-2.5">
+      {/* An: farbiger Rahmen ums ganze Gerät, damit man es auf einen Blick sieht. */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-0 rounded-2xl shadow-[inset_0_0_0_2px_var(--ch-mic)] transition-opacity duration-200",
+          enabled ? "opacity-70" : "opacity-0",
+        )}
+      />
+      <div className="flex h-9 items-center gap-2.5">
         <PowerSwitch label={title} on={enabled} onChange={onToggle} />
-        <h3 className="min-w-0 flex-1 truncate font-display text-base font-semibold tracking-tight">{title}</h3>
+        <h3 className={cn("min-w-0 truncate font-display text-base font-semibold tracking-tight transition-colors", !enabled && "text-muted-foreground")}>
+          {title}
+        </h3>
+        {help && <HelpIcon topic={help} />}
+        <div className="flex-1" />
         {status}
       </div>
       <div

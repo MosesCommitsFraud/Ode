@@ -96,6 +96,8 @@ export function PitchModule() {
   return (
     <Module
       title={t("voice.pitch")}
+      help="pitch"
+      side
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("pitch", { enabled })}
       status={
@@ -116,6 +118,7 @@ export function PitchModule() {
         step={1}
         bipolar
         ticks={25}
+        size="lg"
         format={(v) => signed(v)}
         disabled={!p.enabled}
         onChange={(semitones) => actions.setVoice("pitch", { semitones })}
@@ -128,6 +131,7 @@ export function PitchModule() {
         step={0.5}
         bipolar
         ticks={17}
+        size="lg"
         format={(v) => signed(v, 1)}
         disabled={!p.enabled}
         onChange={(formant) => actions.setVoice("pitch", { formant })}
@@ -293,6 +297,7 @@ export function AutotuneModule() {
   return (
     <Module
       title={t("voice.autotune")}
+      help="autotune"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("autotune", { enabled })}
       status={
@@ -390,6 +395,7 @@ export function HarmonizerModule() {
   return (
     <Module
       title={t("voice.harmonizer")}
+      help="harmonizer"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("harmonizer", { enabled })}
       display={<HarmonyDisplay voices={p.voices} enabled={p.enabled} />}
@@ -450,6 +456,7 @@ export function VocoderModule() {
   return (
     <Module
       title={t("voice.vocoder")}
+      help="vocoder"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("vocoder", { enabled })}
       status={

@@ -1,6 +1,5 @@
 import { ArrowCounterClockwise, FloppyDisk, X } from "@phosphor-icons/react";
 import { useState } from "react";
-import { HelpButton } from "~/components/effects/HelpDrawer";
 import { PageBar } from "~/components/effects/rack";
 import { Badge, Switch } from "~/components/ui/misc";
 import { ActionGroup, ActionPill, Pill, PillGroup } from "~/components/ui/pills";
@@ -101,15 +100,6 @@ export function VoiceView() {
             {t("voice.latency", { ms: Math.round(latency) })}
           </span>
         )}
-        <HelpButton
-          topics={
-            page === "presets"
-              ? ["presets"]
-              : page === "pitch"
-                ? ["pitch", "autotune", "harmonizer", "vocoder"]
-                : ["character", "modulation", "echo", "reverb"]
-          }
-        />
         <label className="flex items-center gap-2 text-xs font-semibold">
           <Switch label={t("voice.on")} checked={enabled} onCheckedChange={(on) => (on ? actions.setVoiceEnabled(true) : void actions.presetOff())} />
           <span className="hidden lg:inline">{t("voice.on")}</span>

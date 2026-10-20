@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { HelpButton } from "~/components/effects/HelpDrawer";
 import { PluginsPanel } from "~/components/effects/PluginsPanel";
 import { EqDisplay, GridLine, Module, PageBar, PLOT, Reading, Tick, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
@@ -208,10 +207,6 @@ export function EffectsView() {
             </Pill>
           )}
         </PillGroup>
-        <div className="flex-1" />
-        {page !== "plugin" && (
-          <HelpButton topics={page === "clean" ? ["gate", "denoise", "eq", "agc"] : ["compressor", "deEsser", "exciter", "limiter"]} />
-        )}
       </PageBar>
 
       {page === "plugin" ? (
@@ -225,6 +220,7 @@ export function EffectsView() {
             <>
               <Module
                 title={t("effects.gate")}
+                help="gate"
                 side
                 enabled={fx.gate.enabled}
                 onToggle={(enabled) => actions.setEffect("gate", { enabled })}
@@ -252,6 +248,8 @@ export function EffectsView() {
 
               <Module
                 title={t("effects.denoise")}
+                help="denoise"
+                side
                 enabled={fx.denoise.enabled}
                 onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
                 status={
@@ -276,6 +274,7 @@ export function EffectsView() {
 
               <Module
                 title={t("effects.eq")}
+                help="eq"
                 enabled={fx.eq.enabled}
                 onToggle={(enabled) => actions.setEffect("eq", { enabled })}
                 display={<EqDisplay low={fx.eq.lowDb} mid={fx.eq.midDb} high={fx.eq.highDb} />}
@@ -296,6 +295,7 @@ export function EffectsView() {
                     step={0.5}
                     bipolar
                     ticks={9}
+                    size="lg"
                     format={db}
                     disabled={!fx.eq.enabled}
                     onChange={(v) => actions.setEffect("eq", { [key]: v })}
@@ -305,6 +305,7 @@ export function EffectsView() {
 
               <Module
                 title={t("effects.agc")}
+                help="agc"
                 side
                 enabled={fx.agc.enabled}
                 onToggle={(enabled) => actions.setEffect("agc", { enabled })}
@@ -348,6 +349,7 @@ export function EffectsView() {
             <>
               <Module
                 title={t("effects.compressor")}
+                help="compressor"
                 side="wide"
                 enabled={fx.compressor.enabled}
                 onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
@@ -399,6 +401,7 @@ export function EffectsView() {
 
               <Module
                 title={t("effects.deEsser")}
+                help="deEsser"
                 side
                 enabled={fx.deEsser.enabled}
                 onToggle={(enabled) => actions.setEffect("deEsser", { enabled })}
@@ -437,6 +440,8 @@ export function EffectsView() {
 
               <Module
                 title={t("effects.exciter")}
+                help="exciter"
+                side
                 enabled={fx.exciter.enabled}
                 onToggle={(enabled) => actions.setEffect("exciter", { enabled })}
                 display={<HighBandDisplay frequencyHz={fx.exciter.frequencyHz} db={fx.exciter.amount * 9} max={12} />}
@@ -467,6 +472,7 @@ export function EffectsView() {
 
               <Module
                 title={t("effects.limiter")}
+                help="limiter"
                 side
                 enabled={fx.limiter.enabled}
                 onToggle={(enabled) => actions.setEffect("limiter", { enabled })}

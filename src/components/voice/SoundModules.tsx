@@ -104,6 +104,7 @@ export function CharacterModule() {
   return (
     <Module
       title={t("voice.character")}
+      help="character"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("character", { enabled })}
       display={<CharacterDisplay mode={p.mode} amount={p.amount} tone={p.tone} mix={p.mix} />}
@@ -208,6 +209,7 @@ export function ModulationModule() {
   return (
     <Module
       title={t("voice.modulation")}
+      help="modulation"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("modulation", { enabled })}
       display={<ModulationDisplay mode={p.mode} rateHz={p.rateHz} depth={p.depth} />}
@@ -427,6 +429,7 @@ export function EchoModule() {
   return (
     <Module
       title={t("voice.echo")}
+      help="echo"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("echo", { enabled })}
       display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.15, p.mix)} />}
@@ -441,6 +444,7 @@ export function ReverbModule() {
   return (
     <Module
       title={t("voice.reverb")}
+      help="reverb"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("reverb", { enabled })}
       display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} />}

@@ -3,12 +3,13 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "~/components/ui/button";
 import { Engraved } from "~/components/ui/hardware";
-import { ActionGroup, ActionPill, Pill, PillGroup } from "~/components/ui/pills";
+import { Pill, PillGroup } from "~/components/ui/pills";
 import { t } from "~/lib/i18n";
+import { cn } from "~/lib/utils";
 
-/* Erklärung der Werkzeuge einer Effekt-Seite: ein Knopf in der Seitenleiste
-   öffnet ein Panel, darin je Werkzeug was es tut, wann man es braucht und
-   was die Regler bewirken. Texte in i18n/help.ts. */
+/* Erklärung der Werkzeuge: ein „?“ am Titel jedes Geräts öffnet ein Panel
+   mit dem, was es tut, wann man es braucht und was die Regler bewirken.
+   Texte in i18n/help.ts. */
 
 /** Werkzeug-ID → Schlüssel des Titels, wie er auf der Seite steht. */
 const TITLES: Record<string, string> = {
@@ -108,17 +109,24 @@ function Panel({ topics, onClose }: { topics: string[]; onClose: () => void }) {
   );
 }
 
-/** Knopf „Erklärung“ für die Seitenleiste; `topics` in der Reihenfolge der Seite. */
-export function HelpButton({ topics }: { topics: string[] }) {
+/** Kleines „?“ neben einem Titel: erklärt genau dieses Werkzeug. */
+export function HelpIcon({ topic, className }: { topic: string; className?: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <ActionGroup>
-        <ActionPill onClick={() => setOpen(true)}>
-          <Question /> {t("help.button")}
-        </ActionPill>
-      </ActionGroup>
-      {open && <Panel key={topics.join()} topics={topics} onClose={() => setOpen(false)} />}
+      <button
+        type="button"
+        title={t("help.button")}
+        aria-label={t("help.button")}
+        onClick={() => setOpen(true)}
+        className={cn(
+          "flex size-6 shrink-0 cursor-default items-center justify-center rounded-full text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-4",
+          className,
+        )}
+      >
+        <Question weight="bold" />
+      </button>
+      {open && <Panel topics={[topic]} onClose={() => setOpen(false)} />}
     </>
   );
 }

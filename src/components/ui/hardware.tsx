@@ -1,10 +1,9 @@
-import { Power } from "@phosphor-icons/react";
 import { useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 
 /*
  * Bedienelemente wie an Rack-Geräten: Schiebefader, Drucktasten mit
- * Leuchtstreifen, Einschalttaste und eingravierte Beschriftung. Leuchten sind flache Farbflächen, ohne Schein.
+ * Leuchtstreifen, Wippschalter zum Einschalten und eingravierte Beschriftung. Leuchten sind flache Farbflächen, ohne Schein.
  */
 
 /** Beschriftung wie auf eine Frontplatte gedruckt. */
@@ -267,13 +266,54 @@ export function PushButton({
   );
 }
 
-/** Einschalttaste eines Geräts: eingerastet leuchtet ihr Streifen. */
+/**
+ * Wippschalter zum Einschalten, wie an einer Steckdosenleiste: quadratisch,
+ * oben „I“, unten „O“. An: die obere Hälfte ist eingedrückt und die Wippe
+ * leuchtet vollflächig in der Gerätefarbe.
+ */
 export function PowerSwitch({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
   return (
-    <div className="flex h-7 w-9 shrink-0">
-      <HardwareKey on={on} title={label} onClick={() => onChange(!on)} className="pt-2 pb-1 [&_svg]:size-3.5">
-        <Power weight="bold" className={cn(on && "text-[var(--ch-mic)]")} />
-      </HardwareKey>
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      title={label}
+      onClick={() => onChange(!on)}
+      className="well size-9 shrink-0 cursor-default rounded-[9px] p-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span
+        className={cn(
+          "relative flex size-full flex-col overflow-hidden rounded-[6px] font-mono text-[10px] leading-none font-bold transition-colors duration-150",
+          "shadow-[0_0_0_1px_oklch(0%_0_0/22%),0_2px_4px_-1px_oklch(0%_0_0/40%)]",
+          on ? "bg-[var(--ch-mic)] text-white" : "bg-[var(--knob-hi)] text-muted-foreground",
+        )}
+      >
+        {/* Obere Hälfte: „I“. Eingedrückt, wenn an. */}
+        <span
+          className={cn(
+            "flex flex-1 items-center justify-center",
+            on
+              ? "bg-[linear-gradient(to_bottom,oklch(0%_0_0/32%),oklch(0%_0_0/8%))]"
+              : "bg-[linear-gradient(to_bottom,oklch(100%_0_0/30%),oklch(0%_0_0/4%))]",
+          )}
+        >
+          I
+        </span>
+        {/* Kante der Wippe */}
+        <span className={cn("h-px", on ? "bg-black/30" : "bg-black/15")} />
+        {/* Untere Hälfte: „O“. Eingedrückt, wenn aus. */}
+        <span
+          className={cn(
+            "flex flex-1 items-center justify-center",
+            on
+              ? "bg-[linear-gradient(to_bottom,oklch(100%_0_0/28%),oklch(0%_0_0/6%))]"
+              : "bg-[linear-gradient(to_bottom,oklch(0%_0_0/18%),oklch(0%_0_0/6%))]",
+          )}
+        >
+          O
+        </span>
+      </span>
+    </button>
   );
 }

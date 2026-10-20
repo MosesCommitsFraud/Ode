@@ -1,6 +1,7 @@
 import { PencilSimple, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { HelpIcon } from "~/components/effects/HelpDrawer";
 import { HotkeyRecorder } from "~/components/soundboard/HotkeyRecorder";
 import { hotkeyLabel } from "~/components/soundboard/hotkey";
 import { Button } from "~/components/ui/button";
@@ -142,6 +143,7 @@ function BankDisplay({ running, modified }: { running: Preset | undefined; modif
         </div>
         <span className="font-mono text-[9px] tracking-[0.18em] text-white/45 uppercase">{t("voice.input")}</span>
       </div>
+      <HelpIcon topic="presets" className="text-white/50 hover:bg-white/10 hover:text-white" />
     </div>
   );
 }
