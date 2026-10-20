@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use super::dsp::{Biquad, Shape};
+use super::eq::Eq3;
 use super::mixer::ChannelId;
 use super::voice::space::{Echo, EchoParams, Reverb, ReverbParams};
 
@@ -148,49 +148,26 @@ impl BusShared {
     }
 }
 
-/// Klang-EQ eines Kanals: Tiefen, Präsenz, Höhen, Low-Cut, High-Cut.
-#[derive(Debug, Clone, Copy, Default)]
+/// Klang-EQ eines Kanals: Tiefen, Präsenz, Höhen, Low-Cut, High-Cut (fundsp, siehe `eq::Eq3`).
+#[derive(Default)]
 struct ChannelEq {
-    bands: [Biquad; 3],
-    low_cut: Option<Biquad>,
-    high_cut: Option<Biquad>,
+    eq: Eq3,
     on: bool,
 }
 
 impl ChannelEq {
     fn configure(&mut self, fx: &ChannelFx) {
+        if fx.eq_enabled && !self.on {
+            self.eq.reset();
+        }
         self.on = fx.eq_enabled;
-        self.bands[0].design(Shape::LowShelf, 120.0, 0.707, fx.low_db);
-        self.bands[1].design(Shape::Peak, 2_500.0, 0.9, fx.mid_db);
-        self.bands[2].design(Shape::HighShelf, 8_000.0, 0.707, fx.high_db);
-        self.low_cut = (fx.low_cut_hz > LOW_CUT_OFF).then(|| {
-            let mut f = self.low_cut.unwrap_or_default();
-            f.design(Shape::HighPass, fx.low_cut_hz, 0.707, 0.0);
-            f
-        });
-        self.high_cut = (fx.high_cut_hz < HIGH_CUT_OFF).then(|| {
-            let mut f = self.high_cut.unwrap_or_default();
-            f.design(Shape::LowPass, fx.high_cut_hz, 0.707, 0.0);
-            f
-        });
+        self.eq.set(fx.low_db, fx.mid_db, fx.high_db);
+        self.eq.set_cuts(fx.low_cut_hz, fx.high_cut_hz);
     }
 
     #[inline]
     fn process(&mut self, x: f32) -> f32 {
-        if !self.on {
-            return x;
-        }
-        let mut y = x;
-        for band in &mut self.bands {
-            y = band.process(y);
-        }
-        if let Some(f) = &mut self.low_cut {
-            y = f.process(y);
-        }
-        if let Some(f) = &mut self.high_cut {
-            y = f.process(y);
-        }
-        y
+        if self.on { self.eq.tick(x) } else { x }
     }
 }
 
@@ -225,7 +202,7 @@ impl BusChain {
             params: BusParams::default(),
             reverb: Reverb::new(),
             echo: Echo::new(),
-            eqs: [ChannelEq::default(); 3],
+            eqs: Default::default(),
         };
         chain.apply(BusParams::default());
         chain

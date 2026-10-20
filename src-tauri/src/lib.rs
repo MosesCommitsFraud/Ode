@@ -231,6 +231,13 @@ fn spawn_meter_loop(app: AppHandle) {
         .expect("Pegel-Thread konnte nicht starten");
 }
 
+/// Exakter Frequenzgang eines EQs an den Bändern des Spektrums, gerechnet
+/// mit denselben Filtern wie im Audio-Thread.
+#[tauri::command]
+fn eq_curve(curve: audio::eq::EqCurve) -> Vec<f32> {
+    audio::eq::response(&curve, &audio::spectrum::band_centers())
+}
+
 #[tauri::command]
 fn list_devices() -> Result<DeviceList, String> {
     devices::list(&cpal::default_host()).map_err(|e| e.to_string())
@@ -385,6 +392,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_devices,
+            eq_curve,
             start_engine,
             stop_engine,
             engine_info,

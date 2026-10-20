@@ -48,6 +48,7 @@ clack-host = { version = "0.2", optional = true }
 clack-extensions = { version = "0.2", optional = true, features = ["clack-host", "audio-ports", "gui", "params", "latency"] }
 clack-plugin = { version = "0.2", optional = true }
 realfft = "3"
+fundsp = "0.23"
 
 
 # Audio-Bibliotheken auch im Debug-Build optimieren, sonst dekodiert symphonia

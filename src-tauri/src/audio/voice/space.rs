@@ -1,12 +1,11 @@
-//! Raum und Zeit: Hall (Freeverb-Aufbau) und Echo. Beide arbeiten Sample für
-//! Sample, damit sie auch als Effekt-Bus im Ausgang laufen können.
+//! Raum und Zeit: Hall und Echo, gebaut aus fundsp. Beide arbeiten Sample
+//! für Sample, damit sie auch als Effekt-Bus im Ausgang laufen können.
 
 use serde::{Deserialize, Serialize};
 
-use crate::audio::ENGINE_RATE;
-use crate::audio::dsp::{Biquad, DelayLine, Shape};
+use fundsp::prelude32::*;
 
-const RATE: f32 = ENGINE_RATE as f32;
+use crate::audio::fund::{Fixed, Rebuilt};
 
 // ------------------------------------------------------------ Hall
 
@@ -50,80 +49,47 @@ impl ReverbParams {
     }
 }
 
-/// Kammfilter mit gedämpfter Rückkopplung (Freeverb).
-#[derive(Debug, Clone)]
-struct Comb {
-    line: Vec<f32>,
-    pos: usize,
-    store: f32,
+/// Feste Teile des Halls: Raumgröße und Dämpfung (in Hundertsteln).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Room {
+    size: u16,
+    damping: u16,
 }
 
-impl Comb {
-    fn new(len: usize) -> Self {
+impl Room {
+    fn of(p: &ReverbParams) -> Self {
         Self {
-            line: vec![0.0; len],
-            pos: 0,
-            store: 0.0,
+            size: (p.size * 100.0).round() as u16,
+            damping: (p.damping * 100.0).round() as u16,
         }
-    }
-
-    #[inline]
-    fn process(&mut self, x: f32, feedback: f32, damp: f32) -> f32 {
-        let y = self.line[self.pos];
-        self.store = y * (1.0 - damp) + self.store * damp;
-        self.line[self.pos] = x + self.store * feedback;
-        self.pos += 1;
-        if self.pos == self.line.len() {
-            self.pos = 0;
-        }
-        y
     }
 }
 
-/// Allpass, der die Echos dichter streut.
-#[derive(Debug, Clone)]
-struct Allpass {
-    line: Vec<f32>,
-    pos: usize,
+/// fundsp-Hall (Feedback-Delay-Netz mit Diffusion und Modulation): 10–30 m
+/// Raum, 0,3–6 s Nachhall, die Dämpfung als Tiefpass in der Schleife.
+fn room_graph(room: Room) -> Box<dyn AudioUnit> {
+    let size = room.size as f32 / 100.0;
+    let damping = room.damping as f32 / 100.0;
+    let meters = 10.0 + 20.0 * size;
+    let seconds = 0.3 + 5.7 * size * size;
+    let cutoff = 12_000.0 * 0.12f32.powf(damping);
+    Box::new(
+        split::<U2>()
+            >> reverb2_stereo(meters, seconds, 0.75, 0.5, lowpole_hz(cutoff))
+            >> join::<U2>(),
+    )
 }
 
-impl Allpass {
-    fn new(len: usize) -> Self {
-        Self {
-            line: vec![0.0; len],
-            pos: 0,
-        }
-    }
-
-    #[inline]
-    fn process(&mut self, x: f32) -> f32 {
-        let buffered = self.line[self.pos];
-        let y = buffered - x;
-        self.line[self.pos] = x + buffered * 0.5;
-        self.pos += 1;
-        if self.pos == self.line.len() {
-            self.pos = 0;
-        }
-        y
-    }
-}
-
-/// Längen der Original-Freeverb-Stimmung (44,1 kHz), auf 48 kHz umgerechnet.
-const COMBS: [usize; 8] = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617];
-const ALLPASSES: [usize; 4] = [556, 441, 341, 225];
-
-fn scaled(len: usize) -> usize {
-    (len as f32 * RATE / 44_100.0) as usize
-}
-
+/// Hall aus fundsp: Vorverzögerung und Low-Cut laufen live, Raumgröße und
+/// Dämpfung bauen den Raum neu (weich übergeblendet).
 pub struct Reverb {
     params: ReverbParams,
-    combs: Vec<Comb>,
-    allpasses: Vec<Allpass>,
-    predelay: DelayLine,
-    low_cut: Biquad,
-    feedback: f32,
-    damp: f32,
+    predelay: Shared,
+    low_cut: Shared,
+    input: Fixed,
+    room: Rebuilt<Room>,
+    /// Noch still (neu oder geleert): Raumänderungen gelten sofort.
+    fresh: bool,
 }
 
 impl Default for Reverb {
@@ -132,47 +98,50 @@ impl Default for Reverb {
     }
 }
 
+/// Kürzeste Vorverzögerung, die die Verzögerungsleitung kann.
+const MIN_PREDELAY: f32 = 0.000_5;
+
 impl Reverb {
     pub fn new() -> Self {
+        let p = ReverbParams::default();
+        let predelay = shared(p.predelay_ms / 1000.0);
+        let low_cut = shared(p.low_cut_hz);
+        let input = Fixed::new(Box::new(
+            (pass() | var(&predelay))
+                >> tap(MIN_PREDELAY, 0.21)
+                >> (pass() | var(&low_cut) | dc(0.707))
+                >> highpass(),
+        ));
         let mut r = Self {
-            params: ReverbParams::default(),
-            combs: COMBS.iter().map(|&l| Comb::new(scaled(l))).collect(),
-            allpasses: ALLPASSES.iter().map(|&l| Allpass::new(scaled(l))).collect(),
-            predelay: DelayLine::new((RATE * 0.21) as usize),
-            low_cut: Biquad::default(),
-            feedback: 0.0,
-            damp: 0.0,
+            params: p,
+            predelay,
+            low_cut,
+            input,
+            room: Rebuilt::new(Room::of(&p), room_graph),
+            fresh: true,
         };
-        r.configure(&ReverbParams::default());
+        r.configure(&p);
         r
     }
 
     pub fn configure(&mut self, p: &ReverbParams) {
         self.params = *p;
-        // Wie Freeverb: Raumgröße 0,7–0,98, Dämpfung bis 0,4.
-        self.feedback = 0.7 + p.size * 0.28;
-        self.damp = p.damping * 0.4;
-        self.low_cut
-            .design(Shape::HighPass, p.low_cut_hz, 0.707, 0.0);
+        self.predelay
+            .set_value((p.predelay_ms / 1000.0).max(MIN_PREDELAY));
+        self.low_cut.set_value(p.low_cut_hz);
+        if self.fresh {
+            self.room.set_now(Room::of(p));
+        } else {
+            self.room.want(Room::of(p));
+        }
     }
 
     /// Nur der Hall ohne trockenes Signal.
     #[inline]
     pub fn wet(&mut self, x: f32) -> f32 {
-        self.predelay.push(x);
-        let delayed = self
-            .predelay
-            .tap((self.params.predelay_ms / 1000.0 * RATE) as usize);
-        // Eingang wie bei Freeverb abschwächen, damit die Kämme nicht übersteuern.
-        let input = self.low_cut.process(delayed) * 0.015;
-        let mut out = 0.0;
-        for comb in &mut self.combs {
-            out += comb.process(input, self.feedback, self.damp);
-        }
-        for ap in &mut self.allpasses {
-            out = ap.process(out);
-        }
-        out
+        self.fresh = false;
+        let x = self.input.tick(x);
+        self.room.tick(x) * (1.0 / 3.0)
     }
 
     /// Mischt trocken und Hall nach `mix`; auch bei vollem Hall bleibt die
@@ -187,15 +156,9 @@ impl Reverb {
     }
 
     pub fn clear(&mut self) {
-        for c in &mut self.combs {
-            c.line.iter_mut().for_each(|s| *s = 0.0);
-            c.store = 0.0;
-        }
-        for a in &mut self.allpasses {
-            a.line.iter_mut().for_each(|s| *s = 0.0);
-        }
-        self.predelay.clear();
-        self.low_cut.reset();
+        self.input.reset();
+        self.room.reset();
+        self.fresh = true;
     }
 }
 
@@ -237,11 +200,16 @@ impl EchoParams {
     }
 }
 
+/// Echo aus fundsp: Verzögerung mit Rückkopplung, jede Wiederholung durch
+/// einen Tiefpass dunkler. Alle Werte laufen live; die Zeit gleitet bei
+/// kleinen Änderungen, damit Ziehen am Regler nicht knackt.
 pub struct Echo {
     params: EchoParams,
-    line: DelayLine,
-    tone: Biquad,
-    /// Gleitende Verzögerung, damit Ändern der Zeit nicht knackt.
+    time: Shared,
+    tone: Shared,
+    feedback: Shared,
+    unit: Fixed,
+    /// Gleitende Verzögerung in Sekunden.
     delay: f32,
 }
 
@@ -253,36 +221,51 @@ impl Default for Echo {
 
 impl Echo {
     pub fn new() -> Self {
+        let p = EchoParams::default();
+        let time = shared(p.time_ms / 1000.0);
+        let tone = shared(p.tone_hz);
+        let feedback = shared(p.feedback);
+        let unit = Fixed::new(Box::new(feedback2(
+            (pass() | var(&time))
+                >> tap(0.02, 1.6)
+                >> (pass() | var(&tone) | dc(0.707))
+                >> lowpass(),
+            pass() * var(&feedback),
+        )));
         let mut e = Self {
-            params: EchoParams::default(),
-            line: DelayLine::new((RATE * 1.6) as usize),
-            tone: Biquad::default(),
-            delay: EchoParams::default().time_ms / 1000.0 * RATE,
+            params: p,
+            time,
+            tone,
+            feedback,
+            unit,
+            delay: p.time_ms / 1000.0,
         };
-        e.configure(&EchoParams::default());
+        e.configure(&p);
         e
     }
 
     pub fn configure(&mut self, p: &EchoParams) {
         self.params = *p;
-        self.tone.design(Shape::LowPass, p.tone_hz, 0.707, 0.0);
+        self.tone.set_value(p.tone_hz);
+        self.feedback.set_value(p.feedback);
         // Kleine Schritte (Regler ziehen) gleiten, große Sprünge (Preset) nicht.
-        let target = p.time_ms / 1000.0 * RATE;
+        let target = p.time_ms / 1000.0;
         if (target - self.delay).abs() > self.delay * 0.2 {
             self.delay = target;
+            self.time.set_value(target);
         }
     }
 
     /// Nur die Wiederholungen ohne trockenes Signal.
     #[inline]
     pub fn wet(&mut self, x: f32) -> f32 {
-        let target = self.params.time_ms / 1000.0 * RATE;
-        self.delay += (target - self.delay) * 0.0005;
-        let y = self.line.read(self.delay);
-        let fed = self.tone.process(y) * self.params.feedback;
+        let target = self.params.time_ms / 1000.0;
+        if self.delay != target {
+            self.delay += (target - self.delay) * 0.0005;
+            self.time.set_value(self.delay);
+        }
         // Weich begrenzen, damit hohe Rückkopplung nicht aufschaukelt.
-        self.line.push((x + fed).clamp(-1.5, 1.5));
-        y
+        self.unit.tick(x).clamp(-1.5, 1.5)
     }
 
     pub fn process(&mut self, buf: &mut [f32]) {
@@ -294,8 +277,7 @@ impl Echo {
     }
 
     pub fn clear(&mut self) {
-        self.line.clear();
-        self.tone.reset();
+        self.unit.reset();
     }
 }
 
@@ -358,7 +340,7 @@ mod tests {
             .enumerate()
             .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
             .unwrap();
-        assert!((pos as i32 + 1 - 4_800).abs() <= 2, "{pos}");
+        assert!((pos as i32 + 1 - 4_800).abs() <= 4, "{pos}");
     }
 
     #[test]

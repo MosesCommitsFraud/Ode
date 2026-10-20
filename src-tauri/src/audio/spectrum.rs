@@ -20,6 +20,14 @@ pub const HIGH_HZ: f32 = 20_000.0;
 /// Untergrenze der Anzeige in dB.
 pub const FLOOR_DB: f32 = -100.0;
 
+/// Mitten der Bänder in Hz; dieselben Frequenzen nutzt die EQ-Kurve.
+pub fn band_centers() -> Vec<f64> {
+    let ratio = (HIGH_HZ as f64 / LOW_HZ as f64).powf(1.0 / BANDS as f64);
+    (0..BANDS)
+        .map(|i| LOW_HZ as f64 * ratio.powf(i as f64 + 0.5))
+        .collect()
+}
+
 /// Die letzten `FFT_SIZE` Samples einer Stelle der Kette.
 pub struct SpectrumTap {
     ring: Mutex<(Vec<f32>, usize)>,

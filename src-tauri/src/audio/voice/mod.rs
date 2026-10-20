@@ -363,7 +363,7 @@ impl VoiceChain {
             old.enabled && old.modulation.enabled,
             p.enabled && p.modulation.enabled,
         ) {
-            self.modulation.clear();
+            self.modulation.clear(&p.modulation);
         }
         if switched_on(old.enabled && old.echo.enabled, p.enabled && p.echo.enabled) {
             self.echo.clear();

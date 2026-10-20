@@ -1,14 +1,9 @@
-//! Modulation: Chorus, Flanger und Phaser. Ein langsamer Oszillator (LFO)
-//! bewegt kurze Verzögerungen bzw. Allpass-Filter.
+//! Modulation: Chorus, Flanger und Phaser aus fundsp.
 
-use std::f32::consts::TAU;
-
+use fundsp::prelude32::*;
 use serde::{Deserialize, Serialize};
 
-use crate::audio::ENGINE_RATE;
-use crate::audio::dsp::DelayLine;
-
-const RATE: f32 = ENGINE_RATE as f32;
+use crate::audio::fund::Rebuilt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,28 +55,55 @@ impl ModulationParams {
     }
 }
 
-/// Allpass erster Ordnung für den Phaser.
-#[derive(Debug, Clone, Copy, Default)]
-struct FirstOrderAllpass {
-    z: f32,
+/// Feste Teile eines Modulations-Graphen (Werte in Hundertsteln).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Shape {
+    mode: ModulationMode,
+    rate: u16,
+    depth: u16,
+    feedback: u16,
 }
 
-impl FirstOrderAllpass {
-    #[inline]
-    fn process(&mut self, x: f32, a: f32) -> f32 {
-        let y = -a * x + self.z;
-        self.z = x + a * y;
-        y
+impl Shape {
+    fn of(p: &ModulationParams) -> Self {
+        let q = |v: f32| (v * 100.0).round() as u16;
+        Self {
+            mode: p.mode,
+            rate: q(p.rate_hz),
+            depth: q(p.depth),
+            feedback: q(p.feedback),
+        }
     }
 }
 
-const PHASER_STAGES: usize = 6;
+/// Chorus, Flanger und Phaser von fundsp; alle enthalten das trockene Signal.
+fn graph(shape: Shape) -> Box<dyn AudioUnit> {
+    let rate = shape.rate as f32 / 100.0;
+    let depth = shape.depth as f32 / 100.0;
+    let feedback = shape.feedback as f32 / 100.0;
+    match shape.mode {
+        // Vier Kopien um 15 ms, bewegt von Rauschen statt Sinus: natürlicher.
+        ModulationMode::Chorus => Box::new(chorus(7, 0.012, 0.002 + 0.008 * depth, rate)),
+        ModulationMode::Flanger => {
+            let min = 0.000_3;
+            let max = min + 0.004_5 * depth.max(0.05);
+            Box::new(flanger(feedback, min, max, move |t| {
+                lerp11(min, max, sin_hz(rate, t))
+            }))
+        }
+        ModulationMode::Phaser => {
+            let depth = depth.max(0.05);
+            Box::new(phaser(feedback, move |t| {
+                0.5 + 0.5 * depth * sin_hz(rate, t)
+            }))
+        }
+    }
+}
 
+/// Modulation aus fundsp: Art, Tempo, Tiefe und Rückkopplung bauen den Graphen
+/// (weich übergeblendet), der Anteil mischt live.
 pub struct Modulation {
-    line: DelayLine,
-    phase: f32,
-    last: f32,
-    stages: [FirstOrderAllpass; PHASER_STAGES],
+    unit: Rebuilt<Shape>,
 }
 
 impl Default for Modulation {
@@ -93,65 +115,30 @@ impl Default for Modulation {
 impl Modulation {
     pub fn new() -> Self {
         Self {
-            line: DelayLine::new((RATE * 0.05) as usize),
-            phase: 0.0,
-            last: 0.0,
-            stages: [FirstOrderAllpass::default(); PHASER_STAGES],
+            unit: Rebuilt::new(Shape::of(&ModulationParams::default()), graph),
         }
     }
 
     pub fn process(&mut self, buf: &mut [f32], p: &ModulationParams) {
-        let step = p.rate_hz / RATE;
+        self.unit.want(Shape::of(p));
         for s in buf.iter_mut() {
-            self.phase = (self.phase + step).fract();
             let x = *s;
-            let wet = match p.mode {
-                ModulationMode::Chorus => {
-                    self.line.push(x);
-                    // Drei Stimmen mit versetzter Phase um 15 ms herum.
-                    let mut sum = 0.0;
-                    for voice in 0..3 {
-                        let lfo = (TAU * (self.phase + voice as f32 / 3.0)).sin();
-                        let ms = 15.0 + voice as f32 * 4.0 + lfo * 6.0 * p.depth;
-                        sum += self.line.read(ms / 1000.0 * RATE);
-                    }
-                    sum / 3.0
-                }
-                ModulationMode::Flanger => {
-                    let lfo = 0.5 + 0.5 * (TAU * self.phase).sin();
-                    let ms = 0.3 + lfo * 4.5 * p.depth.max(0.05);
-                    let y = self.line.read(ms / 1000.0 * RATE);
-                    self.line.push(x + y * p.feedback);
-                    y
-                }
-                ModulationMode::Phaser => {
-                    let lfo = 0.5 + 0.5 * (TAU * self.phase).sin();
-                    // Kerben wandern zwischen 200 Hz und bis zu 3 kHz.
-                    let freq = 200.0 * (1.0 + lfo * 14.0 * p.depth.max(0.05));
-                    let t = (std::f32::consts::PI * freq / RATE).tan();
-                    let a = (1.0 - t) / (1.0 + t);
-                    let mut y = x + self.last * p.feedback;
-                    for stage in &mut self.stages {
-                        y = stage.process(y, a);
-                    }
-                    self.last = y;
-                    y
-                }
-            };
-            *s = x * (1.0 - p.mix * 0.5) + wet * p.mix;
+            let y = self.unit.tick(x);
+            *s = x * (1.0 - p.mix) + y * p.mix;
         }
     }
 
-    pub fn clear(&mut self) {
-        self.line.clear();
-        self.last = 0.0;
-        self.stages = [FirstOrderAllpass::default(); PHASER_STAGES];
+    /// Frisch eingeschaltet: gleich mit den aktuellen Werten, ohne Überblendung.
+    pub fn clear(&mut self, p: &ModulationParams) {
+        self.unit.set_now(Shape::of(p));
+        self.unit.reset();
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::f32::consts::TAU;
 
     #[test]
     fn all_modes_stay_bounded() {
@@ -169,8 +156,9 @@ mod tests {
                 mix: 1.0,
             };
             let mut m = Modulation::new();
+            m.clear(&p);
             let mut buf: Vec<f32> = (0..48_000)
-                .map(|i| (i as f32 * TAU * 220.0 / RATE).sin() * 0.5)
+                .map(|i| (i as f32 * TAU * 220.0 / 48_000.0).sin() * 0.5)
                 .collect();
             m.process(&mut buf, &p);
             assert!(

@@ -13,7 +13,11 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use super::ENGINE_RATE;
-use super::dsp::{AtomicF32, Biquad, Limiter, Shape, coef, db_to_gain, to_db};
+use super::dsp::{AtomicF32, Biquad, Shape, coef, db_to_gain, to_db};
+use fundsp::prelude32::{Shared, Tanh, dc, highpass, limiter, mul, pass, shape, shared, var};
+
+use super::eq::Eq3;
+use super::fund::Fixed;
 use super::insert::InsertSlot;
 use super::spectrum::SpectrumTap;
 use super::voice::{VoiceChain, VoiceMeters, VoiceParams};
@@ -388,32 +392,25 @@ impl Denoiser {
     }
 }
 
+/// Drei-Band-EQ aus fundsp (siehe `eq::Eq3`).
 struct Equalizer {
-    bands: [Biquad; 3],
+    eq: Eq3,
 }
 
 impl Equalizer {
     fn new() -> Self {
-        let mut eq = Self {
-            bands: [Biquad::default(); 3],
-        };
+        let mut eq = Self { eq: Eq3::new() };
         eq.configure(&EqParams::default());
         eq
     }
 
     fn configure(&mut self, p: &EqParams) {
-        self.bands[0].design(Shape::LowShelf, 120.0, 0.707, p.low_db);
-        self.bands[1].design(Shape::Peak, 2_500.0, 0.9, p.mid_db);
-        self.bands[2].design(Shape::HighShelf, 8_000.0, 0.707, p.high_db);
+        self.eq.set(p.low_db, p.mid_db, p.high_db);
     }
 
     fn process(&mut self, buf: &mut [f32]) {
         for s in buf.iter_mut() {
-            let mut x = *s;
-            for band in &mut self.bands {
-                x = band.process(x);
-            }
-            *s = x;
+            *s = self.eq.tick(*s);
         }
     }
 }
@@ -566,34 +563,70 @@ impl DeEsser {
 }
 
 /// Ergänzt Obertöne in den Höhen: Hochpass, Sättigung, nochmals Hochpass.
+/// Exciter aus fundsp: Höhen abzweigen, sanft sättigen (Obertöne), nochmals
+/// hochpassen und zum Original mischen. Frequenz läuft live.
 struct Exciter {
-    before: Biquad,
-    after: Biquad,
+    frequency: Shared,
+    unit: Fixed,
 }
 
 impl Exciter {
     fn new() -> Self {
-        let mut e = Self {
-            before: Biquad::default(),
-            after: Biquad::default(),
-        };
-        e.configure(&ExciterParams::default());
-        e
+        let frequency = shared(ExciterParams::default().frequency_hz);
+        let high = || (pass() | var(&frequency) | dc(0.707)) >> highpass();
+        let unit = Fixed::new(Box::new(high() >> shape(Tanh(4.0)) >> mul(0.25) >> high()));
+        Self { frequency, unit }
     }
 
     fn configure(&mut self, p: &ExciterParams) {
-        self.before
-            .design(Shape::HighPass, p.frequency_hz, 0.707, 0.0);
-        self.after
-            .design(Shape::HighPass, p.frequency_hz, 0.707, 0.0);
+        self.frequency.set_value(p.frequency_hz);
     }
 
     fn process(&mut self, buf: &mut [f32], p: &ExciterParams) {
         for s in buf.iter_mut() {
-            let high = self.before.process(*s);
-            let harmonics = self.after.process((high * 4.0).tanh() * 0.25);
+            let harmonics = self.unit.tick(*s);
             *s += harmonics * p.amount * 2.0;
         }
+    }
+}
+
+/// Limiter aus fundsp mit 2 ms Vorausschau: hebt auf die Obergrenze an,
+/// begrenzt auf 1 und senkt wieder ab. Die Absenkung wird je Block gemessen.
+struct PeakLimiter {
+    unit: Fixed,
+    reduction_db: f32,
+}
+
+/// Vorausschau des Limiters; so viel später kommt das Signal.
+const LIMITER_ATTACK: f32 = 0.002;
+
+impl PeakLimiter {
+    fn new() -> Self {
+        Self {
+            unit: Fixed::new(Box::new(limiter(LIMITER_ATTACK, 0.08))),
+            reduction_db: 0.0,
+        }
+    }
+
+    fn process(&mut self, buf: &mut [f32], ceiling_db: f32) {
+        let ceiling = db_to_gain(ceiling_db);
+        let (mut peak_in, mut peak_out) = (0.0f32, 0.0f32);
+        for s in buf.iter_mut() {
+            peak_in = peak_in.max(s.abs());
+            let y = self.unit.tick(*s / ceiling) * ceiling;
+            peak_out = peak_out.max(y.abs());
+            *s = y;
+        }
+        self.reduction_db = if peak_in > ceiling {
+            to_db(peak_out / peak_in).min(0.0)
+        } else {
+            0.0
+        };
+    }
+
+    fn reset(&mut self) {
+        self.unit.reset();
+        self.reduction_db = 0.0;
     }
 }
 
@@ -611,7 +644,7 @@ pub struct EffectChain {
     de_esser: DeEsser,
     exciter: Exciter,
     voice: VoiceChain,
-    limiter: Limiter,
+    limiter: PeakLimiter,
 }
 
 impl Default for EffectChain {
@@ -624,7 +657,7 @@ impl EffectChain {
     pub fn new() -> Self {
         let params = EffectsParams::default();
         Self {
-            limiter: Limiter::new(params.limiter.ceiling_db, 80.0, ENGINE_RATE),
+            limiter: PeakLimiter::new(),
             params,
             version: u64::MAX,
             gate: Gate::new(),
@@ -652,8 +685,8 @@ impl EffectChain {
         if params.eq != self.params.eq {
             self.eq.configure(&params.eq);
         }
-        if params.limiter.ceiling_db != self.params.limiter.ceiling_db {
-            self.limiter = Limiter::new(params.limiter.ceiling_db, 80.0, ENGINE_RATE);
+        if params.limiter.enabled && !self.params.limiter.enabled {
+            self.limiter.reset();
         }
         if params.de_esser != self.params.de_esser {
             self.de_esser.configure(&params.de_esser);
@@ -735,10 +768,8 @@ impl EffectChain {
         shared.insert.process(buf);
 
         if p.limiter.enabled {
-            self.limiter.process(buf);
-            shared
-                .limiter_reduction_db
-                .store(self.limiter.gain_reduction_db());
+            self.limiter.process(buf, p.limiter.ceiling_db);
+            shared.limiter_reduction_db.store(self.limiter.reduction_db);
         } else {
             shared.limiter_reduction_db.store(0.0);
         }
@@ -771,6 +802,22 @@ mod tests {
             out.extend(b);
         }
         out
+    }
+
+    #[test]
+    fn limiter_holds_the_ceiling() {
+        let mut p = EffectsParams::default();
+        p.limiter.enabled = true;
+        p.limiter.ceiling_db = -6.0;
+        let out = run(p, &sine(440.0, 0.9, 48_000));
+        let ceiling = db_to_gain(-6.0);
+        // Nach dem Einschwingen nie über der Grenze (kleine Toleranz für die Interpolation).
+        assert!(
+            out[4_800..].iter().all(|s| s.abs() <= ceiling * 1.01),
+            "{}",
+            out[4_800..].iter().fold(0.0f32, |m, s| m.max(s.abs()))
+        );
+        assert!(out[24_000..].iter().fold(0.0f32, |m, s| m.max(s.abs())) > ceiling * 0.9);
     }
 
     #[test]
