@@ -1,6 +1,5 @@
-import { Power } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
-import { StripToggle, ToggleGroup } from "~/components/mixer/ChannelStrip";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Activator } from "~/components/ui/hardware";
 import { HelpIcon } from "./HelpDrawer";
 import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
@@ -8,9 +7,9 @@ import { cn } from "~/lib/utils";
 /* Bausteine der Effekt-Seiten: Module als Karten mit Anzeige und Reglern. */
 
 /**
- * Ein Effekt als Zug im Pult, wie die Kanalzüge im Mischpult: Name, ein
- * Bildschirm, der zeigt, was das Gerät tut, darunter die Fader über die ganze
- * Höhe und unten die Tasten. Aus ist der Zug blass, an trägt er seine Farbe.
+ * Ein Effekt als Gerät im Pult: Aktivierungsknopf vor dem Namen, ein Fenster,
+ * das zeigt, was das Gerät tut, darunter Tasten, Drehregler und Fader. Aus ist
+ * das Gerät blass und grau, an trägt es seine Farbe.
  */
 export function Module({
   title,
@@ -22,7 +21,7 @@ export function Module({
   accent,
   help,
   keys,
-  extra,
+  grow = 1,
   framed,
 }: {
   title: string;
@@ -30,59 +29,87 @@ export function Module({
   onToggle: (on: boolean) => void;
   display: ReactNode;
   className?: string;
-  /** Fader in einer Reihe, sie teilen sich die Höhe. */
+  /** Bedienelemente in einer Reihe; Fader nehmen die volle Höhe, `Stack` stapelt Drehregler. */
   children?: ReactNode;
   /** Farbe für Anzeige und Regler, z. B. die Kanalfarbe. */
   accent?: string;
   /** Werkzeug für die Erklärung hinter dem „?“ am Titel (siehe i18n/help.ts). */
   help?: string;
-  /** Wahltasten über den Fadern, z. B. Modus oder Tonart; volle Breite. */
+  /** Tasten über den Reglern, z. B. Modus oder Tonart; volle Breite. */
   keys?: ReactNode;
-  /** Weitere Schalter neben „An“ in der Tastenmulde unten. */
-  extra?: ReactNode;
+  /** Anteil an der Breite im Pult, nach Menge der Bedienelemente. */
+  grow?: number;
   /** Als eigene Karte statt als Zug in einem `Console`. */
   framed?: boolean;
 }) {
   // Ohne eigene Farbe bleibt --ch-mic geerbt; sich selbst zuweisen wäre ungültig.
-  const style: Record<string, string> = accent ? { "--ch-mic": accent, "--ch": accent } : { "--ch": "var(--ch-mic)" };
+  const style: Record<string, string | number> = accent ? { "--ch-mic": accent, "--ch": accent, flexGrow: grow } : { "--ch": "var(--ch-mic)", flexGrow: grow };
   return (
-    <section
-      style={style}
-      className={cn("@container flex min-h-0 min-w-0 flex-1 flex-col gap-3 px-3 py-3.5", framed && "panel overflow-hidden rounded-2xl", className)}
-    >
-      <div className="flex h-7 items-center gap-1.5">
-        <h3 className={cn("min-w-0 truncate font-display text-[17px] font-semibold tracking-tight transition-colors", !enabled && "text-muted-foreground")}>
+    <section style={style} className={cn("flex min-h-0 min-w-0 basis-0 flex-col gap-3 px-3 pt-3.5 pb-3", framed && "panel rounded-2xl", className)}>
+      <div className="flex h-7 shrink-0 items-center gap-1">
+        <Activator label={title} on={enabled} onChange={onToggle} />
+        <h3 className={cn("min-w-0 truncate font-display text-[17px] font-semibold tracking-tight transition-colors duration-300", !enabled && "text-muted-foreground")}>
           {title}
         </h3>
         {help && <HelpIcon topic={help} />}
       </div>
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-3 transition-[opacity,filter] duration-200", !enabled && "opacity-45 grayscale")}>
-        <div
-          className={cn(
-            "well relative overflow-hidden rounded-lg",
-            framed ? "h-14 shrink-0" : !children ? "min-h-0 flex-1" : keys ? "h-[clamp(60px,12vh,140px)] shrink-0" : "h-[clamp(84px,19vh,168px)] shrink-0",
-          )}
-        >
-          {display}
-        </div>
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-3 transition-[opacity,filter] duration-300", !enabled && "opacity-50 grayscale")}>
+        <div className={cn("well relative overflow-hidden rounded-lg", children ? "h-[clamp(72px,16vh,150px)] shrink-0" : "min-h-0 flex-1")}>{display}</div>
         {keys && <div className="flex shrink-0 flex-col gap-2">{keys}</div>}
-        {children && <div className="flex min-h-0 flex-1 justify-evenly gap-1 [&>*]:min-w-0">{children}</div>}
+        {children && <div className="flex min-h-0 flex-1 items-stretch justify-evenly gap-2 [&>*]:min-w-0">{children}</div>}
       </div>
-      <ToggleGroup>
-        <StripToggle title={title} on={enabled} onClick={() => onToggle(!enabled)}>
-          <Power weight="bold" /> {enabled ? t("common.on") : t("common.off")}
-        </StripToggle>
-        {extra}
-      </ToggleGroup>
     </section>
   );
 }
 
-/** Mehrere Effekt-Züge nebeneinander auf einem Pult, getrennt durch feine Linien. */
-export function Console({ children, className }: { children: ReactNode; className?: string }) {
+/** Drehregler übereinander, gleichmäßig über die Höhe verteilt. */
+export function Stack({ children }: { children: ReactNode }) {
+  // Reicht die Höhe nicht, laufen die übrigen in eine zweite Spalte.
   return (
-    <div className={cn("panel flex min-h-0 flex-1 animate-[layout-in_260ms_var(--ease-drawer)] divide-x divide-hairline rounded-2xl p-1.5", className)}>
+    <div className="grid min-h-0 grid-flow-col content-evenly items-center justify-items-center gap-x-3" style={{ gridTemplateRows: "repeat(auto-fit, minmax(84px, max-content))" }}>
       {children}
+    </div>
+  );
+}
+
+/** Mehrere Geräte nebeneinander auf einem Pult, getrennt durch feine Linien. */
+export function Console({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("panel flex min-h-0 flex-1 divide-x divide-hairline rounded-2xl p-1.5", className)}>{children}</div>;
+}
+
+/**
+ * Weicher Wechsel zwischen Seiten: die alte blendet aus, während die neue
+ * schon darüber einblendet; nie ein leerer Moment. Die Richtung folgt der
+ * Reihenfolge in `order`.
+ */
+export function Crossfade({ id, order, children, className }: { id: string; order: string[]; children: ReactNode; className?: string }) {
+  const [shown, setShown] = useState(id);
+  const last = useRef<ReactNode>(children);
+  const [leaving, setLeaving] = useState<{ id: string; node: ReactNode; dir: number } | null>(null);
+  if (shown !== id) {
+    setLeaving({ id: shown, node: last.current, dir: order.indexOf(id) > order.indexOf(shown) ? 1 : -1 });
+    setShown(id);
+  }
+  useEffect(() => {
+    last.current = children;
+  });
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => setLeaving(null), 320);
+    return () => window.clearTimeout(timer);
+  }, [leaving]);
+
+  const dir = leaving?.dir ?? 1;
+  return (
+    <div className={cn("relative grid min-h-0 flex-1", className)} style={{ "--dir": dir } as React.CSSProperties}>
+      {leaving && (
+        <div key={leaving.id} aria-hidden className="pointer-events-none col-start-1 row-start-1 flex min-h-0 animate-[page-out_280ms_ease-in_forwards]">
+          {leaving.node}
+        </div>
+      )}
+      <div key={id} className={cn("col-start-1 row-start-1 flex min-h-0", leaving && "animate-[page-in_320ms_var(--ease-drawer)]")}>
+        {children}
+      </div>
     </div>
   );
 }

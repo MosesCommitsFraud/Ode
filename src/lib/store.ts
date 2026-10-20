@@ -239,20 +239,14 @@ export const actions = {
   async applyPreset(id: string) {
     const preset = state.presets.find((p) => p.id === id);
     if (!preset) return;
-    if (!isTauri) {
-      set({ effects: { ...state.effects, voice: { ...preset.voice, enabled: true } }, activePreset: id });
-      return;
-    }
-    // Das Ergebnis kommt über „effects://changed“.
-    await engine.presetApply(id);
+    // Sofort zeigen; die Engine bestätigt über „effects://changed“.
+    set({ effects: { ...state.effects, voice: { ...preset.voice, enabled: true } }, activePreset: id });
+    if (isTauri) await engine.presetApply(id);
   },
 
   async presetOff() {
-    if (!isTauri) {
-      set({ effects: { ...state.effects, voice: { ...state.effects.voice, enabled: false } }, activePreset: null });
-      return;
-    }
-    await engine.presetOff();
+    set({ effects: { ...state.effects, voice: { ...state.effects.voice, enabled: false } }, activePreset: null });
+    if (isTauri) await engine.presetOff();
   },
 
   async savePreset(preset: Preset) {

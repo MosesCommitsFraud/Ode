@@ -8,6 +8,7 @@ import {
   Waveform as AudioWaveform,
 } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
+import { Crossfade } from "~/components/effects/rack";
 import { BusesPanel } from "~/components/mixer/BusesPanel";
 import { ChannelStrip, StripToggle } from "~/components/mixer/ChannelStrip";
 import { CHANNEL_DEFAULTS, OUTPUT_DEFAULTS, same } from "~/components/mixer/PageChannel";
@@ -224,14 +225,16 @@ export function MixerView() {
           </Pill>
         </PillGroup>
       </div>
-      {page === "console" ? (
-        <>
-          <Console />
-          <DuckingBar />
-        </>
-      ) : (
-        <BusesPanel />
-      )}
+      <Crossfade id={page} order={["console", "buses"]}>
+        {page === "console" ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <Console />
+            <DuckingBar />
+          </div>
+        ) : (
+          <BusesPanel />
+        )}
+      </Crossfade>
     </div>
   );
 }

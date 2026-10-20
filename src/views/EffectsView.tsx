@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { PluginsPanel } from "~/components/effects/PluginsPanel";
-import { Console, EqDisplay, GridLine, Module, PLOT, Tick, freqX } from "~/components/effects/rack";
-import { StripToggle } from "~/components/mixer/ChannelStrip";
+import { Console, Crossfade, EqDisplay, GridLine, Module, PLOT, Stack, Tick, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
-import { PushButtons, SlideFader } from "~/components/ui/hardware";
-import { Needle } from "~/components/ui/knob";
+import { Lamp, PushButton, PushButtons, SlideFader } from "~/components/ui/hardware";
+import { Knob, Needle } from "~/components/ui/knob";
 import { Pill, PillGroup } from "~/components/ui/pills";
 import { actions, useStore } from "~/lib/store";
 import { formatDb, gainToDb } from "~/lib/utils";
@@ -154,6 +153,7 @@ function CleanPage() {
   const running = useStore((s) => s.info !== null);
   const micPeak = useStore((s) => s.meters?.channels.find((c) => c.id === "mic")?.peak ?? 0);
   const voice = running && fx.denoise.enabled ? (live?.voice ?? 0) : 0;
+  const voiceOpen = fx.denoise.voiceGate ? !!live?.voiceOpen : voice > 0.6;
   const agcGainDb = running ? (live?.agcGainDb ?? 0) : 0;
 
   return (
@@ -161,6 +161,7 @@ function CleanPage() {
       <Module
         title={t("effects.gate")}
         help="gate"
+        grow={0.9}
         enabled={fx.gate.enabled}
         onToggle={(enabled) => actions.setEffect("gate", { enabled })}
         display={<GateDisplay peak={running ? micPeak : 0} thresholdDb={fx.gate.thresholdDb} />}
@@ -180,43 +181,55 @@ function CleanPage() {
       <Module
         title={t("effects.denoise")}
         help="denoise"
+        grow={0.8}
         enabled={fx.denoise.enabled}
         onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
         display={<VoiceDisplay voice={voice} />}
-        extra={
-          <StripToggle title={t("effects.voiceGate")} on={fx.denoise.voiceGate} onClick={() => actions.setEffect("denoise", { voiceGate: !fx.denoise.voiceGate })}>
-            {t("effects.voiceGateLabel")}
-          </StripToggle>
-        }
-      />
+      >
+        <div className="flex flex-col items-center justify-evenly gap-3">
+          <Lamp on={voiceOpen} label={t("effects.voice")} />
+          <PushButton
+            className="w-full"
+            label={t("effects.voiceGateLabel")}
+            title={t("effects.voiceGate")}
+            on={fx.denoise.voiceGate}
+            onChange={(voiceGate) => actions.setEffect("denoise", { voiceGate })}
+          />
+        </div>
+      </Module>
 
       <Module
         title={t("effects.eq")}
         help="eq"
+        grow={1.1}
         enabled={fx.eq.enabled}
         onToggle={(enabled) => actions.setEffect("eq", { enabled })}
         display={<EqDisplay low={fx.eq.lowDb} mid={fx.eq.midDb} high={fx.eq.highDb} />}
       >
-        {(
-          [
-            ["lowDb", t("effects.bass")],
-            ["midDb", t("effects.presence")],
-            ["highDb", t("effects.treble")],
-          ] as const
-        ).map(([key, label]) => (
-          <SlideFader
-            key={key}
-            label={label}
-            value={fx.eq[key]}
-            min={-12}
-            max={12}
-            step={0.5}
-            reset={0}
-            bipolar
-            format={db}
-            onChange={(v) => actions.setEffect("eq", { [key]: v })}
-          />
-        ))}
+        <Stack>
+          {(
+            [
+              ["highDb", t("effects.treble")],
+              ["midDb", t("effects.presence")],
+              ["lowDb", t("effects.bass")],
+            ] as const
+          ).map(([key, label]) => (
+            <Knob
+              key={key}
+              label={label}
+              value={fx.eq[key]}
+              min={-12}
+              max={12}
+              step={0.5}
+              reset={0}
+              bipolar
+              ticks={9}
+              size="lg"
+              format={db}
+              onChange={(v) => actions.setEffect("eq", { [key]: v })}
+            />
+          ))}
+        </Stack>
       </Module>
 
       <Module
@@ -236,16 +249,19 @@ function CleanPage() {
           format={db}
           onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
         />
-        <SlideFader
-          label={t("effects.maxGain")}
-          value={fx.agc.maxGainDb}
-          min={0}
-          max={30}
-          step={1}
-          reset={18}
-          format={(v) => `+${v} dB`}
-          onChange={(maxGainDb) => actions.setEffect("agc", { maxGainDb })}
-        />
+        <Stack>
+          <Knob
+            label={t("effects.maxGain")}
+            value={fx.agc.maxGainDb}
+            min={0}
+            max={30}
+            step={1}
+            reset={18}
+            size="lg"
+            format={(v) => `+${v} dB`}
+            onChange={(maxGainDb) => actions.setEffect("agc", { maxGainDb })}
+          />
+        </Stack>
       </Module>
     </Console>
   );
@@ -264,6 +280,7 @@ function DynamicsPage() {
       <Module
         title={t("effects.compressor")}
         help="compressor"
+        grow={1.2}
         enabled={fx.compressor.enabled}
         onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
         display={<ReductionDisplay db={compressorDb} max={18} />}
@@ -285,16 +302,19 @@ function DynamicsPage() {
           format={db}
           onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
         />
-        <SlideFader
-          label={t("effects.makeup")}
-          value={fx.compressor.makeupDb}
-          min={0}
-          max={18}
-          step={0.5}
-          reset={4}
-          format={(v) => `+${v.toFixed(1)} dB`}
-          onChange={(makeupDb) => actions.setEffect("compressor", { makeupDb })}
-        />
+        <Stack>
+          <Knob
+            label={t("effects.makeup")}
+            value={fx.compressor.makeupDb}
+            min={0}
+            max={18}
+            step={0.5}
+            reset={4}
+            size="lg"
+            format={(v) => `+${v.toFixed(1)} dB`}
+            onChange={(makeupDb) => actions.setEffect("compressor", { makeupDb })}
+          />
+        </Stack>
       </Module>
 
       <Module
@@ -314,16 +334,19 @@ function DynamicsPage() {
           format={db}
           onChange={(thresholdDb) => actions.setEffect("deEsser", { thresholdDb })}
         />
-        <SlideFader
-          label={t("effects.frequency")}
-          value={fx.deEsser.frequencyHz}
-          min={3000}
-          max={10000}
-          step={100}
-          reset={6000}
-          format={kHz}
-          onChange={(frequencyHz) => actions.setEffect("deEsser", { frequencyHz })}
-        />
+        <Stack>
+          <Knob
+            label={t("effects.frequency")}
+            value={fx.deEsser.frequencyHz}
+            min={3000}
+            max={10000}
+            step={100}
+            reset={6000}
+            size="lg"
+            format={kHz}
+            onChange={(frequencyHz) => actions.setEffect("deEsser", { frequencyHz })}
+          />
+        </Stack>
       </Module>
 
       <Module
@@ -333,31 +356,36 @@ function DynamicsPage() {
         onToggle={(enabled) => actions.setEffect("exciter", { enabled })}
         display={<HighBandDisplay frequencyHz={fx.exciter.frequencyHz} db={fx.exciter.amount * 9} max={12} />}
       >
-        <SlideFader
-          label={t("effects.frequency")}
-          value={fx.exciter.frequencyHz}
-          min={1000}
-          max={8000}
-          step={100}
-          reset={3000}
-          format={kHz}
-          onChange={(frequencyHz) => actions.setEffect("exciter", { frequencyHz })}
-        />
-        <SlideFader
-          label={t("effects.amount")}
-          value={fx.exciter.amount}
-          min={0}
-          max={1}
-          step={0.01}
-          reset={0.3}
-          format={(v) => `${Math.round(v * 100)} %`}
-          onChange={(amount) => actions.setEffect("exciter", { amount })}
-        />
+        <Stack>
+          <Knob
+            label={t("effects.frequency")}
+            value={fx.exciter.frequencyHz}
+            min={1000}
+            max={8000}
+            step={100}
+            reset={3000}
+            size="lg"
+            format={kHz}
+            onChange={(frequencyHz) => actions.setEffect("exciter", { frequencyHz })}
+          />
+          <Knob
+            label={t("effects.amount")}
+            value={fx.exciter.amount}
+            min={0}
+            max={1}
+            step={0.01}
+            reset={0.3}
+            size="lg"
+            format={(v) => `${Math.round(v * 100)} %`}
+            onChange={(amount) => actions.setEffect("exciter", { amount })}
+          />
+        </Stack>
       </Module>
 
       <Module
         title={t("effects.limiter")}
         help="limiter"
+        grow={0.8}
         enabled={fx.limiter.enabled}
         onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
         display={<ReductionDisplay db={limiterDb} max={12} />}
@@ -376,6 +404,8 @@ function DynamicsPage() {
     </Console>
   );
 }
+
+const PAGES: Page[] = ["clean", "dynamics", "plugin"];
 
 export function EffectsView() {
   const pluginsAvailable = usePlugins((s) => s.status.available);
@@ -410,9 +440,11 @@ export function EffectsView() {
           )}
         </PillGroup>
       </div>
-      {page === "clean" && <CleanPage />}
-      {page === "dynamics" && <DynamicsPage />}
-      {page === "plugin" && <PluginsPanel embedded />}
+      <Crossfade id={page} order={PAGES}>
+        {page === "clean" && <CleanPage />}
+        {page === "dynamics" && <DynamicsPage />}
+        {page === "plugin" && <PluginsPanel embedded />}
+      </Crossfade>
     </div>
   );
 }

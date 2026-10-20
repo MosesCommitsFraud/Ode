@@ -1,6 +1,7 @@
-import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay } from "~/components/effects/rack";
+import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Stack } from "~/components/effects/rack";
 import { CassetteTape, Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
 import { PushButtons, SlideFader } from "~/components/ui/hardware";
+import { Knob } from "~/components/ui/knob";
 import type { CharacterMode, ModulationMode } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -115,26 +116,28 @@ export function CharacterModule() {
         />
       }
     >
-      <SlideFader
-        label={t("voice.amount")}
-        value={p.amount}
-        min={0}
-        max={1}
-        step={0.01}
-        reset={0.5}
-        format={percent}
-        onChange={(amount) => actions.setVoice("character", { amount })}
-      />
-      <SlideFader
-        label={tone.label}
-        value={p.tone}
-        min={0}
-        max={1}
-        step={0.01}
-        reset={0.5}
-        format={() => tone.value}
-        onChange={(v) => actions.setVoice("character", { tone: v })}
-      />
+      <Stack>
+        <Knob
+          label={t("voice.amount")}
+          value={p.amount}
+          min={0}
+          max={1}
+          step={0.01}
+          reset={0.5}
+          format={percent}
+          onChange={(amount) => actions.setVoice("character", { amount })}
+        />
+        <Knob
+          label={tone.label}
+          value={p.tone}
+          min={0}
+          max={1}
+          step={0.01}
+          reset={0.5}
+          format={() => tone.value}
+          onChange={(v) => actions.setVoice("character", { tone: v })}
+        />
+      </Stack>
       <SlideFader
         label={t("voice.mix")}
         value={p.mix}
@@ -208,37 +211,39 @@ export function ModulationModule() {
         />
       }
     >
-      <SlideFader
-        label={t("voice.rate")}
-        value={p.rateHz}
-        min={0.05}
-        max={8}
-        step={0.05}
-        reset={0.8}
-        format={(v) => `${v.toFixed(2)} Hz`}
-        onChange={(rateHz) => actions.setVoice("modulation", { rateHz })}
-      />
-      <SlideFader
-        label={t("voice.depth")}
-        value={p.depth}
-        min={0}
-        max={1}
-        step={0.01}
-        reset={0.5}
-        format={percent}
-        onChange={(depth) => actions.setVoice("modulation", { depth })}
-      />
-      <SlideFader
-        label={t("voice.feedback")}
-        value={p.feedback}
-        min={0}
-        max={0.9}
-        step={0.01}
-        reset={0.3}
-        format={percent}
-        disabled={p.mode === "chorus"}
-        onChange={(feedback) => actions.setVoice("modulation", { feedback })}
-      />
+      <Stack>
+        <Knob
+          label={t("voice.rate")}
+          value={p.rateHz}
+          min={0.05}
+          max={8}
+          step={0.05}
+          reset={0.8}
+          format={(v) => `${v.toFixed(2)} Hz`}
+          onChange={(rateHz) => actions.setVoice("modulation", { rateHz })}
+        />
+        <Knob
+          label={t("voice.depth")}
+          value={p.depth}
+          min={0}
+          max={1}
+          step={0.01}
+          reset={0.5}
+          format={percent}
+          onChange={(depth) => actions.setVoice("modulation", { depth })}
+        />
+        <Knob
+          label={t("voice.feedback")}
+          value={p.feedback}
+          min={0}
+          max={0.9}
+          step={0.01}
+          reset={0.3}
+          format={percent}
+          disabled={p.mode === "chorus"}
+          onChange={(feedback) => actions.setVoice("modulation", { feedback })}
+        />
+      </Stack>
       <SlideFader
         label={t("voice.mix")}
         value={p.mix}
@@ -271,42 +276,44 @@ export function EchoControls({
 }) {
   return (
     <>
-      <SlideFader
-        label={t("voice.time")}
-        value={params.timeMs}
-        min={20}
-        max={1500}
-        step={5}
-        reset={320}
-        format={(v) => `${Math.round(v)} ms`}
-        disabled={disabled}
-        color={color}
-        onChange={(timeMs) => onChange({ timeMs })}
-      />
-      <SlideFader
-        label={t("voice.feedback")}
-        value={params.feedback}
-        min={0}
-        max={0.95}
-        step={0.01}
-        reset={0.35}
-        format={percent}
-        disabled={disabled}
-        color={color}
-        onChange={(feedback) => onChange({ feedback })}
-      />
-      <SlideFader
-        label={t("voice.echoTone")}
-        value={Math.log2(params.toneHz)}
-        min={Math.log2(500)}
-        max={Math.log2(16000)}
-        step={0.01}
-        reset={Math.log2(4000)}
-        format={(v) => hz(Math.pow(2, v))}
-        disabled={disabled}
-        color={color}
-        onChange={(v) => onChange({ toneHz: Math.round(Math.pow(2, v)) })}
-      />
+      <Stack>
+        <Knob
+          label={t("voice.time")}
+          value={params.timeMs}
+          min={20}
+          max={1500}
+          step={5}
+          reset={320}
+          format={(v) => `${Math.round(v)} ms`}
+          disabled={disabled}
+          color={color}
+          onChange={(timeMs) => onChange({ timeMs })}
+        />
+        <Knob
+          label={t("voice.feedback")}
+          value={params.feedback}
+          min={0}
+          max={0.95}
+          step={0.01}
+          reset={0.35}
+          format={percent}
+          disabled={disabled}
+          color={color}
+          onChange={(feedback) => onChange({ feedback })}
+        />
+        <Knob
+          label={t("voice.echoTone")}
+          value={Math.log2(params.toneHz)}
+          min={Math.log2(500)}
+          max={Math.log2(16000)}
+          step={0.01}
+          reset={Math.log2(4000)}
+          format={(v) => hz(Math.pow(2, v))}
+          disabled={disabled}
+          color={color}
+          onChange={(v) => onChange({ toneHz: Math.round(Math.pow(2, v)) })}
+        />
+      </Stack>
       <SlideFader
         label={mixLabel}
         value={params.mix}
@@ -338,42 +345,44 @@ export function ReverbControls({
 }) {
   return (
     <>
-      <SlideFader
-        label={t("voice.size")}
-        value={params.size}
-        min={0}
-        max={1}
-        step={0.01}
-        reset={0.6}
-        format={percent}
-        disabled={disabled}
-        color={color}
-        onChange={(size) => onChange({ size })}
-      />
-      <SlideFader
-        label={t("voice.damping")}
-        value={params.damping}
-        min={0}
-        max={1}
-        step={0.01}
-        reset={0.5}
-        format={percent}
-        disabled={disabled}
-        color={color}
-        onChange={(damping) => onChange({ damping })}
-      />
-      <SlideFader
-        label={t("voice.predelay")}
-        value={params.predelayMs}
-        min={0}
-        max={200}
-        step={1}
-        reset={20}
-        format={(v) => `${v} ms`}
-        disabled={disabled}
-        color={color}
-        onChange={(predelayMs) => onChange({ predelayMs })}
-      />
+      <Stack>
+        <Knob
+          label={t("voice.size")}
+          value={params.size}
+          min={0}
+          max={1}
+          step={0.01}
+          reset={0.6}
+          format={percent}
+          disabled={disabled}
+          color={color}
+          onChange={(size) => onChange({ size })}
+        />
+        <Knob
+          label={t("voice.damping")}
+          value={params.damping}
+          min={0}
+          max={1}
+          step={0.01}
+          reset={0.5}
+          format={percent}
+          disabled={disabled}
+          color={color}
+          onChange={(damping) => onChange({ damping })}
+        />
+        <Knob
+          label={t("voice.predelay")}
+          value={params.predelayMs}
+          min={0}
+          max={200}
+          step={1}
+          reset={20}
+          format={(v) => `${v} ms`}
+          disabled={disabled}
+          color={color}
+          onChange={(predelayMs) => onChange({ predelayMs })}
+        />
+      </Stack>
       <SlideFader
         label={mixLabel}
         value={params.mix}

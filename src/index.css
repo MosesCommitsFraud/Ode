@@ -248,6 +248,21 @@
   }
 }
 
+/* Seitenwechsel als Überblendung; --dir gibt die Richtung (siehe Crossfade). */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--dir, 1) * 18px));
+  }
+}
+
+@keyframes page-out {
+  to {
+    opacity: 0;
+    transform: translateX(calc(var(--dir, 1) * -12px));
+  }
+}
+
 /* Hell/Dunkel-Wechsel als ruhige Überblendung (siehe App.tsx). */
 ::view-transition-old(root),
 ::view-transition-new(root) {

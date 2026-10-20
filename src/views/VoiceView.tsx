@@ -1,7 +1,7 @@
 import { ArrowCounterClockwise, FloppyDisk, X } from "@phosphor-icons/react";
 import { useState } from "react";
 import { HelpIcon } from "~/components/effects/HelpDrawer";
-import { Console } from "~/components/effects/rack";
+import { Console, Crossfade } from "~/components/effects/rack";
 import { ActionGroup, ActionPill, Pill, PillGroup } from "~/components/ui/pills";
 import { AutotuneModule, HarmonizerModule, PitchModule, VocoderModule } from "~/components/voice/PitchModules";
 import { PresetBank, PresetEditor } from "~/components/voice/Presets";
@@ -96,23 +96,25 @@ export function VoiceView() {
       <PresetBank onEdit={setEditing} />
 
       {/* Bei ausgeschalteter Stimme bleibt das Pult bedienbar, wirkt aber erst mit „Eigene“ oder einem Preset. */}
-      <Console key={page} className={cn("transition-opacity", !enabled && "opacity-55")}>
-        {page === "pitch" ? (
-          <>
-            <PitchModule />
-            <AutotuneModule />
-            <HarmonizerModule />
-            <VocoderModule />
-          </>
-        ) : (
-          <>
-            <CharacterModule />
-            <ModulationModule />
-            <EchoModule />
-            <ReverbModule />
-          </>
-        )}
-      </Console>
+      <Crossfade id={page} order={["pitch", "sound"]} className={cn("transition-opacity duration-300", !enabled && "opacity-55")}>
+        <Console>
+          {page === "pitch" ? (
+            <>
+              <PitchModule />
+              <AutotuneModule />
+              <HarmonizerModule />
+              <VocoderModule />
+            </>
+          ) : (
+            <>
+              <CharacterModule />
+              <ModulationModule />
+              <EchoModule />
+              <ReverbModule />
+            </>
+          )}
+        </Console>
+      </Crossfade>
 
       {editing && <PresetEditor key={editing.id} preset={editing} onClose={() => setEditing(null)} />}
     </div>

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { GridLine, Module, PLOT, freqX } from "~/components/effects/rack";
-import { StripToggle } from "~/components/mixer/ChannelStrip";
+import { GridLine, Module, PLOT, Stack, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
-import { PushButtons, SlideFader } from "~/components/ui/hardware";
+import { PushButton, PushButtons, SlideFader } from "~/components/ui/hardware";
+import { Knob } from "~/components/ui/knob";
 import type { Chord, Scale } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -84,21 +84,26 @@ export function PitchModule() {
     <Module
       title={t("voice.pitch")}
       help="pitch"
+      grow={1.15}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("pitch", { enabled })}
       display={<PitchDisplay semitones={p.enabled ? p.semitones : 0} formant={p.enabled ? p.formant : 0} pitchHz={pitchHz} />}
     >
-      <SlideFader
-        label={t("voice.semitones")}
-        value={p.semitones}
-        min={-12}
-        max={12}
-        step={1}
-        reset={0}
-        bipolar
-        format={(v) => signed(v)}
-        onChange={(semitones) => actions.setVoice("pitch", { semitones })}
-      />
+      <Stack>
+        <Knob
+          label={t("voice.semitones")}
+          value={p.semitones}
+          min={-12}
+          max={12}
+          step={1}
+          reset={0}
+          bipolar
+          ticks={25}
+          size="lg"
+          format={(v) => signed(v)}
+          onChange={(semitones) => actions.setVoice("pitch", { semitones })}
+        />
+      </Stack>
       <SlideFader
         label={t("voice.formant")}
         value={p.formant}
@@ -272,16 +277,19 @@ export function AutotuneModule() {
         </>
       }
     >
-      <SlideFader
-        label={t("voice.speed")}
-        value={p.speed}
-        min={0}
-        max={1}
-        step={0.01}
-        reset={0.3}
-        format={(v) => (v < 0.05 ? t("voice.instant") : `${Math.round(v * v * 400)} ms`)}
-        onChange={(speed) => actions.setVoice("autotune", { speed })}
-      />
+      <Stack>
+        <Knob
+          label={t("voice.speed")}
+          value={p.speed}
+          min={0}
+          max={1}
+          step={0.01}
+          reset={0.3}
+          size="lg"
+          format={(v) => (v < 0.05 ? t("voice.instant") : `${Math.round(v * v * 400)} ms`)}
+          onChange={(speed) => actions.setVoice("autotune", { speed })}
+        />
+      </Stack>
     </Module>
   );
 }
@@ -327,44 +335,50 @@ export function HarmonizerModule() {
     <Module
       title={t("voice.harmonizer")}
       help="harmonizer"
+      grow={1.15}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("harmonizer", { enabled })}
       display={<HarmonyDisplay voices={p.voices} enabled={p.enabled} />}
-      extra={([0, 1] as const).map((i) => (
-        <StripToggle key={i} title={t("voice.voiceN", { n: i + 1 })} on={p.voices[i].enabled} onClick={() => setVoice(i, { enabled: !p.voices[i].enabled })}>
-          {i + 1}
-        </StripToggle>
-      ))}
+      keys={
+        <div className="grid grid-cols-2 gap-1.5">
+          {([0, 1] as const).map((i) => (
+            <PushButton key={i} label={t("voice.voiceN", { n: i + 1 })} on={p.voices[i].enabled} onChange={(enabled) => setVoice(i, { enabled })} />
+          ))}
+        </div>
+      }
     >
-      {([0, 1] as const).flatMap((i) => {
+      {([0, 1] as const).map((i) => {
         const v = p.voices[i];
-        return [
-          <SlideFader
-            key={`i${i}`}
-            label={t("voice.intervalN", { n: i + 1 })}
-            value={v.semitones}
-            min={-12}
-            max={12}
-            step={1}
-            reset={0}
-            bipolar
-            format={(x) => signed(x)}
-            disabled={!v.enabled}
-            onChange={(semitones) => setVoice(i, { semitones })}
-          />,
-          <SlideFader
-            key={`l${i}`}
-            label={t("voice.levelN", { n: i + 1 })}
-            value={v.level}
-            min={0}
-            max={1}
-            step={0.01}
-            reset={0.6}
-            format={(x) => `${Math.round(x * 100)} %`}
-            disabled={!v.enabled}
-            onChange={(level) => setVoice(i, { level })}
-          />,
-        ];
+        return (
+          <div key={i} className="flex min-h-0 flex-1 items-stretch justify-center gap-1">
+            <Stack>
+              <Knob
+                label={t("voice.intervalN", { n: i + 1 })}
+                value={v.semitones}
+                min={-12}
+                max={12}
+                step={1}
+                reset={0}
+                bipolar
+                ticks={25}
+                format={(x) => signed(x)}
+                disabled={!v.enabled}
+                onChange={(semitones) => setVoice(i, { semitones })}
+              />
+            </Stack>
+            <SlideFader
+              label={t("voice.levelN", { n: i + 1 })}
+              value={v.level}
+              min={0}
+              max={1}
+              step={0.01}
+              reset={0.6}
+              format={(x) => `${Math.round(x * 100)} %`}
+              disabled={!v.enabled}
+              onChange={(level) => setVoice(i, { level })}
+            />
+          </div>
+        );
       })}
     </Module>
   );
@@ -400,39 +414,47 @@ export function VocoderModule() {
         </div>
       }
       keys={
-        <PushButtons
-          value={p.chord}
-          onChange={(chord: Chord) => actions.setVoice("vocoder", { chord })}
-          options={CHORDS.map((c) => ({ value: c, label: t(`voice.chordShort.${c}`), title: t(`voice.chord.${c}`) }))}
-        />
-      }
-      extra={
-        <StripToggle title={t("voice.follow")} on={p.follow} onClick={() => actions.setVoice("vocoder", { follow: !p.follow })}>
-          {t("voice.followShort")}
-        </StripToggle>
+        <div className="flex gap-1.5">
+          <PushButtons
+            className="flex-[4]"
+            value={p.chord}
+            onChange={(chord: Chord) => actions.setVoice("vocoder", { chord })}
+            options={CHORDS.map((c) => ({ value: c, label: t(`voice.chordShort.${c}`), title: t(`voice.chord.${c}`) }))}
+          />
+          <PushButton
+            className="flex-[1.6]"
+            label={t("voice.followShort")}
+            title={t("voice.follow")}
+            on={p.follow}
+            onChange={(follow) => actions.setVoice("vocoder", { follow })}
+          />
+        </div>
       }
     >
-      <SlideFader
-        label={t("voice.note")}
-        value={p.note}
-        min={28}
-        max={76}
-        step={1}
-        reset={48}
-        format={(v) => noteName(v)}
-        disabled={p.follow}
-        onChange={(note) => actions.setVoice("vocoder", { note })}
-      />
-      <SlideFader
-        label={t("voice.breath")}
-        value={p.breath}
-        min={0}
-        max={1}
-        step={0.01}
-        reset={0.2}
-        format={(v) => `${Math.round(v * 100)} %`}
-        onChange={(breath) => actions.setVoice("vocoder", { breath })}
-      />
+      <Stack>
+        <Knob
+          label={t("voice.note")}
+          value={p.note}
+          min={28}
+          max={76}
+          step={1}
+          reset={48}
+          ticks={5}
+          format={(v) => noteName(v)}
+          disabled={p.follow}
+          onChange={(note) => actions.setVoice("vocoder", { note })}
+        />
+        <Knob
+          label={t("voice.breath")}
+          value={p.breath}
+          min={0}
+          max={1}
+          step={0.01}
+          reset={0.2}
+          format={(v) => `${Math.round(v * 100)} %`}
+          onChange={(breath) => actions.setVoice("vocoder", { breath })}
+        />
+      </Stack>
       <SlideFader
         label={t("voice.mix")}
         value={p.mix}
