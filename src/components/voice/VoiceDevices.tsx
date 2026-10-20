@@ -24,6 +24,7 @@ import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 import { inScale, keyName, noteName, noteOf } from "./icons";
+import { DecayChart, IntervalChart, LfoChart, PitchPad, PitchTrack, TapsChart, WaveChart } from "./VoiceCharts";
 
 /* Die Stimm-Effekte als Geräte-Seiten: je Effekt Erklärung, Live-Werte, wo
    es welche gibt, und alle Einstellungen als Zeilen. Echo und Hall teilen
@@ -244,7 +245,7 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
   const meters = useStore((s) => (s.info ? s.meters?.effects : undefined));
   const p = voice[id];
   const set = <K extends VoiceDeviceId>(key: K, patch: Partial<VoiceParams[K]>) => actions.setVoice(key, patch);
-  const page = (extra: { live?: ReactNode; columns?: 1 | 2 }, children: ReactNode) => (
+  const page = (extra: { live?: ReactNode; columns?: 1 | 2; graph?: ReactNode }, children: ReactNode) => (
     <DevicePage
       icon={VOICE_ICONS[id]}
       title={t(`voice.${id}`)}
@@ -262,7 +263,10 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
   switch (id) {
     case "pitch":
       return page(
-        { live: <Readout label={t("voice.sung")} value={sung !== null ? noteName(sung) : "—"} sub={sung !== null && voice.pitch.enabled ? `→ ${noteName(sung + voice.pitch.semitones)}` : undefined} /> },
+        {
+          live: <Readout label={t("voice.sung")} value={sung !== null ? noteName(sung) : "—"} sub={sung !== null && voice.pitch.enabled ? `→ ${noteName(sung + voice.pitch.semitones)}` : undefined} />,
+          graph: <PitchPad semitones={voice.pitch.semitones} formant={voice.pitch.formant} onChange={(semitones, formant) => set("pitch", { semitones, formant })} />,
+        },
         <>
           <ParamRow label={t("voice.semitones")} hint={t("devices.pitch.semitones")}>
             <div className="flex flex-col gap-2">
@@ -317,6 +321,7 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
               <Readout label={t("voice.target")} value={target !== null && voice.autotune.enabled ? noteName(target) : "—"} sub={target !== null && voice.autotune.enabled ? `${signed(Math.round(cents))} ct` : undefined} />
             </>
           ),
+          graph: <PitchTrack keyNote={voice.autotune.key} scale={voice.autotune.scale} />,
         },
         <>
           <ParamRow label={t("voice.key")} hint={t("devices.autotune.key")}>
@@ -357,7 +362,7 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
         set("harmonizer", { voices });
       };
       return page(
-        { columns: 2 },
+        { columns: 2, graph: <IntervalChart voices={voice.harmonizer.voices} onChange={(i, patch) => setVoice(i, patch)} /> },
         ([0, 1] as const).map((i) => {
           const v = voice.harmonizer.voices[i];
           return (
@@ -440,7 +445,7 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
     case "character": {
       const tone = toneOf(voice.character.mode, voice.character.tone);
       return page(
-        {},
+        { graph: <WaveChart params={voice.character} /> },
         <>
           <ParamRow label={t("voice.modeLabel")} hint={t("devices.character.mode")}>
             <div className="grid grid-cols-7 gap-1.5">
@@ -477,7 +482,10 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
     }
     case "modulation":
       return page(
-        { columns: 2 },
+        {
+          columns: 2,
+          graph: <LfoChart rate={voice.modulation.rateHz} depth={voice.modulation.depth} onChange={(rateHz, depth) => set("modulation", { rateHz, depth })} />,
+        },
         <>
           <ParamRow label={t("voice.modeLabel")} hint={t("devices.modulation.mode")}>
             <PushButtons value={voice.modulation.mode} onChange={(mode: ModulationMode) => set("modulation", { mode })} options={MOD_MODES.map((m) => ({ value: m, label: t(`voice.mod.${m}`) }))} />
@@ -507,8 +515,14 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
         </>,
       );
     case "echo":
-      return page({ columns: 2 }, <EchoRows params={voice.echo} onChange={(patch) => set("echo", patch)} />);
+      return page(
+        { columns: 2, graph: <TapsChart params={voice.echo} onChange={(patch) => set("echo", patch)} /> },
+        <EchoRows params={voice.echo} onChange={(patch) => set("echo", patch)} />,
+      );
     case "reverb":
-      return page({ columns: 2 }, <ReverbRows params={voice.reverb} onChange={(patch) => set("reverb", patch)} />);
+      return page(
+        { columns: 2, graph: <DecayChart params={voice.reverb} onChange={(patch) => set("reverb", patch)} /> },
+        <ReverbRows params={voice.reverb} onChange={(patch) => set("reverb", patch)} />,
+      );
   }
 }

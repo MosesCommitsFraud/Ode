@@ -238,6 +238,12 @@ fn eq_curve(curve: audio::eq::EqCurve) -> Vec<f32> {
     audio::eq::response(&curve, &audio::spectrum::band_centers())
 }
 
+/// Kurve eines Stimm-Effekts für die Anzeige, mit dem echten Effekt gerechnet.
+#[tauri::command]
+fn voice_preview(preview: audio::voice::preview::Preview) -> Vec<f32> {
+    audio::voice::preview::render(preview)
+}
+
 #[tauri::command]
 fn list_devices() -> Result<DeviceList, String> {
     devices::list(&cpal::default_host()).map_err(|e| e.to_string())
@@ -393,6 +399,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_devices,
             eq_curve,
+            voice_preview,
             start_engine,
             stop_engine,
             engine_info,

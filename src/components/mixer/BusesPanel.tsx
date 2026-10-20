@@ -1,7 +1,9 @@
 import { Church, Equalizer, Repeat } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
+import { EqChart } from "~/components/effects/charts";
 import { Crossfade, DeviceBar, DevicePage, ParamRow, Slider, useSelected } from "~/components/effects/device";
 import { parseNumber } from "~/components/ui/knob";
+import { DecayChart, TapsChart } from "~/components/voice/VoiceCharts";
 import { EchoRows, ReverbRows } from "~/components/voice/VoiceDevices";
 import { BUS_DEFAULTS, CHANNEL_FX_DEFAULTS } from "~/lib/defaults";
 import type { ChannelId } from "~/lib/engine";
@@ -65,6 +67,13 @@ function Bus({ id }: { id: BusId }) {
         about={t(`devices.${id}.about`)}
         accent="var(--ch-out)"
         columns={2}
+        graph={
+          id === "reverb" ? (
+            <DecayChart params={buses.reverb} onChange={(patch) => actions.setBus("reverb", patch)} />
+          ) : (
+            <TapsChart params={buses.echo} onChange={(patch) => actions.setBus("echo", patch)} />
+          )
+        }
         enabled={p.enabled}
         onToggle={(enabled) => actions.setBus(id, { enabled })}
         onReset={() => actions.setBus(id, { ...BUS_DEFAULTS[id], enabled: p.enabled })}
@@ -93,6 +102,13 @@ function Bus({ id }: { id: BusId }) {
       about={t("devices.tone.about")}
       accent={channel.color}
       columns={2}
+      graph={
+        <EqChart
+          eq={fx}
+          labels={[t("effects.bass"), t("effects.presence"), t("effects.treble")]}
+          onChange={(key, v) => set({ [key]: v })}
+        />
+      }
       enabled={fx.eqEnabled}
       onToggle={(eqEnabled) => set({ eqEnabled })}
       onReset={() => {

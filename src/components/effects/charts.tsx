@@ -1,7 +1,8 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import uPlot, { type AlignedData, type Options } from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { EQ_BANDS, EQ_RANGE_DB, eqResponse, spectrumFrequencies, SPECTRUM_FLOOR, type EqSettings } from "~/lib/filters";
+import { engine, isTauri } from "~/lib/engine";
 import { cn } from "~/lib/utils";
 
 /*
@@ -33,12 +34,12 @@ function rgba(color: string, alpha = 1) {
 }
 
 /** Farbe einer CSS-Variable am Element (z. B. die Gerätefarbe --ch-mic). */
-function token(el: Element | null, name: string, alpha = 1) {
+export function token(el: Element | null, name: string, alpha = 1) {
   const value = el ? getComputedStyle(el).getPropertyValue(name).trim() : "";
   return rgba(value || "#888", alpha);
 }
 
-const FONT = '10px "JetBrains Mono Variable", ui-monospace, monospace';
+export const FONT = '10px "JetBrains Mono Variable", ui-monospace, monospace';
 
 /* ---------- uPlot in React ---------- */
 
@@ -46,7 +47,7 @@ const FONT = '10px "JetBrains Mono Variable", ui-monospace, monospace';
  * Hält ein uPlot an der Größe seines Platzes. `build` erzeugt die Optionen
  * einmal; neue Daten gehen per `setData` hinein, ohne neu aufzubauen.
  */
-function Plot({
+export function Plot({
   build,
   data,
   className,
@@ -92,7 +93,7 @@ function Plot({
 }
 
 /** Ziehen im Zeichenbereich: liefert Werte auf den angegebenen Skalen. */
-function draggable(u: uPlot, onDrag: (x: number, y: number, start: boolean) => void, scales: { x: string; y: string }) {
+export function draggable(u: uPlot, onDrag: (x: number, y: number, start: boolean) => void, scales: { x: string; y: string }) {
   const over = u.over;
   const at = (e: PointerEvent, start: boolean) => {
     const r = over.getBoundingClientRect();
@@ -108,7 +109,7 @@ function draggable(u: uPlot, onDrag: (x: number, y: number, start: boolean) => v
 }
 
 /** Beschriftete Marke auf der Zeichenfläche (z. B. „Bass +3 dB“), weicht am Rand aus. */
-function tag(u: uPlot, x: number, y: number, text: string, color: string, bg: string) {
+export function tag(u: uPlot, x: number, y: number, text: string, color: string, bg: string) {
   const ctx = u.ctx;
   const pr = uPlot.pxRatio;
   ctx.save();
@@ -130,7 +131,7 @@ function tag(u: uPlot, x: number, y: number, text: string, color: string, bg: st
   ctx.restore();
 }
 
-function dot(u: uPlot, x: number, y: number, fill: string, ring: string) {
+export function dot(u: uPlot, x: number, y: number, fill: string, ring: string) {
   const ctx = u.ctx;
   const pr = uPlot.pxRatio;
   ctx.save();
@@ -152,7 +153,7 @@ function dot(u: uPlot, x: number, y: number, fill: string, ring: string) {
 const FREQ_TICKS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
 const freqLabel = (f: number) => (f >= 1000 ? `${f / 1000}k` : String(f));
 
-function axisStyle(el: HTMLElement) {
+export function axisStyle(el: HTMLElement) {
   return {
     stroke: () => token(el, "--muted-foreground"),
     grid: { stroke: () => token(el, "--muted-foreground", 0.14), width: 1 },
@@ -171,6 +172,29 @@ function freqAxis(el: HTMLElement, scale = "x"): uPlot.Axis {
 
 export const EQ_FREQS = spectrumFrequencies;
 const BAND_KEYS = EQ_BANDS.map((b) => b.key);
+
+/**
+ * Frequenzgang eines EQs: in der App exakt aus der Engine (dieselben
+ * fundsp-Filter wie im Audio-Thread), in der Browser-Vorschau nachgerechnet.
+ */
+export function useEqCurve(eq: EqSettings) {
+  const [curve, setCurve] = useState(() => eqResponse(eq, EQ_FREQS));
+  const key = `${eq.lowDb}|${eq.midDb}|${eq.highDb}|${eq.lowCutHz}|${eq.highCutHz}`;
+  useEffect(() => {
+    if (!isTauri) {
+      setCurve(eqResponse(eq, EQ_FREQS));
+      return;
+    }
+    let current = true;
+    void engine.eqCurve(eq).then((c) => current && setCurve(c));
+    return () => {
+      current = false;
+    };
+    // Nur bei geänderten Werten neu holen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return curve;
+}
 
 /**
  * EQ-Kurve in der Gerätefarbe über dem gemessenen Spektrum: grau vor dem EQ,
@@ -193,7 +217,7 @@ export function EqChart({
 }) {
   const state = useRef({ eq, labels, onChange, active: 0 });
   state.current = { ...state.current, eq, labels, onChange };
-  const curve = eqResponse(eq, EQ_FREQS);
+  const curve = useEqCurve(eq);
   const empty = EQ_FREQS.map(() => SPECTRUM_FLOOR);
   const data: AlignedData = [EQ_FREQS, spectrumIn?.length ? spectrumIn : empty, spectrumOut?.length ? spectrumOut : empty, curve];
 

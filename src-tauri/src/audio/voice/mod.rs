@@ -8,6 +8,7 @@
 pub mod character;
 pub mod modulation;
 pub mod pitch;
+pub mod preview;
 pub mod space;
 pub mod stretch;
 pub mod vocoder;

@@ -237,9 +237,19 @@ export const engine = {
   presetsState: () => invoke<PresetState>("presets_state"),
   presetApply: (id: string) => invoke<void>("preset_apply", { id }),
   presetOff: () => invoke<void>("preset_off"),
+  /** Exakter Frequenzgang eines EQs an den 120 Spektrum-Bändern, aus denselben Filtern wie im Audio-Thread. */
+  /** Kurve eines Stimm-Effekts, mit dem echten Effekt gerechnet (Echo, Hall, Charakter). */
+  voicePreview: (preview: VoicePreview) => invoke<number[]>("voice_preview", { preview }),
+  eqCurve: (curve: { lowDb: number; midDb: number; highDb: number; lowCutHz?: number; highCutHz?: number }) => invoke<number[]>("eq_curve", { curve }),
   presetSave: (preset: Preset) =>
     invoke<{ state: PresetState; hotkeyErrors: string[] }>("preset_save", { preset }),
   presetDelete: (id: string) => invoke<PresetState>("preset_delete", { id }),
   presetsReorder: (ids: string[]) => invoke<PresetState>("presets_reorder", { ids }),
   presetsRestore: () => invoke<PresetState>("presets_restore"),
 };
+
+/** Was `voicePreview` rechnen soll. */
+export type VoicePreview =
+  | { kind: "echo"; params: VoiceParams["echo"] }
+  | { kind: "reverb"; params: VoiceParams["reverb"] }
+  | { kind: "character"; params: VoiceParams["character"] };
