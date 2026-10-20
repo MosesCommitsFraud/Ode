@@ -261,7 +261,7 @@ fn eq_curve(curve: audio::eq::EqSettings) -> Vec<f32> {
 
 /// Kurve eines Stimm-Effekts für die Anzeige, mit dem echten Effekt gerechnet.
 #[tauri::command]
-fn voice_preview(preview: audio::voice::preview::Preview) -> Vec<f32> {
+fn voice_preview(preview: audio::voice::preview::Preview) -> Vec<Vec<f32>> {
     audio::voice::preview::render(preview)
 }
 

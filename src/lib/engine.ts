@@ -250,7 +250,7 @@ export const engine = {
   presetOff: () => invoke<void>("preset_off"),
   /** Exakter Frequenzgang eines EQs an den 120 Spektrum-Bändern, aus denselben Filtern wie im Audio-Thread. */
   /** Kurve eines Stimm-Effekts, mit dem echten Effekt gerechnet (Echo, Hall, Charakter). */
-  voicePreview: (preview: VoicePreview) => invoke<number[]>("voice_preview", { preview }),
+  voicePreview: (preview: VoicePreview) => invoke<number[][]>("voice_preview", { preview }),
   eqCurve: (curve: EqSettings) => invoke<number[]>("eq_curve", { curve }),
   presetSave: (preset: Preset) =>
     invoke<{ state: PresetState; hotkeyErrors: string[] }>("preset_save", { preset }),

@@ -78,7 +78,7 @@ function Bus({ id }: { id: BusId }) {
     <DevicePage
       title={t(id === "reverb" ? "mixer.reverbBus" : "mixer.echoBus")}
       about={t(`devices.${id}.about`)}
-      accent="var(--ch-out)"
+      accent="var(--ch-fx)"
       graph={
         id === "reverb" ? (
           <DecayChart params={buses.reverb} onChange={(patch) => actions.setBus("reverb", patch)} />
@@ -114,8 +114,8 @@ export function BusesPanel() {
         onChange={select}
         groups={[
           [
-            { id: "reverb", title: t("mixer.reverbBus"), icon: <Church />, accent: "var(--ch-out)", enabled: buses.reverb.enabled },
-            { id: "echo", title: t("mixer.echoBus"), icon: <Repeat />, accent: "var(--ch-out)", enabled: buses.echo.enabled },
+            { id: "reverb", title: t("mixer.reverbBus"), icon: <Church />, accent: "var(--ch-fx)", enabled: buses.reverb.enabled },
+            { id: "echo", title: t("mixer.echoBus"), icon: <Repeat />, accent: "var(--ch-fx)", enabled: buses.echo.enabled },
           ],
           TONE_CHANNELS.map(tone),
         ]}
