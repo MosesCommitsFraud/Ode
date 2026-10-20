@@ -220,10 +220,19 @@ pub struct VoiceMeters {
 
 // ------------------------------------------------------------ Autotune
 
-/// Zustand des Autotune: aktuelle Zielnote und gleitende Korrektur.
+/// Um so viele Stücke (je 2,5 ms) wird die erkannte Tonhöhe verzögert, bevor
+/// sie den Verschieber steuert: Der Detektor schaut auf jüngere Samples als
+/// das Analysefenster des Verschiebers.
+const TUNE_LAG: usize = 4;
+
+/// Zustand des Autotune: Zielnote und die Tonhöhe, die herauskommen soll.
 #[derive(Debug, Default)]
 struct Tuner {
     target: Option<i32>,
+    /// Gewünschte Ausgangs-Tonhöhe (Midi); gleitet zur Zielnote.
+    out: Option<f32>,
+    /// Wie lange (s) schon kein Ton erkannt wurde.
+    silent: f32,
     cents: f32,
     /// Zuletzt angenommene Note, gegen Oktavsprünge der Erkennung.
     last: Option<f32>,
@@ -273,18 +282,38 @@ impl Tuner {
 
     /// Korrekturfaktor für die erkannte Tonhöhe; ohne Ton bleibt die letzte
     /// Korrektur stehen, damit Konsonanten nicht springen. `dt` in s.
+    ///
+    /// Geglättet wird die Ausgangs-Tonhöhe, nicht die Korrektur: Sie gleitet
+    /// zur Zielnote und bleibt dort, auch wenn die Stimme wackelt oder
+    /// schwebt. Die Geschwindigkeit bestimmt nur, wie weich Notenwechsel sind.
     fn correction(&mut self, hz: Option<f32>, p: &AutotuneParams, dt: f32) -> f32 {
-        if let Some(note) = hz.map(note_of).and_then(|n| self.steady(n)) {
-            let target = self.snap(note, p);
-            let desired = (target as f32 - note) * 100.0;
-            // Geschwindigkeit 0–1 → Zeitkonstante 0–400 ms, quadratisch für
-            // feine Einstellung bei den schnellen Werten.
-            let tau = p.speed * p.speed * 0.4;
-            if tau < 0.002 {
-                self.cents = desired;
-            } else {
-                self.cents += (desired - self.cents) * (1.0 - (-dt / tau).exp());
+        match hz.map(note_of).and_then(|n| self.steady(n)) {
+            Some(note) => {
+                let target = self.snap(note, p) as f32;
+                // Geschwindigkeit 0–1 → bis der Ton sitzt 0–400 ms (drei
+                // Zeitkonstanten), quadratisch für feine Einstellung bei den
+                // schnellen Werten.
+                let tau = p.speed * p.speed * 0.4 / 3.0;
+                // Ein neuer Ton beginnt dort, wo er gesungen wird.
+                let out = self.out.unwrap_or(note);
+                let out = if tau < 0.002 {
+                    target
+                } else {
+                    out + (target - out) * (1.0 - (-dt / tau).exp())
+                };
+                self.out = Some(out);
+                self.cents = (out - note) * 100.0;
+                self.silent = 0.0;
             }
+            // Nach einer Pause (Atmen, Konsonanten) setzt der nächste Ton neu an;
+            // kurze Aussetzer der Erkennung überbrückt die Korrektur.
+            None if hz.is_none() => {
+                self.silent += dt;
+                if self.silent > 0.08 {
+                    self.out = None;
+                }
+            }
+            None => {}
         }
         2f32.powf(self.cents / 1200.0)
     }
@@ -305,6 +334,9 @@ pub struct VoiceChain {
     output: Vec<f32>,
     shifting: bool,
     tuner: Tuner,
+    /// Erkannte Tonhöhen der letzten Stücke, für `TUNE_LAG`.
+    recent: [Option<f32>; TUNE_LAG + 1],
+    recent_pos: usize,
     vocoder: Vocoder,
     character: Character,
     modulation: Modulation,
@@ -333,6 +365,8 @@ impl VoiceChain {
             output: vec![0.0; SUB],
             shifting: false,
             tuner: Tuner::default(),
+            recent: [None; TUNE_LAG + 1],
+            recent_pos: 0,
             vocoder: Vocoder::new(),
             character: Character::new(),
             modulation: Modulation::new(),
@@ -383,6 +417,7 @@ impl VoiceChain {
         }
         if !old.autotune.enabled && p.autotune.enabled {
             self.tuner = Tuner::default();
+            self.recent = [None; TUNE_LAG + 1];
         }
         self.params = *p;
     }
@@ -482,8 +517,12 @@ impl VoiceChain {
                 self.dry.push(x);
             }
             let hz = self.detector.frequency();
+            self.recent[self.recent_pos] = hz;
+            self.recent_pos = (self.recent_pos + 1) % self.recent.len();
             let auto = if p.autotune.enabled {
-                self.tuner.correction(hz, &p.autotune, n as f32 / RATE)
+                // Der älteste Eintrag liegt `TUNE_LAG` Stücke zurück.
+                let lagged = self.recent[self.recent_pos];
+                self.tuner.correction(lagged, &p.autotune, n as f32 / RATE)
             } else {
                 1.0
             };
@@ -655,6 +694,94 @@ mod measure {
                 (f[0].process(pulse) + f[1].process(pulse) * 0.6 + f[2].process(pulse) * 0.3) * 0.25
             })
             .collect()
+    }
+
+    /// Gesungene Melodie: gehaltene Töne je 0,6 s, jeder etwas verstimmt,
+    /// mit Vibrato und kurzem Gleiten dazwischen.
+    fn melody(len: usize) -> Vec<f32> {
+        // (Midi-Note, Verstimmung in Halbtönen)
+        const NOTES: [(f32, f32); 6] = [
+            (55.0, 0.35),
+            (57.0, -0.3),
+            (59.0, 0.25),
+            (60.0, -0.4),
+            (57.0, 0.3),
+            (55.0, -0.25),
+        ];
+        let mut phase = 0.0f32;
+        let mut f = [
+            crate::audio::dsp::Biquad::new(crate::audio::dsp::Shape::BandPass, 700.0, 5.0, 0.0),
+            crate::audio::dsp::Biquad::new(crate::audio::dsp::Shape::BandPass, 1200.0, 6.0, 0.0),
+            crate::audio::dsp::Biquad::new(crate::audio::dsp::Shape::BandPass, 2600.0, 7.0, 0.0),
+        ];
+        let mut note = NOTES[0].0 + NOTES[0].1;
+        (0..len)
+            .map(|i| {
+                let t = i as f32 / RATE;
+                let (n, off) = NOTES[(t / 0.6) as usize % NOTES.len()];
+                // Gleiten mit etwa 40 ms Zeitkonstante.
+                note += (n + off - note) * (1.0 / (0.04 * RATE));
+                let hz = pitch::hz_of(note + (t * TAU * 5.5).sin() * 0.2);
+                phase = (phase + hz / RATE).fract();
+                let pulse = if phase < 0.08 { 1.0 } else { -0.087 };
+                (f[0].process(pulse) + f[1].process(pulse) * 0.6 + f[2].process(pulse) * 0.3) * 0.25
+            })
+            .collect()
+    }
+
+    /// Mittlerer Abstand (Cent) der erkannten Tonhöhe zum nächsten Halbton,
+    /// nach der ersten Sekunde.
+    fn off_key(signal: &[f32]) -> f32 {
+        let mut d = PitchDetector::new();
+        let mut cents = Vec::new();
+        for (i, &x) in signal.iter().enumerate() {
+            d.push(x);
+            if i > 48_000 && i % 240 == 0 {
+                if let Some(hz) = d.frequency() {
+                    let n = note_of(hz);
+                    cents.push((n - n.round()).abs() * 100.0);
+                }
+            }
+        }
+        cents.iter().sum::<f32>() / cents.len() as f32
+    }
+
+    fn tuned(speed: f32, input: &[f32]) -> Vec<f32> {
+        let mut p = VoiceParams::default();
+        p.autotune.enabled = true;
+        p.autotune.speed = speed;
+        let meters = VoiceMeters::default();
+        let mut chain = VoiceChain::new();
+        chain.configure(&p);
+        let mut out = Vec::new();
+        for block in input.chunks(480) {
+            let mut b = block.to_vec();
+            chain.process(&mut b, &meters);
+            out.extend(b);
+        }
+        out
+    }
+
+    #[test]
+    fn autotune_holds_a_wavering_voice_on_the_note() {
+        // Verstimmte Töne mit Vibrato: im Schnitt fast 30 Cent daneben.
+        // Langsamer heißt weichere Notenwechsel, gehaltene Töne sitzen trotzdem.
+        let input = melody(48_000 * 4);
+        let before = off_key(&input);
+        for (speed, limit) in [(0.0, 7.0), (0.3, 8.0), (0.55, 14.0)] {
+            let after = off_key(&tuned(speed, &input));
+            assert!(after < limit, "speed {speed}: {before} → {after} Cent");
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn measure_autotune() {
+        let input = melody(48_000 * 4);
+        println!("ungestimmt {:.1} Cent", off_key(&input));
+        for speed in [0.0, 0.3, 0.55, 1.0] {
+            println!("speed {speed}: {:.1} Cent", off_key(&tuned(speed, &input)));
+        }
     }
 
     #[test]
