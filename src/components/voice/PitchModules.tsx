@@ -77,11 +77,12 @@ function PitchDisplay({ semitones, formant, pitchHz }: { semitones: number; form
   );
 }
 
-export function PitchModule() {
+export function PitchModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.pitch);
   const pitchHz = usePitch();
   return (
     <Module
+      highlight={highlight}
       title={t("voice.pitch")}
       help="pitch"
       enabled={p.enabled}
@@ -256,10 +257,11 @@ function Keyboard({
   );
 }
 
-export function AutotuneModule() {
+export function AutotuneModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.autotune);
   return (
     <Module
+      highlight={highlight}
       title={t("voice.autotune")}
       help="autotune"
       enabled={p.enabled}
@@ -323,7 +325,7 @@ function HarmonyDisplay({ voices, enabled }: { voices: { enabled: boolean; semit
   );
 }
 
-export function HarmonizerModule() {
+export function HarmonizerModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.harmonizer);
   const setVoice = (index: 0 | 1, patch: Partial<(typeof p.voices)[0]>) => {
     const voices = [...p.voices] as typeof p.voices;
@@ -332,6 +334,7 @@ export function HarmonizerModule() {
   };
   return (
     <Module
+      highlight={highlight}
       title={t("voice.harmonizer")}
       help="harmonizer"
       enabled={p.enabled}
@@ -386,12 +389,13 @@ export function HarmonizerModule() {
 
 const CHORDS: Chord[] = ["single", "fifth", "major", "minor"];
 
-export function VocoderModule() {
+export function VocoderModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.vocoder);
   const bands = useStore((s) => (s.info ? s.meters?.effects.vocoder : undefined));
   const values = (bands ?? Array(16).fill(0)).map((v) => Math.min(1, Math.sqrt(v * 6)));
   return (
     <Module
+      highlight={highlight}
       title={t("voice.vocoder")}
       help="vocoder"
       enabled={p.enabled}

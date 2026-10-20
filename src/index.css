@@ -248,6 +248,21 @@
   }
 }
 
+/* Geräte (Module in rack.tsx): ist der Platz breit und flach, rücken die
+   Regler neben die Anzeige statt darunter. */
+.device-body {
+  container-type: size;
+}
+
+@container (min-aspect-ratio: 1.6) {
+  .device-layout {
+    flex-direction: row;
+  }
+  .device-controls {
+    width: min(42%, 260px);
+  }
+}
+
 /* Seitenwechsel als Überblendung; --dir gibt die Richtung (siehe Crossfade). */
 @keyframes page-in {
   from {

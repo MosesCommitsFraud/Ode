@@ -98,11 +98,12 @@ function CharacterDisplay({ mode, amount, tone, mix }: { mode: CharacterMode; am
   );
 }
 
-export function CharacterModule() {
+export function CharacterModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.character);
   const tone = toneOf(p.mode, p.tone);
   return (
     <Module
+      highlight={highlight}
       title={t("voice.character")}
       help="character"
       enabled={p.enabled}
@@ -194,10 +195,11 @@ function ModulationDisplay({ mode, rateHz, depth }: { mode: ModulationMode; rate
   );
 }
 
-export function ModulationModule() {
+export function ModulationModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.modulation);
   return (
     <Module
+      highlight={highlight}
       title={t("voice.modulation")}
       help="modulation"
       enabled={p.enabled}
@@ -399,10 +401,11 @@ export function ReverbControls({
   );
 }
 
-export function EchoModule() {
+export function EchoModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.echo);
   return (
     <Module
+      highlight={highlight}
       title={t("voice.echo")}
       help="echo"
       enabled={p.enabled}
@@ -414,10 +417,11 @@ export function EchoModule() {
   );
 }
 
-export function ReverbModule() {
+export function ReverbModule({ highlight }: { highlight?: boolean }) {
   const p = useStore((s) => s.effects.voice.reverb);
   return (
     <Module
+      highlight={highlight}
       title={t("voice.reverb")}
       help="reverb"
       enabled={p.enabled}

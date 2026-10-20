@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PluginsPanel } from "~/components/effects/PluginsPanel";
-import { Bench, DragArea, EqDisplay, GridLine, Handle, HandleLine, Module, PLOT, Tick, freqX } from "~/components/effects/rack";
+import { Bench, DeviceGrid, DragArea, EQ_RANGE, EqDisplay, GridLine, Handle, HandleLine, Module, PLOT_Y, Tick, YAxis, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
 import { PushButton, PushButtons } from "~/components/ui/hardware";
 import { Knob } from "~/components/ui/knob";
@@ -10,9 +10,10 @@ import { t } from "~/lib/i18n";
 import { plugins, usePlugins } from "~/lib/plugins";
 
 /* Die Aufbereitung des Mikrofons wie in einem modernen Plugin: links die
-   Kette als Liste mit Schaltern, rechts das gewählte Gerät mit großer
-   Anzeige. Schwellen, Grenzen und EQ-Punkte lassen sich direkt in der
-   Anzeige ziehen; die Drehregler darunter machen dasselbe. */
+   Kette als Liste mit Schaltern, rechts die Geräte der gewählten Gruppe im
+   Raster. Schwellen, Grenzen und EQ-Punkte lassen sich direkt in der Anzeige
+   ziehen; jede Anzeige reicht genau über den Regelweg und sagt am Griff, was
+   er einstellt. */
 
 const db = (v: number) => `${formatDb(v)} dB`;
 const kHz = (v: number) => `${(v / 1000).toFixed(1)} kHz`;
@@ -41,71 +42,87 @@ function useHistory(value: number) {
   return history;
 }
 
-const FLOOR = -70;
-/** Pegel in dB auf 0–1 der Anzeige. */
-const levelPos = (v: number) => clamp((v - FLOOR) / -FLOOR, 0, 1);
-const posLevel = (p: number) => FLOOR + p * -FLOOR;
-
-/** Mikrofonpegel, solange die Engine läuft. */
+/** Mikrofonpegel in dB, solange die Engine läuft. */
 function useMicDb() {
   const peak = useStore((s) => (s.info ? (s.meters?.channels.find((c) => c.id === "mic")?.peak ?? 0) : 0));
-  return gainToDb(peak, FLOOR);
+  return gainToDb(peak, -90);
+}
+
+/** Runde Skalenwerte in einem Bereich, alle `step` dB. */
+function dbTicks(lo: number, hi: number, step: number) {
+  const ticks: number[] = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(v);
+  return ticks;
 }
 
 /**
  * Pegelverlauf als feine Balken mit einer ziehbaren Linie (Schwelle, Ziel,
- * Obergrenze). `above`: wie Balken über der Linie aussehen.
+ * Obergrenze). Die Anzeige reicht über `axis` (dB), so weit wie der Regelweg
+ * plus etwas Luft; links die dB-Skala.
  */
 function LevelDisplay({
-  lineDb,
-  onLine,
+  label,
+  value,
+  onChange,
   min,
   max,
+  axis,
   above = "color",
-  title,
+  reductionDb,
+  reductionMax = 12,
 }: {
-  lineDb: number;
-  onLine: (db: number) => void;
+  label: string;
+  value: number;
+  onChange: (db: number) => void;
   min: number;
   max: number;
+  axis: [number, number];
   above?: "color" | "muted";
-  title: string;
+  reductionDb?: number;
+  reductionMax?: number;
 }) {
-  const history = useHistory(levelPos(useMicDb()));
-  const line = levelPos(lineDb);
+  const [lo, hi] = axis;
+  const pos = (v: number) => clamp((v - lo) / (hi - lo), 0, 1);
+  const history = useHistory(pos(useMicDb()));
+  const line = pos(value);
+  const step = hi - lo > 40 ? 20 : 10;
   return (
-    <div className="absolute inset-3">
-      <Bars
-        values={history}
-        align="bottom"
-        stretch
-        bar={3}
-        gap={2}
-        min={0.01}
-        color={(_, v, el) => ((v > line) === (above === "color") ? [cssColor(el, "--ch-mic"), 0.9] : [cssColor(el, "--muted-foreground"), 0.28])}
-        deps={[history, line]}
-        className="size-full"
-      />
-      <HandleLine y={(1 - line) * 100} />
-      <DragArea title={title} className="inset-0 cursor-ns-resize" onDrag={(_, y) => onLine(clamp(Math.round(posLevel(y)), min, max))} />
-    </div>
+    <>
+      <YAxis bottom={3} ticks={dbTicks(lo, hi, step).map((v) => [(1 - pos(v)) * 100, String(v)])} />
+      <div className={reductionDb !== undefined ? "absolute top-3 right-8 bottom-3 left-10" : "absolute top-3 right-3 bottom-3 left-10"}>
+        <Bars
+          values={history}
+          align="bottom"
+          stretch
+          bar={3}
+          gap={2}
+          min={0.01}
+          color={(_, v, el) => ((v > line) === (above === "color") ? [cssColor(el, "--ch-mic"), 0.9] : [cssColor(el, "--muted-foreground"), 0.28])}
+          deps={[history, line]}
+          className="size-full"
+        />
+        <HandleLine y={(1 - line) * 100} label={`${label} ${db(value)}`} />
+        <DragArea title={label} className="inset-0 cursor-ns-resize" onDrag={(_, y) => onChange(clamp(Math.round(lo + y * (hi - lo)), min, max))} />
+      </div>
+      {reductionDb !== undefined && <ReductionBar db={reductionDb} max={reductionMax} />}
+    </>
   );
 }
 
 /** Wie stark ein Gerät gerade absenkt: Balken am rechten Rand, wächst von oben. */
 function ReductionBar({ db: level, max }: { db: number; max: number }) {
   return (
-    <div className="pointer-events-none absolute top-3 right-3 bottom-3 w-2 overflow-hidden rounded-full bg-[var(--meter-track)]">
+    <div title={t("effects.reduction")} className="absolute top-3 right-3 bottom-3 w-2 overflow-hidden rounded-full bg-[var(--meter-track)]">
       <div className="w-full rounded-full bg-[var(--ch-mic)] transition-[height] duration-100" style={{ height: `${clamp(-level / max, 0, 1) * 100}%` }} />
     </div>
   );
 }
 
-/** Verlauf der Spracherkennung: Sprache in Farbe, alles andere grau. */
+/** Verlauf der Spracherkennung: Sprache grün, alles andere grau. */
 function VoiceDisplay({ voice }: { voice: number }) {
   const history = useHistory(voice);
   return (
-    <div className="absolute inset-3">
+    <div className="absolute inset-3 bottom-6">
       <Bars
         values={history}
         align="center"
@@ -117,45 +134,53 @@ function VoiceDisplay({ voice }: { voice: number }) {
         deps={[history]}
         className="size-full"
       />
+      <div className="absolute inset-x-0 -bottom-5 flex justify-between font-mono text-[9px] text-muted-foreground">
+        <span>−8 s</span>
+        <span className="flex items-center gap-1">
+          <span className="size-1.5 rounded-full bg-[var(--success)]" /> {t("effects.voice")}
+        </span>
+        <span>{t("effects.now")}</span>
+      </div>
     </div>
   );
 }
 
 const EQ_BANDS = [
-  { key: "lowDb", f: 120 },
-  { key: "midDb", f: 2500 },
-  { key: "highDb", f: 8000 },
+  { key: "lowDb", f: 120, label: "effects.bass" },
+  { key: "midDb", f: 2500, label: "effects.presence" },
+  { key: "highDb", f: 8000, label: "effects.treble" },
 ] as const;
 
 /** EQ-Kurve mit drei Punkten zum Ziehen: hoch hebt an, runter senkt ab. */
 function EqEditor() {
   const eq = useStore((s) => s.effects.eq);
-  const dy = (v: number) => 50 - (v / 15) * 50;
+  const dy = (v: number) => 50 - (v / EQ_RANGE) * 50;
   return (
     <>
       <EqDisplay low={eq.lowDb} mid={eq.midDb} high={eq.highDb} />
-      <div className="pointer-events-none absolute top-3 right-3 bottom-6 left-3">
+      <div className={PLOT_Y}>
         {EQ_BANDS.map((b) => (
-          <Handle key={b.key} x={freqX(b.f)} y={dy(eq[b.key])} />
+          <Handle key={b.key} x={freqX(b.f)} y={dy(eq[b.key])} label={`${formatDb(eq[b.key])} dB`} />
         ))}
+        <DragArea
+          className="inset-0 cursor-ns-resize"
+          onDrag={(x, y) => {
+            const band = EQ_BANDS.reduce((best, b) => (Math.abs(freqX(b.f) / 100 - x) < Math.abs(freqX(best.f) / 100 - x) ? b : best));
+            actions.setEffect("eq", { [band.key]: clamp(Math.round((y - 0.5) * 2 * EQ_RANGE * 2) / 2, -12, 12) });
+          }}
+        />
       </div>
-      <DragArea
-        className="top-3 right-3 bottom-6 left-3 cursor-ns-resize"
-        onDrag={(x, y) => {
-          const band = EQ_BANDS.reduce((best, b) => (Math.abs(freqX(b.f) / 100 - x) < Math.abs(freqX(best.f) / 100 - x) ? b : best));
-          actions.setEffect("eq", { [band.key]: clamp(Math.round((y - 0.5) * 30 * 2) / 2, -12, 12) });
-        }}
-      />
     </>
   );
 }
 
-const IN_MIN = -60;
+const IN_MIN = -50;
 
 /**
- * Kennlinie des Kompressors: waagrecht der Eingang, senkrecht der Ausgang.
- * Bis zur Schwelle geradeaus, darüber flacher. Der Punkt an der Schwelle
- * lässt sich ziehen, der Ball zeigt den aktuellen Pegel.
+ * Kennlinie des Kompressors: waagrecht was hineingeht, senkrecht was
+ * herauskommt. Bis zur Schwelle geradeaus, darüber flacher. Der Punkt an der
+ * Schwelle lässt sich über die ganze Breite ziehen, der Ball zeigt den
+ * aktuellen Pegel.
  */
 function CompressorDisplay({ thresholdDb, ratio, reductionDb }: { thresholdDb: number; ratio: number; reductionDb: number }) {
   const input = useMicDb();
@@ -164,19 +189,22 @@ function CompressorDisplay({ thresholdDb, ratio, reductionDb }: { thresholdDb: n
   const y = (o: number) => 100 - ((o - IN_MIN) / -IN_MIN) * 100;
   const points = [IN_MIN, thresholdDb, 0].map((i) => `${x(i)},${y(out(i))}`).join(" ");
   const now = clamp(input, IN_MIN, 0);
+  const ticks = [-40, -20];
   return (
     <>
-      <div className="absolute top-3 right-8 bottom-3 left-3">
+      <YAxis ticks={ticks.map((v) => [y(v), String(v)])} />
+      <div className="absolute top-3 right-8 bottom-6 left-10">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
-          {[-48, -36, -24, -12].map((v) => (
+          {ticks.map((v) => (
             <GridLine key={v} x={x(v)} />
           ))}
-          {[-48, -36, -24, -12].map((v) => (
+          {ticks.map((v) => (
             <GridLine key={`y${v}`} y={y(v)} />
           ))}
           <line x1="0" y1="100" x2="100" y2="0" stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
           <polyline points={points} fill="none" stroke="var(--ch-mic)" strokeWidth="2.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         </svg>
+        <span className="pointer-events-none absolute top-0 left-1 font-mono text-[9px] text-muted-foreground">{t("effects.output")} ↑</span>
         {input > IN_MIN && (
           <span
             aria-hidden
@@ -184,73 +212,81 @@ function CompressorDisplay({ thresholdDb, ratio, reductionDb }: { thresholdDb: n
             style={{ left: `${x(now)}%`, top: `${y(out(now))}%` }}
           />
         )}
-        <Handle x={x(thresholdDb)} y={y(thresholdDb)} />
+        <Handle x={x(thresholdDb)} y={y(thresholdDb)} label={`${t("effects.threshold")} ${db(thresholdDb)}`} />
         <DragArea
           className="inset-0 cursor-ew-resize"
           onDrag={(px) => actions.setEffect("compressor", { thresholdDb: clamp(Math.round(IN_MIN + px * -IN_MIN), -50, 0) })}
         />
+      </div>
+      <div className="pointer-events-none absolute right-8 bottom-0 left-10 h-6">
+        {ticks.map((v) => (
+          <Tick key={v} axis="x" at={x(v)}>
+            {v}
+          </Tick>
+        ))}
+        <span className="absolute right-0 bottom-1.5 font-mono text-[9px] text-muted-foreground">{t("effects.input")} →</span>
       </div>
       <ReductionBar db={reductionDb} max={18} />
     </>
   );
 }
 
-/** Band ab der Frequenz als Fläche; der Punkt setzt Frequenz (waagrecht) und Höhe (senkrecht). */
+/**
+ * Band ab einer Frequenz als Fläche über einer eigenen Frequenzachse
+ * `range` (logarithmisch); der Punkt setzt Frequenz (waagrecht) und Höhe
+ * (senkrecht, 0–1).
+ */
 function BandDisplay({
+  range,
   frequencyHz,
   level,
+  label,
+  yTicks,
   onDrag,
   reductionDb,
-  fill,
+  filled,
 }: {
+  range: [number, number];
   frequencyHz: number;
-  /** Höhe des Punkts 0–1. */
   level: number;
-  onDrag: (x: number, y: number) => void;
+  label: string;
+  yTicks: [number, string][];
+  onDrag: (frequencyHz: number, level: number) => void;
   reductionDb?: number;
-  /** Fläche ab der Frequenz bis zu dieser Höhe (0–1), z. B. die Anhebung. */
-  fill?: number;
+  /** Fläche nur bis zur Höhe des Punkts, z. B. eine Anhebung. */
+  filled?: boolean;
 }) {
-  const x = freqX(frequencyHz);
+  const [lo, hi] = range;
+  const fx = (f: number) => (Math.log(f / lo) / Math.log(hi / lo)) * 100;
+  const x = fx(frequencyHz);
   const top = (1 - level) * 100;
+  const ticks = [2000, 4000, 8000].filter((f) => f > lo * 1.05 && f < hi * 0.97);
   return (
     <>
-      <div className={reductionDb !== undefined ? "absolute top-3 right-8 bottom-6 left-3" : PLOT}>
+      <YAxis ticks={yTicks.map(([p, text]) => [(1 - p) * 100, text])} />
+      <div className={reductionDb !== undefined ? "absolute top-3 right-8 bottom-6 left-10" : PLOT_Y}>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
-          {[100, 1000, 10000].map((f) => (
-            <GridLine key={f} x={freqX(f)} />
+          {ticks.map((f) => (
+            <GridLine key={f} x={fx(f)} />
           ))}
-          <rect
-            x={x}
-            y={fill !== undefined ? (1 - fill) * 100 : 0}
-            width={100 - x}
-            height={fill !== undefined ? fill * 100 : 100}
-            fill="var(--ch-mic)"
-            fillOpacity=".16"
-          />
+          <rect x={x} y={filled ? top : 0} width={100 - x} height={filled ? 100 - top : 100} fill="var(--ch-mic)" fillOpacity=".16" />
           <line x1={x} x2={x} y1="0" y2="100" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-          {fill === undefined && (
-            <line x1={x} x2="100" y1={top} y2={top} stroke="var(--ch-mic)" strokeDasharray="4 3" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-          )}
+          <line x1={x} x2="100" y1={top} y2={top} stroke="var(--ch-mic)" strokeDasharray={filled ? undefined : "4 3"} strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
-        <Handle x={x} y={fill !== undefined ? (1 - fill) * 100 : top} />
-        <DragArea className="inset-0 cursor-move" onDrag={onDrag} />
+        <Handle x={x} y={top} label={label} />
+        <DragArea className="inset-0 cursor-move" onDrag={(px, py) => onDrag(lo * Math.pow(hi / lo, px), py)} />
       </div>
-      <div className="pointer-events-none absolute right-8 bottom-0 left-3 h-6">
-        <Tick axis="x" at={freqX(120)}>
-          {t("effects.bass")}
-        </Tick>
-        <Tick axis="x" at={freqX(9000)}>
-          {t("effects.treble")}
-        </Tick>
+      <div className={reductionDb !== undefined ? "pointer-events-none absolute right-8 bottom-0 left-10 h-6" : "pointer-events-none absolute right-3 bottom-0 left-10 h-6"}>
+        {ticks.map((f) => (
+          <Tick key={f} axis="x" at={fx(f)}>
+            {f / 1000} kHz
+          </Tick>
+        ))}
       </div>
       {reductionDb !== undefined && <ReductionBar db={reductionDb} max={18} />}
     </>
   );
 }
-
-/** Frequenz aus der waagrechten Position 0–1 (20 Hz … 20 kHz, logarithmisch). */
-const posFreq = (x: number) => 20 * Math.pow(1000, x);
 
 const RATIOS: { value: number; label: string }[] = [
   { value: 2, label: "effects.ratioSoft" },
@@ -258,7 +294,7 @@ const RATIOS: { value: number; label: string }[] = [
   { value: 8, label: "effects.ratioHard" },
 ];
 
-function Device({ id }: { id: string }) {
+function Device({ id, highlight }: { id: string; highlight: boolean }) {
   const fx = useStore((s) => s.effects);
   const live = useStore((s) => s.meters?.effects);
   const running = useStore((s) => s.info !== null);
@@ -270,15 +306,17 @@ function Device({ id }: { id: string }) {
         <Module
           title={t("effects.gate")}
           help="gate"
+          highlight={highlight}
           enabled={fx.gate.enabled}
           onToggle={(enabled) => actions.setEffect("gate", { enabled })}
           display={
             <LevelDisplay
-              title={t("effects.threshold")}
-              lineDb={fx.gate.thresholdDb}
+              label={t("effects.threshold")}
+              value={fx.gate.thresholdDb}
               min={-70}
               max={-10}
-              onLine={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
+              axis={[-70, -10]}
+              onChange={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
             />
           }
         >
@@ -289,7 +327,6 @@ function Device({ id }: { id: string }) {
             max={-10}
             step={1}
             reset={-50}
-            size="lg"
             format={db}
             onChange={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
           />
@@ -300,6 +337,7 @@ function Device({ id }: { id: string }) {
         <Module
           title={t("effects.denoise")}
           help="denoise"
+          highlight={highlight}
           enabled={fx.denoise.enabled}
           onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
           display={<VoiceDisplay voice={running && fx.denoise.enabled ? (live?.voice ?? 0) : 0} />}
@@ -308,26 +346,26 @@ function Device({ id }: { id: string }) {
       );
     case "eq":
       return (
-        <Module title={t("effects.eq")} help="eq" enabled={fx.eq.enabled} onToggle={(enabled) => actions.setEffect("eq", { enabled })} display={<EqEditor />}>
-          {(
-            [
-              ["lowDb", t("effects.bass")],
-              ["midDb", t("effects.presence")],
-              ["highDb", t("effects.treble")],
-            ] as const
-          ).map(([key, label]) => (
+        <Module
+          title={t("effects.eq")}
+          help="eq"
+          highlight={highlight}
+          enabled={fx.eq.enabled}
+          onToggle={(enabled) => actions.setEffect("eq", { enabled })}
+          display={<EqEditor />}
+        >
+          {EQ_BANDS.map((b) => (
             <Knob
-              key={key}
-              label={label}
-              value={fx.eq[key]}
+              key={b.key}
+              label={t(b.label)}
+              value={fx.eq[b.key]}
               min={-12}
               max={12}
               step={0.5}
               reset={0}
               bipolar
-              size="lg"
               format={db}
-              onChange={(v) => actions.setEffect("eq", { [key]: v })}
+              onChange={(v) => actions.setEffect("eq", { [b.key]: v })}
             />
           ))}
         </Module>
@@ -337,16 +375,18 @@ function Device({ id }: { id: string }) {
         <Module
           title={t("effects.agc")}
           help="agc"
+          highlight={highlight}
           enabled={fx.agc.enabled}
           onToggle={(enabled) => actions.setEffect("agc", { enabled })}
           display={
             <LevelDisplay
-              title={t("effects.target")}
-              lineDb={fx.agc.targetDb}
+              label={t("effects.target")}
+              value={fx.agc.targetDb}
               min={-30}
               max={-10}
+              axis={[-34, -6]}
               above="muted"
-              onLine={(targetDb) => actions.setEffect("agc", { targetDb })}
+              onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
             />
           }
         >
@@ -357,7 +397,6 @@ function Device({ id }: { id: string }) {
             max={-10}
             step={1}
             reset={-20}
-            size="lg"
             format={db}
             onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
           />
@@ -368,7 +407,6 @@ function Device({ id }: { id: string }) {
             max={30}
             step={1}
             reset={18}
-            size="lg"
             format={(v) => `+${v} dB`}
             onChange={(maxGainDb) => actions.setEffect("agc", { maxGainDb })}
           />
@@ -379,6 +417,7 @@ function Device({ id }: { id: string }) {
         <Module
           title={t("effects.compressor")}
           help="compressor"
+          highlight={highlight}
           enabled={fx.compressor.enabled}
           onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
           display={
@@ -388,14 +427,15 @@ function Device({ id }: { id: string }) {
               reductionDb={fx.compressor.enabled ? reduction("compressorDb") : 0}
             />
           }
-          keys={
+        >
             <PushButtons
+              className="w-44 self-center"
+              label={t("effects.ratio")}
               value={RATIOS.reduce((best, r) => (Math.abs(r.value - fx.compressor.ratio) < Math.abs(best - fx.compressor.ratio) ? r.value : best), 4)}
               options={RATIOS.map((r) => ({ value: r.value, label: t(r.label), title: `${r.value}:1` }))}
               onChange={(ratio) => actions.setEffect("compressor", { ratio })}
             />
-          }
-        >
+
           <Knob
             label={t("effects.threshold")}
             value={fx.compressor.thresholdDb}
@@ -403,7 +443,6 @@ function Device({ id }: { id: string }) {
             max={0}
             step={1}
             reset={-20}
-            size="lg"
             format={db}
             onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
           />
@@ -414,7 +453,6 @@ function Device({ id }: { id: string }) {
             max={18}
             step={0.5}
             reset={4}
-            size="lg"
             format={(v) => `+${v.toFixed(1)} dB`}
             onChange={(makeupDb) => actions.setEffect("compressor", { makeupDb })}
           />
@@ -425,17 +463,25 @@ function Device({ id }: { id: string }) {
         <Module
           title={t("effects.deEsser")}
           help="deEsser"
+          highlight={highlight}
           enabled={fx.deEsser.enabled}
           onToggle={(enabled) => actions.setEffect("deEsser", { enabled })}
           display={
             <BandDisplay
+              range={[3000, 10000]}
               frequencyHz={fx.deEsser.frequencyHz}
               level={(fx.deEsser.thresholdDb + 60) / 60}
+              label={`${kHz(fx.deEsser.frequencyHz)} · ${db(fx.deEsser.thresholdDb)}`}
+              yTicks={[
+                [0, "−60"],
+                [0.5, "−30"],
+                [1, "0"],
+              ]}
               reductionDb={fx.deEsser.enabled ? reduction("deEsserDb") : 0}
-              onDrag={(x, y) =>
+              onDrag={(f, level) =>
                 actions.setEffect("deEsser", {
-                  frequencyHz: clamp(Math.round(posFreq(x) / 100) * 100, 3000, 10000),
-                  thresholdDb: clamp(Math.round(y * 60 - 60), -60, 0),
+                  frequencyHz: clamp(Math.round(f / 100) * 100, 3000, 10000),
+                  thresholdDb: clamp(Math.round(level * 60 - 60), -60, 0),
                 })
               }
             />
@@ -448,7 +494,6 @@ function Device({ id }: { id: string }) {
             max={0}
             step={1}
             reset={-30}
-            size="lg"
             format={db}
             onChange={(thresholdDb) => actions.setEffect("deEsser", { thresholdDb })}
           />
@@ -459,7 +504,6 @@ function Device({ id }: { id: string }) {
             max={10000}
             step={100}
             reset={6000}
-            size="lg"
             format={kHz}
             onChange={(frequencyHz) => actions.setEffect("deEsser", { frequencyHz })}
           />
@@ -470,17 +514,25 @@ function Device({ id }: { id: string }) {
         <Module
           title={t("effects.exciter")}
           help="exciter"
+          highlight={highlight}
           enabled={fx.exciter.enabled}
           onToggle={(enabled) => actions.setEffect("exciter", { enabled })}
           display={
             <BandDisplay
+              range={[1000, 8000]}
               frequencyHz={fx.exciter.frequencyHz}
               level={fx.exciter.amount}
-              fill={fx.exciter.amount * 0.9}
-              onDrag={(x, y) =>
+              filled
+              label={`${kHz(fx.exciter.frequencyHz)} · ${Math.round(fx.exciter.amount * 100)} %`}
+              yTicks={[
+                [0, "0 %"],
+                [0.5, "50 %"],
+                [1, "100 %"],
+              ]}
+              onDrag={(f, level) =>
                 actions.setEffect("exciter", {
-                  frequencyHz: clamp(Math.round(posFreq(x) / 100) * 100, 1000, 8000),
-                  amount: clamp(Math.round((y / 0.9) * 100) / 100, 0, 1),
+                  frequencyHz: clamp(Math.round(f / 100) * 100, 1000, 8000),
+                  amount: clamp(Math.round(level * 100) / 100, 0, 1),
                 })
               }
             />
@@ -493,7 +545,6 @@ function Device({ id }: { id: string }) {
             max={8000}
             step={100}
             reset={3000}
-            size="lg"
             format={kHz}
             onChange={(frequencyHz) => actions.setEffect("exciter", { frequencyHz })}
           />
@@ -504,7 +555,6 @@ function Device({ id }: { id: string }) {
             max={1}
             step={0.01}
             reset={0.3}
-            size="lg"
             format={(v) => `${Math.round(v * 100)} %`}
             onChange={(amount) => actions.setEffect("exciter", { amount })}
           />
@@ -515,21 +565,19 @@ function Device({ id }: { id: string }) {
         <Module
           title={t("effects.limiter")}
           help="limiter"
+          highlight={highlight}
           enabled={fx.limiter.enabled}
           onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
           display={
-            <>
-              <div className="absolute inset-y-0 right-5 left-0">
-                <LevelDisplay
-                  title={t("effects.ceiling")}
-                  lineDb={fx.limiter.ceilingDb}
-                  min={-20}
-                  max={0}
-                  onLine={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
-                />
-              </div>
-              <ReductionBar db={fx.limiter.enabled ? reduction("limiterDb") : 0} max={12} />
-            </>
+            <LevelDisplay
+              label={t("effects.ceiling")}
+              value={fx.limiter.ceilingDb}
+              min={-20}
+              max={0}
+              axis={[-24, 0]}
+              reductionDb={fx.limiter.enabled ? reduction("limiterDb") : 0}
+              onChange={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
+            />
           }
         >
           <Knob
@@ -539,7 +587,6 @@ function Device({ id }: { id: string }) {
             max={0}
             step={0.5}
             reset={-3}
-            size="lg"
             format={db}
             onChange={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
           />
@@ -550,35 +597,48 @@ function Device({ id }: { id: string }) {
   }
 }
 
-const OPEN_KEY = "ode.effects-open";
-const DEVICES = ["gate", "denoise", "eq", "agc", "compressor", "deEsser", "exciter", "limiter"] as const;
+const GROUPS = {
+  clean: ["gate", "denoise", "eq", "agc"],
+  dynamics: ["compressor", "deEsser", "exciter", "limiter"],
+} as const;
+type DeviceId = (typeof GROUPS)[keyof typeof GROUPS][number];
+const KEY = "ode.effects-open";
 
-function readOpen() {
+function readOpen(): { group: string; device?: string } {
   try {
-    return localStorage.getItem(OPEN_KEY) ?? "gate";
+    return JSON.parse(localStorage.getItem(KEY) ?? "") as { group: string; device?: string };
   } catch {
-    return "gate";
+    return { group: "clean" };
   }
 }
 
 export function EffectsView() {
   const fx = useStore((s) => s.effects);
   const plugin = usePlugins((s) => s.status);
-  const [stored, setStored] = useState(readOpen);
-  const valid: string[] = [...DEVICES, ...(plugin.available ? ["plugin"] : [])];
-  const open = valid.includes(stored) ? stored : "gate";
+  const [state, setState] = useState(readOpen);
+  const [flash, setFlash] = useState<string | null>(null);
+  const valid = ["clean", "dynamics", ...(plugin.available ? ["plugin"] : [])];
+  const group = valid.includes(state.group) ? state.group : "clean";
   useEffect(() => {
     void plugins.refresh();
   }, []);
-  const select = (id: string) => {
-    setStored(id);
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), 900);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+
+  const open = (next: string, device?: string) => {
+    const value = { group: next, device };
+    setState(value);
+    if (device) setFlash(device);
     try {
-      localStorage.setItem(OPEN_KEY, id);
+      localStorage.setItem(KEY, JSON.stringify(value));
     } catch {
       // Nur Komfort.
     }
   };
-  const item = (id: (typeof DEVICES)[number]) => ({
+  const device = (id: DeviceId) => ({
     id,
     title: t(`effects.${id}`),
     enabled: fx[id].enabled,
@@ -588,33 +648,39 @@ export function EffectsView() {
   return (
     <div className="flex h-full flex-col overflow-hidden pt-3 pr-3 pb-3 pl-6">
       <Bench
-        open={open}
-        onOpen={select}
-        items={[
-          { group: t("effects.cleanPage") },
-          item("gate"),
-          item("denoise"),
-          item("eq"),
-          item("agc"),
-          { group: t("effects.dynamicsPage") },
-          item("compressor"),
-          item("deEsser"),
-          item("exciter"),
-          item("limiter"),
+        open={group}
+        focus={state.device}
+        onOpen={open}
+        groups={[
+          { id: "clean", title: t("effects.cleanPage"), devices: GROUPS.clean.map(device) },
+          { id: "dynamics", title: t("effects.dynamicsPage"), devices: GROUPS.dynamics.map(device) },
           ...(plugin.available
             ? [
-                { group: t("plugins.page") },
                 {
                   id: "plugin",
-                  title: plugin.loaded?.name ?? t("plugins.emptyTitle"),
-                  enabled: !!plugin.loaded && !plugin.bypass,
-                  onToggle: plugin.loaded ? (on: boolean) => void plugins.setBypass(!on) : undefined,
+                  title: t("plugins.page"),
+                  devices: [
+                    {
+                      id: "plugin",
+                      title: plugin.loaded?.name ?? t("plugins.emptyTitle"),
+                      enabled: !!plugin.loaded && !plugin.bypass,
+                      onToggle: plugin.loaded ? (on: boolean) => void plugins.setBypass(!on) : undefined,
+                    },
+                  ],
                 },
               ]
             : []),
         ]}
       >
-        <Device id={open} />
+        {group === "plugin" ? (
+          <PluginsPanel embedded />
+        ) : (
+          <DeviceGrid count={4}>
+            {GROUPS[group as keyof typeof GROUPS].map((id) => (
+              <Device key={id} id={id} highlight={flash === id} />
+            ))}
+          </DeviceGrid>
+        )}
       </Bench>
     </div>
   );

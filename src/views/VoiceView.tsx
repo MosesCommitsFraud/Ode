@@ -1,7 +1,7 @@
 import { ArrowCounterClockwise, FloppyDisk, X } from "@phosphor-icons/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HelpIcon } from "~/components/effects/HelpDrawer";
-import { Bench } from "~/components/effects/rack";
+import { Bench, DeviceGrid } from "~/components/effects/rack";
 import { ActionGroup, ActionPill } from "~/components/ui/pills";
 import { AutotuneModule, HarmonizerModule, PitchModule, VocoderModule } from "~/components/voice/PitchModules";
 import { PresetBank, PresetEditor } from "~/components/voice/Presets";
@@ -30,20 +30,24 @@ function newPreset(): Preset {
   };
 }
 
-const OPEN_KEY = "ode.voice-open";
-const DEVICES = ["pitch", "autotune", "harmonizer", "vocoder", "character", "modulation", "echo", "reverb"] as const;
-type DeviceId = (typeof DEVICES)[number];
+const KEY = "ode.voice-open";
+const GROUPS = {
+  pitch: ["pitch", "autotune", "harmonizer", "vocoder"],
+  sound: ["character", "modulation", "echo", "reverb"],
+} as const;
+type GroupId = keyof typeof GROUPS;
+type DeviceId = (typeof GROUPS)[GroupId][number];
 
-function readOpen(): DeviceId {
+function readOpen(): { group: GroupId; device?: string } {
   try {
-    const stored = localStorage.getItem(OPEN_KEY);
-    return DEVICES.find((d) => d === stored) ?? "pitch";
+    const value = JSON.parse(localStorage.getItem(KEY) ?? "") as { group: string; device?: string };
+    return { group: value.group === "sound" ? "sound" : "pitch", device: value.device };
   } catch {
-    return "pitch";
+    return { group: "pitch" };
   }
 }
 
-const MODULES: Record<DeviceId, () => React.ReactNode> = {
+const MODULES: Record<DeviceId, (props: { highlight?: boolean }) => React.ReactNode> = {
   pitch: PitchModule,
   autotune: AutotuneModule,
   harmonizer: HarmonizerModule,
@@ -55,16 +59,23 @@ const MODULES: Record<DeviceId, () => React.ReactNode> = {
 };
 
 export function VoiceView() {
-  const [open, setOpen] = useState<DeviceId>(readOpen);
+  const [state, setState] = useState(readOpen);
+  const [flash, setFlash] = useState<string | null>(null);
   const [editing, setEditing] = useState<Preset | null>(null);
   const voice = useStore((s) => s.effects.voice);
   const errors = useStore((s) => s.presetErrors);
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), 900);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
 
-  const select = (id: string) => {
-    const next = DEVICES.find((d) => d === id) ?? "pitch";
-    setOpen(next);
+  const open = (group: string, device?: string) => {
+    const value = { group: group === "sound" ? ("sound" as const) : ("pitch" as const), device };
+    setState(value);
+    if (device) setFlash(device);
     try {
-      localStorage.setItem(OPEN_KEY, next);
+      localStorage.setItem(KEY, JSON.stringify(value));
     } catch {
       // Nur Komfort.
     }
@@ -74,13 +85,12 @@ export function VoiceView() {
     await actions.savePreset(preset);
     setEditing(preset);
   };
-  const item = (id: DeviceId) => ({
+  const device = (id: DeviceId) => ({
     id,
     title: t(`voice.${id}`),
     enabled: voice[id].enabled,
     onToggle: (enabled: boolean) => actions.setVoice(id, { enabled }),
   });
-  const Device = MODULES[open];
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-hidden pt-3 pr-3 pb-3 pl-6">
@@ -113,22 +123,21 @@ export function VoiceView() {
       {/* Bei ausgeschalteter Stimme bleibt alles bedienbar, wirkt aber erst mit „Eigene“ oder einem Preset. */}
       <Bench
         className={cn("transition-opacity duration-300", !voice.enabled && "opacity-60")}
-        open={open}
-        onOpen={select}
-        items={[
-          { group: t("voice.pitchPage") },
-          item("pitch"),
-          item("autotune"),
-          item("harmonizer"),
-          item("vocoder"),
-          { group: t("voice.soundPage") },
-          item("character"),
-          item("modulation"),
-          item("echo"),
-          item("reverb"),
+        open={state.group}
+        focus={state.device}
+        onOpen={open}
+        groups={[
+          { id: "pitch", title: t("voice.pitchPage"), devices: GROUPS.pitch.map(device) },
+          { id: "sound", title: t("voice.soundPage"), devices: GROUPS.sound.map(device) },
         ]}
       >
-        <Device />
+        {/* Unter der Preset-Leiste ist es flach: vier Geräte nebeneinander statt 2 × 2. */}
+        <DeviceGrid count={4} columns={4}>
+          {GROUPS[state.group].map((id) => {
+            const Device = MODULES[id];
+            return <Device key={id} highlight={flash === id} />;
+          })}
+        </DeviceGrid>
       </Bench>
 
       {editing && <PresetEditor key={editing.id} preset={editing} onClose={() => setEditing(null)} />}

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Bench, Divider, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
+import { useEffect, useState } from "react";
+import { Bench, DeviceGrid, Divider, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
 import { Knob } from "~/components/ui/knob";
 import { EchoControls, ReverbControls } from "~/components/voice/SoundModules";
 import type { ChannelId } from "~/lib/engine";
@@ -43,10 +43,11 @@ function Sends({ bus }: { bus: "reverbSend" | "echoSend" }) {
   );
 }
 
-function ReverbBus() {
+function ReverbBus({ highlight }: { highlight: boolean }) {
   const p = useStore((s) => s.buses.reverb);
   return (
     <Module
+      highlight={highlight}
       title={t("mixer.reverbBus")}
       accent="var(--ch-out)"
       enabled={p.enabled}
@@ -60,10 +61,11 @@ function ReverbBus() {
   );
 }
 
-function EchoBus() {
+function EchoBus({ highlight }: { highlight: boolean }) {
   const p = useStore((s) => s.buses.echo);
   return (
     <Module
+      highlight={highlight}
       title={t("mixer.echoBus")}
       accent="var(--ch-out)"
       enabled={p.enabled}
@@ -77,11 +79,12 @@ function EchoBus() {
   );
 }
 
-function ChannelTone({ id }: { id: ChannelId }) {
+function ChannelTone({ id, highlight }: { id: ChannelId; highlight: boolean }) {
   const fx = useStore((s) => s.buses.channels[id]);
   const channel = CHANNELS.find((c) => c.id === id)!;
   return (
     <Module
+      highlight={highlight}
       title={`${channel.name()} · ${t("mixer.tone")}`}
       accent={channel.color}
       enabled={fx.eqEnabled}
@@ -142,28 +145,37 @@ function ChannelTone({ id }: { id: ChannelId }) {
   );
 }
 
-const OPEN_KEY = "ode.buses-open";
-const BUSES = ["reverb", "echo", "soundboard", "music", "live"] as const;
-type BusId = (typeof BUSES)[number];
+const KEY = "ode.buses-open";
+type GroupId = "buses" | "tone";
 
-function readOpen(): BusId {
+function readOpen(): { group: GroupId; device?: string } {
   try {
-    const stored = localStorage.getItem(OPEN_KEY);
-    return BUSES.find((b) => b === stored) ?? "reverb";
+    const value = JSON.parse(localStorage.getItem(KEY) ?? "") as { group: string; device?: string };
+    return { group: value.group === "tone" ? "tone" : "buses", device: value.device };
   } catch {
-    return "reverb";
+    return { group: "buses" };
   }
 }
 
-/** Effekt-Busse wie die Effekt-Seiten: links die Liste mit Schaltern, rechts das Gerät groß. */
+/**
+ * Effekt-Busse wie die Effekt-Seiten: links die Liste mit Schaltern, rechts
+ * die Geräte der Gruppe nebeneinander (Hall und Echo, oder die drei Klang-EQs).
+ */
 export function BusesPanel() {
   const buses = useStore((s) => s.buses);
-  const [open, setOpen] = useState<BusId>(readOpen);
-  const select = (id: string) => {
-    const next = BUSES.find((b) => b === id) ?? "reverb";
-    setOpen(next);
+  const [state, setState] = useState(readOpen);
+  const [flash, setFlash] = useState<string | null>(null);
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), 900);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+  const open = (group: string, device?: string) => {
+    const value = { group: group === "tone" ? ("tone" as const) : ("buses" as const), device };
+    setState(value);
+    if (device) setFlash(device);
     try {
-      localStorage.setItem(OPEN_KEY, next);
+      localStorage.setItem(KEY, JSON.stringify(value));
     } catch {
       // Nur Komfort.
     }
@@ -181,19 +193,33 @@ export function BusesPanel() {
 
   return (
     <Bench
-      open={open}
-      onOpen={select}
-      items={[
-        { group: t("mixer.buses") },
-        { id: "reverb", title: t("mixer.reverbBus"), accent: "var(--ch-out)", enabled: buses.reverb.enabled, onToggle: (enabled) => actions.setBus("reverb", { enabled }) },
-        { id: "echo", title: t("mixer.echoBus"), accent: "var(--ch-out)", enabled: buses.echo.enabled, onToggle: (enabled) => actions.setBus("echo", { enabled }) },
-        { group: t("mixer.tone") },
-        tone("soundboard"),
-        tone("music"),
-        tone("live"),
+      open={state.group}
+      focus={state.device}
+      onOpen={open}
+      groups={[
+        {
+          id: "buses",
+          title: t("mixer.buses"),
+          devices: [
+            { id: "reverb", title: t("mixer.reverbBus"), accent: "var(--ch-out)", enabled: buses.reverb.enabled, onToggle: (enabled: boolean) => actions.setBus("reverb", { enabled }) },
+            { id: "echo", title: t("mixer.echoBus"), accent: "var(--ch-out)", enabled: buses.echo.enabled, onToggle: (enabled: boolean) => actions.setBus("echo", { enabled }) },
+          ],
+        },
+        { id: "tone", title: t("mixer.tone"), devices: [tone("soundboard"), tone("music"), tone("live")] },
       ]}
     >
-      {open === "reverb" ? <ReverbBus /> : open === "echo" ? <EchoBus /> : <ChannelTone id={open} />}
+      {state.group === "buses" ? (
+        <DeviceGrid count={2}>
+          <ReverbBus highlight={flash === "reverb"} />
+          <EchoBus highlight={flash === "echo"} />
+        </DeviceGrid>
+      ) : (
+        <DeviceGrid count={3}>
+          {(["soundboard", "music", "live"] as const).map((id) => (
+            <ChannelTone key={id} id={id} highlight={flash === id} />
+          ))}
+        </DeviceGrid>
+      )}
     </Bench>
   );
 }

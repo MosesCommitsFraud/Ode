@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Toggle } from "~/components/ui/hardware";
-import { SectionLabel } from "~/components/ui/misc";
 import { HelpIcon } from "./HelpDrawer";
 import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
@@ -8,9 +7,10 @@ import { cn } from "~/lib/utils";
 /* Bausteine der Effekt-Seiten: Module als Karten mit Anzeige und Reglern. */
 
 /**
- * Ein Effekt als Gerät: Name mit Schalter rechts, eine große Anzeige, in der
- * sich oft direkt ziehen lässt, darunter wenige Regler. Aus ist das Gerät
- * blass und grau, an trägt es seine Farbe.
+ * Ein Effekt als Gerät: Name mit Schalter rechts, eine Anzeige, in der sich
+ * oft direkt ziehen lässt, und die Regler. Ist das Gerät breit und flach,
+ * stehen die Regler neben der Anzeige, sonst darunter. Aus ist es blass und
+ * grau, an trägt es seine Farbe.
  */
 export function Module({
   title,
@@ -22,38 +22,54 @@ export function Module({
   accent,
   help,
   keys,
+  highlight,
 }: {
   title: string;
   enabled: boolean;
   onToggle: (on: boolean) => void;
   display: ReactNode;
   className?: string;
-  /** Regler in einer Reihe unter der Anzeige. */
+  /** Regler. */
   children?: ReactNode;
   /** Farbe für Anzeige und Regler, z. B. die Kanalfarbe. */
   accent?: string;
   /** Werkzeug für die Erklärung hinter dem „?“ am Titel (siehe i18n/help.ts). */
   help?: string;
-  /** Wahltasten über den Reglern, z. B. Modus oder Tonart. */
+  /** Wahltasten, z. B. Modus oder Tonart. */
   keys?: ReactNode;
+  /** Kurz hervorheben, z. B. wenn es in der Liste gewählt wurde. */
+  highlight?: boolean;
 }) {
   // Ohne eigene Farbe bleibt --ch-mic geerbt; sich selbst zuweisen wäre ungültig.
   const style: Record<string, string> = accent ? { "--ch-mic": accent, "--ch": accent } : { "--ch": "var(--ch-mic)" };
   return (
-    <section style={style} className={cn("panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 rounded-2xl p-4", className)}>
+    <section
+      style={style}
+      className={cn(
+        "panel flex min-h-0 min-w-0 flex-col gap-2.5 rounded-2xl p-3.5 transition-shadow duration-500",
+        highlight && "shadow-[inset_0_0_0_2px_var(--ch-mic)]",
+        className,
+      )}
+    >
       <div className="flex h-7 shrink-0 items-center gap-1.5">
-        <h3 className={cn("min-w-0 truncate font-display text-xl font-semibold tracking-tight transition-colors duration-300", !enabled && "text-muted-foreground")}>
+        <h3 className={cn("min-w-0 truncate font-display text-lg font-semibold tracking-tight transition-colors duration-300", !enabled && "text-muted-foreground")}>
           {title}
         </h3>
         {help && <HelpIcon topic={help} />}
         <div className="flex-1" />
         <Toggle label={title} on={enabled} onChange={onToggle} />
       </div>
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-4 transition-[opacity,filter] duration-300", !enabled && "opacity-50 grayscale")}>
-        {/* Mulde: Rundung der Karte (16) minus Innenabstand, damit beide konzentrisch wirken. */}
-        <div className="well relative min-h-[110px] flex-1 overflow-hidden rounded-[10px]">{display}</div>
-        {keys && <div className="flex shrink-0 justify-center gap-3 [&>*]:max-w-md [&>*]:flex-1">{keys}</div>}
-        {children && <div className="flex shrink-0 flex-wrap items-start justify-center gap-x-7 gap-y-3 px-2">{children}</div>}
+      <div className={cn("device-body min-h-0 flex-1 transition-[opacity,filter] duration-300", !enabled && "opacity-50 grayscale")}>
+        <div className="device-layout flex size-full flex-col gap-3">
+          {/* Mulde: Rundung der Karte (16) minus Innenabstand, damit beide konzentrisch wirken. */}
+          <div className="well relative min-h-[72px] min-w-0 flex-1 overflow-hidden rounded-[10px]">{display}</div>
+          {(keys || children) && (
+            <div className="device-controls flex shrink-0 flex-col justify-center gap-3">
+              {keys && <div className="flex flex-col gap-2">{keys}</div>}
+              {children && <div className="flex flex-wrap items-start justify-center gap-x-2 gap-y-2">{children}</div>}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -74,19 +90,40 @@ export function Console({ children, className }: { children: ReactNode; classNam
   return <div className={cn("panel flex min-h-0 flex-1 divide-x divide-hairline rounded-2xl p-1.5", className)}>{children}</div>;
 }
 
-export type BenchItem = { id: string; title: string; enabled: boolean; onToggle?: (on: boolean) => void; accent?: string } | { group: string };
+export type BenchDevice = { id: string; title: string; enabled: boolean; onToggle?: (on: boolean) => void; accent?: string };
+export type BenchGroup = { id: string; title: string; devices: BenchDevice[] };
 
 /**
- * Links eine schmale Liste aller Geräte mit Schalter, rechts das gewählte
- * groß. Pfeiltasten wandern durch die Liste; der Wechsel blendet weich über.
+ * Links eine schmale Liste aller Geräte in Gruppen, jedes mit Schalter;
+ * rechts alle Geräte der gewählten Gruppe zusammen im Raster. Ein Klick auf
+ * ein Gerät öffnet seine Gruppe und hebt es kurz hervor; der Wechsel
+ * zwischen Gruppen blendet weich über.
  */
-export function Bench({ items, open, onOpen, children, className }: { items: BenchItem[]; open: string; onOpen: (id: string) => void; children: ReactNode; className?: string }) {
-  const ids = items.flatMap((i) => ("id" in i ? [i.id] : []));
+export function Bench({
+  groups,
+  open,
+  focus,
+  onOpen,
+  children,
+  className,
+}: {
+  groups: BenchGroup[];
+  /** Gewählte Gruppe. */
+  open: string;
+  /** Zuletzt angeklicktes Gerät. */
+  focus?: string;
+  onOpen: (group: string, device?: string) => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const order = groups.map((g) => g.id);
+  const devices = groups.flatMap((g) => g.devices.map((d) => ({ ...d, group: g.id })));
   const rows = useRef(new Map<string, HTMLElement>());
   const step = (delta: number) => {
-    const next = ids[(ids.indexOf(open) + delta + ids.length) % ids.length];
-    onOpen(next);
-    rows.current.get(next)?.focus();
+    const index = Math.max(0, devices.findIndex((d) => d.id === focus));
+    const next = devices[(index + delta + devices.length) % devices.length];
+    onOpen(next.group, next.id);
+    rows.current.get(next.id)?.focus();
   };
   return (
     <div className={cn("flex min-h-0 flex-1 gap-3", className)}>
@@ -100,38 +137,63 @@ export function Bench({ items, open, onOpen, children, className }: { items: Ben
           step(e.key === "ArrowDown" ? 1 : -1);
         }}
       >
-        {items.map((item) =>
-          "group" in item ? (
-            <SectionLabel key={`g-${item.group}`} className="px-2.5 pt-2.5 pb-1 first:pt-1.5">
-              {item.group}
-            </SectionLabel>
-          ) : (
-            <div
-              key={item.id}
-              ref={(el) => {
-                if (el) rows.current.set(item.id, el);
-                else rows.current.delete(item.id);
-              }}
-              role="option"
-              aria-selected={open === item.id}
-              tabIndex={open === item.id ? 0 : -1}
-              onClick={() => onOpen(item.id)}
-              style={item.accent ? ({ "--ch-mic": item.accent } as React.CSSProperties) : undefined}
+        {groups.map((g) => (
+          <div key={g.id} className="flex flex-col gap-px">
+            <button
+              type="button"
+              onClick={() => onOpen(g.id)}
               className={cn(
-                // Rundung der Liste (16) minus Innenabstand (6).
-                "flex h-9 shrink-0 cursor-default items-center gap-2 rounded-[10px] pr-2 pl-2.5 text-[13px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring",
-                open === item.id ? "bg-accent font-semibold text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                "cursor-default rounded-[10px] px-2.5 pt-2.5 pb-1 text-left font-mono text-3xs tracking-[0.16em] uppercase transition-colors",
+                open === g.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <span className={cn("min-w-0 flex-1 truncate transition-opacity", !item.enabled && open !== item.id && "opacity-70")}>{item.title}</span>
-              {item.onToggle && <Toggle size="sm" label={item.title} on={item.enabled} onChange={item.onToggle} />}
-            </div>
-          ),
-        )}
+              {g.title}
+            </button>
+            {g.devices.map((d) => (
+              <div
+                key={d.id}
+                ref={(el) => {
+                  if (el) rows.current.set(d.id, el);
+                  else rows.current.delete(d.id);
+                }}
+                role="option"
+                aria-selected={open === g.id}
+                tabIndex={focus === d.id ? 0 : -1}
+                onClick={() => onOpen(g.id, d.id)}
+                style={d.accent ? ({ "--ch-mic": d.accent } as React.CSSProperties) : undefined}
+                className={cn(
+                  // Rundung der Liste (16) minus Innenabstand (6).
+                  "flex h-9 shrink-0 cursor-default items-center gap-2 rounded-[10px] pr-2 pl-2.5 text-[13px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+                  open === g.id ? "bg-accent/70 text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  focus === d.id && open === g.id && "bg-accent font-semibold",
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate">{d.title}</span>
+                {d.onToggle && <Toggle size="sm" label={d.title} on={d.enabled} onChange={d.onToggle} />}
+              </div>
+            ))}
+          </div>
+        ))}
       </nav>
-      <Crossfade id={open} order={ids} axis="y">
+      <Crossfade id={open} order={order} axis="y">
         {children}
       </Crossfade>
+    </div>
+  );
+}
+
+/** Geräte einer Gruppe im Raster: zwei → nebeneinander, drei → drei Spalten, vier → 2 × 2 (oder `columns`). */
+export function DeviceGrid({ children, count, columns }: { children: ReactNode; count: number; columns?: number }) {
+  const cols = columns ?? (count === 4 ? 2 : count);
+  return (
+    <div
+      className="grid min-h-0 min-w-0 flex-1 gap-3"
+      style={{
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${Math.ceil(count / cols)}, minmax(0, 1fr))`,
+      }}
+    >
+      {children}
     </div>
   );
 }
@@ -196,23 +258,56 @@ export function DragArea({ onDrag, className, title }: { onDrag: (x: number, y: 
   );
 }
 
-/** Griff in einer Anzeige an Position x/y in Prozent (y von oben). */
-export function Handle({ x, y }: { x: number; y: number }) {
+/** Beschriftung an einem Griff: was er einstellt und der Wert; weicht am Rand zur anderen Seite aus. */
+function HandleTag({ x, y, children }: { x: number; y: number; children: ReactNode }) {
   return (
     <span
-      aria-hidden
-      className="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--ch-mic)] shadow-[0_1px_4px_oklch(0%_0_0/45%)] transition-[left,top] duration-75"
+      className={cn(
+        "pointer-events-none absolute z-10 rounded-md bg-panel-raised/95 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap text-foreground tabular-nums shadow-[0_1px_4px_oklch(0%_0_0/18%)]",
+        x > 50 ? "-translate-x-[calc(100%+12px)]" : "translate-x-3",
+        y < 18 ? "translate-y-1.5" : "-translate-y-[calc(100%+6px)]",
+      )}
       style={{ left: `${x}%`, top: `${y}%` }}
-    />
+    >
+      {children}
+    </span>
   );
 }
 
-/** Waagrechte Linie zum Ziehen, z. B. eine Schwelle; `y` in Prozent von oben. */
-export function HandleLine({ y }: { y: number }) {
+/** Griff in einer Anzeige an Position x/y in Prozent (y von oben), optional mit Beschriftung. */
+export function Handle({ x, y, label }: { x: number; y: number; label?: ReactNode }) {
+  return (
+    <>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--ch-mic)] shadow-[0_1px_4px_oklch(0%_0_0/45%)] transition-[left,top] duration-75"
+        style={{ left: `${x}%`, top: `${y}%` }}
+      />
+      {label && (
+        <HandleTag x={x} y={y}>
+          {label}
+        </HandleTag>
+      )}
+    </>
+  );
+}
+
+/** Waagrechte Linie zum Ziehen, z. B. eine Schwelle; `y` in Prozent von oben, Beschriftung links an der Linie. */
+export function HandleLine({ y, label }: { y: number; label?: ReactNode }) {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-x-0 transition-[top] duration-75" style={{ top: `${y}%` }}>
       <div className="border-t-2 border-dashed border-[var(--ch-mic)]" />
       <span className="absolute right-2 h-4 w-8 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--ch-mic)] shadow-[0_1px_4px_oklch(0%_0_0/45%)]" />
+      {label && (
+        <span
+          className={cn(
+            "absolute left-2 rounded-md bg-panel-raised/95 px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap tabular-nums shadow-[0_1px_4px_oklch(0%_0_0/18%)]",
+            y < 18 ? "top-1.5" : "-top-1.5 -translate-y-full",
+          )}
+        >
+          {label}
+        </span>
+      )}
     </div>
   );
 }
@@ -222,7 +317,7 @@ export function Tick({ at, axis, children }: { at: number; axis: "x" | "y"; chil
   return (
     <span
       className={cn(
-        "pointer-events-none absolute font-mono text-[9px] leading-none whitespace-nowrap text-muted-foreground/70 tabular-nums",
+        "pointer-events-none absolute font-mono text-[9px] leading-none whitespace-nowrap text-muted-foreground tabular-nums",
         axis === "x" ? "bottom-1.5 -translate-x-1/2" : "left-2 -translate-y-1/2",
       )}
       style={axis === "x" ? { left: `${at}%` } : { top: `${at}%` }}
@@ -234,6 +329,22 @@ export function Tick({ at, axis, children }: { at: number; axis: "x" | "y"; chil
 
 /** Zeichenfläche für Kurven mit Platz für die Achsen links und unten. */
 export const PLOT = "absolute top-3 right-3 bottom-6 left-3";
+
+/** Wie `PLOT`, mit Platz für eine beschriftete senkrechte Achse links. */
+export const PLOT_Y = "absolute top-3 right-3 bottom-6 left-10";
+
+/** Beschriftung der senkrechten Achse; `ticks` als [Position 0–100 von oben, Text]. */
+export function YAxis({ ticks, bottom = 6 }: { ticks: [number, ReactNode][]; bottom?: number }) {
+  return (
+    <div className="pointer-events-none absolute top-3 left-0 w-10" style={{ bottom: bottom * 4 }}>
+      {ticks.map(([at, text]) => (
+        <Tick key={at} axis="y" at={at}>
+          {text}
+        </Tick>
+      ))}
+    </div>
+  );
+}
 
 /** Gitterlinie im 0–100-Koordinatensystem der Anzeigen. */
 export function GridLine({ x, y, strong }: { x?: number; y?: number; strong?: boolean }) {
@@ -264,7 +375,8 @@ export function Curve({ points, base, color = "var(--ch-mic)", fill = true }: { 
 
 /* ---------- Frequenzgang ---------- */
 
-const EQ_RANGE = 15;
+/** Höhe der EQ-Anzeige in dB je Richtung; etwas mehr als der Regelweg, damit die Griffe sichtbar bleiben. */
+export const EQ_RANGE = 13;
 const EQ_DB_TICKS = [12, 6, 0, -6, -12];
 const EQ_FREQ_TICKS: [number, string][] = [
   [50, "50"],
@@ -320,7 +432,7 @@ export function EqDisplay({
 
   return (
     <>
-      <div className={PLOT}>
+      <div className={PLOT_Y}>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
           {EQ_FREQ_TICKS.map(([f]) => (
             <GridLine key={f} x={freqX(f)} />
@@ -331,7 +443,8 @@ export function EqDisplay({
           <Curve points={points} base={50} color={color} />
         </svg>
       </div>
-      <div className="pointer-events-none absolute right-3 bottom-0 left-3 h-6">
+      <YAxis ticks={EQ_DB_TICKS.map((v) => [dy(v), v > 0 ? `+${v}` : String(v)])} />
+      <div className="pointer-events-none absolute right-3 bottom-0 left-10 h-6">
         {EQ_BANDS.map(([f, label]) => (
           <Tick key={f} axis="x" at={freqX(f)}>
             {t(label)}
