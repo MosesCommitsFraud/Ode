@@ -1,5 +1,6 @@
 import { ArrowCounterClockwise } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type WheelEvent } from "react";
+import * as RadixSlider from "@radix-ui/react-slider";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type WheelEvent } from "react";
 import { Toggle } from "~/components/ui/hardware";
 import { Pill, PillGroup } from "~/components/ui/pills";
 import { parseNumber } from "~/components/ui/knob";
@@ -192,10 +193,11 @@ function ValueField({ text, onCommit, label }: { text: string; onCommit: (text: 
 }
 
 /**
- * Waagrechter Schieberegler mit Wert daneben. Klicken springt, Ziehen
- * stellt ein (Shift fein), Mausrad und Pfeiltasten in Schritten, Doppelklick
- * setzt zurück; der Wert lässt sich eintippen. `bipolar` füllt von der Mitte,
- * `marks` beschriftet Stellen unter der Bahn.
+ * Waagrechter Schieberegler (Radix Slider) mit Wert daneben: Ziehen am Knopf
+ * oder Klicken auf die Bahn, Pfeiltasten (mit Shift in großen Schritten),
+ * Mausrad über der Bahn, Doppelklick setzt zurück. Beim Ziehen steht der
+ * Wert über dem Knopf; daneben lässt er sich eintippen. `bipolar` füllt von
+ * der Mitte, `marks` beschriftet Stellen unter der Bahn (anklickbar).
  */
 export function Slider({
   label,
@@ -224,33 +226,13 @@ export function Slider({
   parse?: (text: string) => number | null;
   disabled?: boolean;
 }) {
-  const track = useRef<HTMLDivElement>(null);
-  const fine = useRef<{ x: number; value: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
   const range = max - min;
   const pos = range > 0 ? Math.min(1, Math.max(0, (value - min) / range)) : 0;
   const origin = bipolar ? 0.5 : 0;
   const set = (v: number) => {
-    const next = Number((Math.min(max, Math.max(min, Math.round((v - min) / step) * step + min))).toFixed(6));
+    const next = Number(Math.min(max, Math.max(min, Math.round((v - min) / step) * step + min)).toFixed(6));
     if (next !== value) onChange(next);
-  };
-  const fromPointer = (e: PointerEvent<HTMLDivElement>) => {
-    const r = track.current?.getBoundingClientRect();
-    if (!r) return;
-    // Mit Shift fein: relativ zur Startstelle, zehnmal langsamer.
-    if (e.shiftKey && fine.current) {
-      set(fine.current.value + ((e.clientX - fine.current.x) / r.width) * range * 0.1);
-      return;
-    }
-    set(min + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * range);
-  };
-  const onKeyDown = (e: KeyboardEvent) => {
-    const big = Math.max(step, Math.round(range / step / 10) * step);
-    const delta: Record<string, number> = { ArrowRight: step, ArrowUp: step, ArrowLeft: -step, ArrowDown: -step, PageUp: big, PageDown: -big };
-    if (e.key in delta) set(value + delta[e.key]);
-    else if (e.key === "Home") set(min);
-    else if (e.key === "End") set(max);
-    else return;
-    e.preventDefault();
   };
   const onWheel = (e: WheelEvent) => {
     const steps = Math.max(1, Math.round(range / step / (e.shiftKey ? 200 : 50)));
@@ -260,43 +242,42 @@ export function Slider({
   return (
     <div className={cn("flex min-w-0 items-center gap-3", disabled && "pointer-events-none opacity-45")}>
       <div className="min-w-0 flex-1">
-        <div
-          ref={track}
-          role="slider"
-          tabIndex={0}
+        <RadixSlider.Root
+          value={[value]}
+          min={min}
+          max={max}
+          step={step}
+          disabled={disabled}
           aria-label={label}
-          aria-valuemin={min}
-          aria-valuemax={max}
-          aria-valuenow={value}
-          aria-valuetext={format(value)}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return;
-            e.currentTarget.setPointerCapture(e.pointerId);
-            fine.current = { x: e.clientX, value };
-            if (!e.shiftKey) fromPointer(e);
-          }}
-          onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && fromPointer(e)}
-          onPointerUp={() => {
-            fine.current = null;
-          }}
+          onValueChange={([v]) => set(v)}
+          onPointerDown={() => setDragging(true)}
+          onPointerUp={() => setDragging(false)}
+          onLostPointerCapture={() => setDragging(false)}
           onDoubleClick={() => reset !== undefined && set(reset)}
-          onKeyDown={onKeyDown}
           onWheel={onWheel}
-          className="group relative h-7 cursor-default touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group relative flex h-6 cursor-default touch-none items-center select-none"
         >
-          <div className="well absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full" />
-          {bipolar && <div className="absolute top-1/2 left-1/2 h-3.5 w-px -translate-y-1/2 bg-muted-foreground/40" />}
-          <div
-            className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-[var(--ch-mic)]"
-            style={{ left: `${Math.min(origin, pos) * 100}%`, width: `${Math.abs(pos - origin) * 100}%` }}
-          />
-          <div
-            className="absolute top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_4px_oklch(0%_0_0/35%),0_0_0_1px_oklch(0%_0_0/10%)] transition-transform duration-150 group-active:scale-110"
-            style={{ left: `${pos * 100}%` }}
-          />
-        </div>
+          <RadixSlider.Track className="relative h-1.5 grow overflow-hidden rounded-full bg-[var(--meter-track)] shadow-[inset_0_1px_1px_oklch(0%_0_0/15%)]">
+            {/* Eigene Füllung statt Radix' Range, damit ±-Regler von der Mitte füllen. */}
+            <span
+              className="absolute inset-y-0 rounded-full bg-[var(--ch-mic)]"
+              style={{ left: `${Math.min(origin, pos) * 100}%`, width: `${Math.abs(pos - origin) * 100}%` }}
+            />
+          </RadixSlider.Track>
+          {bipolar && <span aria-hidden className="pointer-events-none absolute top-1/2 left-1/2 h-3 w-px -translate-y-1/2 bg-muted-foreground/40" />}
+          <RadixSlider.Thumb
+            aria-valuetext={format(value)}
+            className="relative block size-4 rounded-full bg-white shadow-[0_1px_3px_oklch(0%_0_0/40%),0_0_0_1px_oklch(0%_0_0/8%)] outline-none transition-[box-shadow,transform] duration-150 group-hover:shadow-[0_1px_3px_oklch(0%_0_0/40%),0_0_0_4px_color-mix(in_oklch,var(--ch-mic)_22%,transparent)] focus-visible:shadow-[0_1px_3px_oklch(0%_0_0/40%),0_0_0_4px_color-mix(in_oklch,var(--ch-mic)_35%,transparent)] active:scale-110"
+          >
+            {dragging && (
+              <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 font-mono text-[11px] whitespace-nowrap text-background tabular-nums shadow-md">
+                {format(value)}
+              </span>
+            )}
+          </RadixSlider.Thumb>
+        </RadixSlider.Root>
         {marks && (
-          <div className="relative mx-[9px] h-4">
+          <div className="relative mx-2 h-4">
             {marks.map(([v, text]) => (
               <button
                 key={v}
@@ -311,10 +292,14 @@ export function Slider({
           </div>
         )}
       </div>
-      <ValueField label={label} text={format(value)} onCommit={(text) => {
-        const next = parse ? parse(text) : parseNumber(text, format(value));
-        if (next !== null && Number.isFinite(next)) set(next);
-      }} />
+      <ValueField
+        label={label}
+        text={format(value)}
+        onCommit={(text) => {
+          const next = parse ? parse(text) : parseNumber(text, format(value));
+          if (next !== null && Number.isFinite(next)) set(next);
+        }}
+      />
     </div>
   );
 }

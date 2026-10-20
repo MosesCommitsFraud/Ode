@@ -127,6 +127,21 @@ function withDefaults(config: EngineConfig, devices: DeviceList): EngineConfig {
   };
 }
 
+/**
+ * Schickt beim Ziehen eines Reglers höchstens einmal pro Bild den neuesten
+ * Stand an die Engine statt bei jeder Mausbewegung; die Oberfläche selbst
+ * zeigt jeden Wert sofort.
+ */
+const pending = new Set<string>();
+function sendLatest(key: string, send: () => Promise<unknown>) {
+  if (pending.has(key)) return;
+  pending.add(key);
+  requestAnimationFrame(() => {
+    pending.delete(key);
+    void send();
+  });
+}
+
 export const actions = {
   async init() {
     if (!isTauri) {
@@ -220,7 +235,7 @@ export const actions = {
 
   setEffects(effects: EffectsParams) {
     set({ effects });
-    if (isTauri) void engine.setEffects(effects);
+    if (isTauri) sendLatest("effects", () => engine.setEffects(state.effects));
   },
 
   setChannelFx(id: ChannelId, patch: Partial<ChannelFx>) {
@@ -234,7 +249,7 @@ export const actions = {
 
   setBuses(buses: BusParams) {
     set({ buses });
-    if (isTauri) void engine.setBuses(buses);
+    if (isTauri) sendLatest("buses", () => engine.setBuses(state.buses));
   },
 
   async applyPreset(id: string) {

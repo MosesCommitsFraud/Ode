@@ -84,7 +84,8 @@ function Plot({
   }, []);
 
   useEffect(() => {
-    plot.current?.setData(data, false);
+    // Mit Neuberechnung der Skalen; die Bereiche sind fest, und nur so zeichnet uPlot neu.
+    plot.current?.setData(data);
   }, [data]);
 
   return <div ref={ref} className={cn("ode-plot absolute inset-0", className)} />;
