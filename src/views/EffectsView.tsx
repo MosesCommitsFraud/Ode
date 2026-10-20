@@ -1,7 +1,8 @@
 import { ArrowLineUp, ArrowsInLineVertical, Broom, Door, Equalizer, Gauge, Plug, Sun, Waves } from "@phosphor-icons/react";
 import { useEffect, type ReactNode } from "react";
-import { EqChart, HistoryChart, SpectrumChart, useHistory } from "~/components/effects/charts";
-import { Crossfade, DeviceBar, DevicePage, Lamp, Meter, ParamRow, QuickPicks, Slider, useSelected } from "~/components/effects/device";
+import { HistoryChart, SpectrumChart, useHistory } from "~/components/effects/charts";
+import { EqControls, EqGraph, useEqTarget } from "~/components/effects/EqEditor";
+import { Crossfade, DeviceBar, DevicePage, KnobDeck, Lamp, Meter, ParamRow, Slider, useSelected } from "~/components/effects/device";
 import { PluginsPanel } from "~/components/effects/PluginsPanel";
 import { PushButtons } from "~/components/ui/hardware";
 import { EFFECTS_DEFAULTS } from "~/lib/defaults";
@@ -41,14 +42,6 @@ const RATIOS = [
   { value: 8, label: "effects.ratioHard" },
 ];
 
-const EQ_PICKS: { label: string; value: [number, number, number] }[] = [
-  { label: "devices.eq.neutral", value: [0, 0, 0] },
-  { label: "devices.eq.warm", value: [3, -1, -2] },
-  { label: "devices.eq.clear", value: [-2, 3, 2] },
-  { label: "devices.eq.bright", value: [0, 1, 4] },
-  { label: "devices.eq.thin", value: [-5, 0, 0] },
-];
-
 const LEVEL_FLOOR = -70;
 const levelPos = (v: number) => clamp01((v - LEVEL_FLOOR) / -LEVEL_FLOOR);
 const LEVEL_SCALE: [number, string][] = [-60, -40, -20, 0].map((v) => [levelPos(v), String(v)]);
@@ -76,6 +69,7 @@ function Device({ id }: { id: DeviceId }) {
   const set = <K extends DeviceId>(key: K, patch: Partial<EffectsParams[K]>) => actions.setEffect(key, patch);
   // Verläufe für die Diagramme; welche gebraucht werden, hängt vom Gerät ab.
   const levels = useHistory(useMicDb(), 8, -90);
+  const [eqTarget, setEqTarget] = useEqTarget();
   const reductionNow =
     id === "compressor" ? live?.compressorDb : id === "deEsser" ? live?.deEsserDb : id === "limiter" ? live?.limiterDb : id === "agc" ? live?.agcGainDb : 0;
   const reductions = useHistory(p.enabled ? (reductionNow ?? 0) : 0, 8, 0);
@@ -90,7 +84,6 @@ function Device({ id }: { id: DeviceId }) {
   );
   const page = (extra: { live?: ReactNode; columns?: 1 | 2; graph?: ReactNode }, children: ReactNode) => (
     <DevicePage
-      icon={ICONS[id]}
       title={t(`effects.${id}`)}
       about={t(`devices.${id}.about`)}
       enabled={p.enabled}
@@ -187,52 +180,17 @@ function Device({ id }: { id: DeviceId }) {
       return page(
         {
           graph: (
-            <EqChart
+            <EqGraph
               eq={fx.eq}
-              labels={[t("effects.bass"), t("effects.presence"), t("effects.treble")]}
+              selected={eqTarget}
+              onSelect={setEqTarget}
               spectrumIn={live?.spectrumIn}
               spectrumOut={live?.spectrumOut}
-              onChange={(key, v) => set("eq", { [key]: v })}
+              onChange={(patch) => set("eq", patch)}
             />
           ),
         },
-        <>
-          <ParamRow label={t("devices.quick")}>
-            <QuickPicks
-              options={EQ_PICKS.map((o) => ({ label: t(o.label), value: o.value }))}
-              isActive={([l, m, h]) => fx.eq.lowDb === l && fx.eq.midDb === m && fx.eq.highDb === h}
-              onPick={([lowDb, midDb, highDb]) => set("eq", { lowDb, midDb, highDb })}
-            />
-          </ParamRow>
-          {(
-            [
-              ["lowDb", "effects.bass", "devices.eq.low"],
-              ["midDb", "effects.presence", "devices.eq.mid"],
-              ["highDb", "effects.treble", "devices.eq.high"],
-            ] as const
-          ).map(([key, label, hint]) => (
-            <ParamRow key={key} label={t(label)} hint={t(hint)}>
-              <Slider
-                label={t(label)}
-                value={fx.eq[key]}
-                min={-12}
-                max={12}
-                step={0.5}
-                reset={0}
-                bipolar
-                format={db}
-                marks={[
-                  [-12, "−12"],
-                  [-6, "−6"],
-                  [0, "0"],
-                  [6, "+6"],
-                  [12, "+12"],
-                ]}
-                onChange={(v) => set("eq", { [key]: v })}
-              />
-            </ParamRow>
-          ))}
-        </>,
+        <EqControls eq={fx.eq} selected={eqTarget} onSelect={setEqTarget} onChange={(patch) => set("eq", patch)} />,
       );
     case "agc": {
       const gain = fx.agc.enabled ? (live?.agcGainDb ?? 0) : 0;
@@ -254,41 +212,32 @@ function Device({ id }: { id: DeviceId }) {
           }),
         },
         <>
-          <ParamRow label={t("effects.target")} hint={t("devices.agc.target")}>
-            <Slider
-              label={t("effects.target")}
-              value={fx.agc.targetDb}
-              min={-30}
-              max={-10}
-              step={1}
-              reset={-20}
-              format={db}
-              marks={[
-                [-30, "−30"],
-                [-20, "−20"],
-                [-10, "−10"],
-              ]}
-              onChange={(targetDb) => set("agc", { targetDb })}
-            />
-          </ParamRow>
-          <ParamRow label={t("effects.maxGain")} hint={t("devices.agc.maxGain")}>
-            <Slider
-              label={t("effects.maxGain")}
-              value={fx.agc.maxGainDb}
-              min={0}
-              max={30}
-              step={1}
-              reset={18}
-              format={(v) => `+${v} dB`}
-              marks={[
-                [0, "0"],
-                [10, "+10"],
-                [20, "+20"],
-                [30, "+30"],
-              ]}
-              onChange={(maxGainDb) => set("agc", { maxGainDb })}
-            />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: t("effects.target"),
+                hint: t("devices.agc.target"),
+                value: fx.agc.targetDb,
+                min: -30,
+                max: -10,
+                step: 1,
+                reset: -20,
+                format: db,
+                onChange: (targetDb) => set("agc", { targetDb }),
+              },
+              {
+                label: t("effects.maxGain"),
+                hint: t("devices.agc.maxGain"),
+                value: fx.agc.maxGainDb,
+                min: 0,
+                max: 30,
+                step: 1,
+                reset: 18,
+                format: (v) => `+${v} dB`,
+                onChange: (maxGainDb) => set("agc", { maxGainDb }),
+              },
+            ]}
+          />
         </>,
       );
     }
@@ -340,24 +289,21 @@ function Device({ id }: { id: DeviceId }) {
               onChange={(thresholdDb) => set("compressor", { thresholdDb })}
             />
           </ParamRow>
-          <ParamRow label={t("effects.makeup")} hint={t("devices.compressor.makeup")}>
-            <Slider
-              label={t("effects.makeup")}
-              value={fx.compressor.makeupDb}
-              min={0}
-              max={18}
-              step={0.5}
-              reset={4}
-              format={(v) => `+${v.toFixed(1)} dB`}
-              marks={[
-                [0, "0"],
-                [6, "+6"],
-                [12, "+12"],
-                [18, "+18"],
-              ]}
-              onChange={(makeupDb) => set("compressor", { makeupDb })}
-            />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: t("effects.makeup"),
+                hint: t("devices.compressor.makeup"),
+                value: fx.compressor.makeupDb,
+                min: 0,
+                max: 18,
+                step: 0.5,
+                reset: 4,
+                format: (v) => `+${v.toFixed(1)} dB`,
+                onChange: (makeupDb) => set("compressor", { makeupDb }),
+              },
+            ]}
+          />
         </>,
       );
     case "deEsser":
@@ -393,24 +339,21 @@ function Device({ id }: { id: DeviceId }) {
               onChange={(thresholdDb) => set("deEsser", { thresholdDb })}
             />
           </ParamRow>
-          <ParamRow label={t("effects.frequency")} hint={t("devices.deEsser.frequency")}>
-            <Slider
-              label={t("effects.frequency")}
-              value={fx.deEsser.frequencyHz}
-              min={3000}
-              max={10000}
-              step={100}
-              reset={6000}
-              format={kHz}
-              marks={[
-                [3000, "3 kHz"],
-                [5000, "5"],
-                [7000, "7"],
-                [10000, "10 kHz"],
-              ]}
-              onChange={(frequencyHz) => set("deEsser", { frequencyHz })}
-            />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: t("effects.frequency"),
+                hint: t("devices.deEsser.frequency"),
+                value: fx.deEsser.frequencyHz,
+                min: 3000,
+                max: 10000,
+                step: 100,
+                reset: 6000,
+                format: kHz,
+                onChange: (frequencyHz) => set("deEsser", { frequencyHz }),
+              },
+            ]}
+          />
         </>,
       );
     case "exciter":
@@ -427,41 +370,32 @@ function Device({ id }: { id: DeviceId }) {
           ),
         },
         <>
-          <ParamRow label={t("effects.frequency")} hint={t("devices.exciter.frequency")}>
-            <Slider
-              label={t("effects.frequency")}
-              value={fx.exciter.frequencyHz}
-              min={1000}
-              max={8000}
-              step={100}
-              reset={3000}
-              format={kHz}
-              marks={[
-                [1000, "1 kHz"],
-                [3000, "3"],
-                [5000, "5"],
-                [8000, "8 kHz"],
-              ]}
-              onChange={(frequencyHz) => set("exciter", { frequencyHz })}
-            />
-          </ParamRow>
-          <ParamRow label={t("effects.amount")} hint={t("devices.exciter.amount")}>
-            <Slider
-              label={t("effects.amount")}
-              value={fx.exciter.amount}
-              min={0}
-              max={1}
-              step={0.01}
-              reset={0.3}
-              format={percent}
-              marks={[
-                [0, "0 %"],
-                [0.5, "50 %"],
-                [1, "100 %"],
-              ]}
-              onChange={(amount) => set("exciter", { amount })}
-            />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: t("effects.frequency"),
+                hint: t("devices.exciter.frequency"),
+                value: fx.exciter.frequencyHz,
+                min: 1000,
+                max: 8000,
+                step: 100,
+                reset: 3000,
+                format: kHz,
+                onChange: (frequencyHz) => set("exciter", { frequencyHz }),
+              },
+              {
+                label: t("effects.amount"),
+                hint: t("devices.exciter.amount"),
+                value: fx.exciter.amount,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                reset: 0.3,
+                format: percent,
+                onChange: (amount) => set("exciter", { amount }),
+              },
+            ]}
+          />
         </>,
       );
     case "limiter":
@@ -525,7 +459,9 @@ export function EffectsView() {
         groups={[
           (["gate", "denoise", "eq", "agc"] as const).map(key),
           (["compressor", "deEsser", "exciter", "limiter"] as const).map(key),
-          ...(plugin.available ? [[{ id: "plugin", title: plugin.loaded?.name ?? t("plugins.page"), icon: ICONS.plugin, enabled: !!plugin.loaded && !plugin.bypass }]] : []),
+          ...(plugin.available
+            ? [[{ id: "plugin", title: plugin.loaded?.name ?? t("plugins.page"), icon: ICONS.plugin, enabled: !!plugin.loaded && !plugin.bypass }]]
+            : []),
         ]}
       />
       <Crossfade id={open} order={ids}>

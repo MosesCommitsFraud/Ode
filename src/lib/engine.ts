@@ -107,11 +107,27 @@ export interface VoiceParams {
   reverb: ReverbParams;
 }
 
+/** Ein Band des parametrischen EQs; das erste und letzte sind Kuhschwänze, die anderen Glocken. */
+export interface EqBand {
+  freqHz: number;
+  gainDb: number;
+  q: number;
+}
+
+/** Einstellung eines EQs (src-tauri/src/audio/eq.rs `EqSettings`). */
+export interface EqSettings {
+  bands: EqBand[];
+  /** 20 = aus. */
+  lowCutHz: number;
+  /** 20000 = aus. */
+  highCutHz: number;
+}
+
 export interface EffectsParams {
   gate: { enabled: boolean; thresholdDb: number };
   /** voiceGate: senkt alles ab, was RNNoise nicht als Sprache erkennt (Klicks, Tippen). */
   denoise: { enabled: boolean; voiceGate: boolean; strength: number };
-  eq: { enabled: boolean; lowDb: number; midDb: number; highDb: number };
+  eq: { enabled: boolean } & EqSettings;
   /** Automatische Lautstärke: Ziel −30…−10 dBFS, Anhebung höchstens 0…30 dB. */
   agc: { enabled: boolean; targetDb: number; maxGainDb: number };
   compressor: { enabled: boolean; thresholdDb: number; ratio: number; makeupDb: number };
@@ -122,15 +138,8 @@ export interface EffectsParams {
 }
 
 /** Klang-EQ und Sends eines Kanals im Pult. */
-export interface ChannelFx {
+export interface ChannelFx extends EqSettings {
   eqEnabled: boolean;
-  lowDb: number;
-  midDb: number;
-  highDb: number;
-  /** 20 = aus. */
-  lowCutHz: number;
-  /** 20000 = aus. */
-  highCutHz: number;
   reverbSend: number;
   echoSend: number;
 }
@@ -211,6 +220,8 @@ export interface Meters {
     /** Spektrum vor dem EQ und am Ende der Kette, je 120 Bänder 20 Hz – 20 kHz in dB. */
     spectrumIn: number[];
     spectrumOut: number[];
+    /** Spektrum vor und nach dem Klang-EQ von Soundboard, Musik und Live. */
+    busSpectra: [number[], number[]][];
   };
 }
 
@@ -240,7 +251,7 @@ export const engine = {
   /** Exakter Frequenzgang eines EQs an den 120 Spektrum-Bändern, aus denselben Filtern wie im Audio-Thread. */
   /** Kurve eines Stimm-Effekts, mit dem echten Effekt gerechnet (Echo, Hall, Charakter). */
   voicePreview: (preview: VoicePreview) => invoke<number[]>("voice_preview", { preview }),
-  eqCurve: (curve: { lowDb: number; midDb: number; highDb: number; lowCutHz?: number; highCutHz?: number }) => invoke<number[]>("eq_curve", { curve }),
+  eqCurve: (curve: EqSettings) => invoke<number[]>("eq_curve", { curve }),
   presetSave: (preset: Preset) =>
     invoke<{ state: PresetState; hotkeyErrors: string[] }>("preset_save", { preset }),
   presetDelete: (id: string) => invoke<PresetState>("preset_delete", { id }),

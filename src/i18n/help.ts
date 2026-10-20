@@ -21,9 +21,9 @@ export default {
     "denoise.when": "Fast immer sinnvoll, besonders mit lautem Raum oder einfachem Headset. Kostet 10 ms Verzögerung.",
     "denoise.controls": "Sprach-Gate: Senkt alles ab, was nicht nach Sprache klingt, z. B. Klicks und Tippen zwischen Wörtern.",
 
-    "eq.what": "Hebt oder senkt Tiefen, Präsenz und Höhen der Stimme. Die Kurve zeigt, was mit welcher Frequenz passiert.",
+    "eq.what": "Ein parametrischer EQ mit fünf Bändern, Low- und High-Cut. Die Kurve zeigt, was mit welcher Frequenz passiert, dahinter das Spektrum vor und nach dem EQ.",
     "eq.when": "Dumpfe Stimme: Präsenz und Höhen etwas anheben. Dröhnt es: Bass absenken. Zischelt es: Höhen absenken oder den De-Esser nehmen.",
-    "eq.controls": "Bass: 120 Hz und darunter.\nPräsenz: Verständlichkeit um 2,5 kHz.\nHöhen: Luft ab 8 kHz.\nDoppelklick auf einen Fader stellt ihn auf 0.",
+    "eq.controls": "Punkt ziehen: seitlich die Frequenz, hoch und runter den Pegel.\nMausrad über der Kurve: Breite des gewählten Bands.\nDoppelklick auf einen Punkt stellt ihn zurück.\nDarunter die Drehregler des gewählten Punkts.",
 
     "agc.what": "Gleicht deine Lautstärke automatisch an: leise Passagen werden angehoben, laute abgesenkt. Die Nadel zeigt die aktuelle Anhebung.",
     "agc.when": "Wenn du mal nah, mal fern vom Mikrofon sitzt oder andere sagen, du seist zu leise.",
@@ -98,9 +98,9 @@ export default {
     "denoise.when": "Almost always useful, especially in a loud room or with a simple headset. Adds 10 ms of delay.",
     "denoise.controls": "Voice gate: lowers everything that does not sound like speech, e.g. clicks and typing between words.",
 
-    "eq.what": "Raises or lowers the lows, presence and highs of your voice. The curve shows what happens at which frequency.",
+    "eq.what": "A parametric EQ with five bands, low cut and high cut. The curve shows what happens at which frequency, behind it the spectrum before and after the EQ.",
     "eq.when": "Muffled voice: raise presence and highs a little. Boomy: lower the bass. Hissy: lower the highs or use the de-esser.",
-    "eq.controls": "Bass: 120 Hz and below.\nPresence: clarity around 2.5 kHz.\nTreble: air above 8 kHz.\nDouble-click a knob to reset it to 0.",
+    "eq.controls": "Drag a point: sideways for frequency, up and down for level.\nMouse wheel over the curve: width of the selected band.\nDouble-click a point to reset it.\nBelow are the knobs of the selected point.",
 
     "agc.what": "Evens out your volume automatically: quiet parts are raised, loud ones lowered. The needle shows the current boost.",
     "agc.when": "If you move closer to and away from the mic, or others say you are too quiet.",

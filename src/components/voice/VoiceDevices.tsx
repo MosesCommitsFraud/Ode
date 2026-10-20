@@ -16,7 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import { createContext, useContext, type ReactNode } from "react";
 import { Klavier, type CustomKeyProps } from "klavier";
-import { DevicePage, ParamRow, QuickPicks, Readout, Slider } from "~/components/effects/device";
+import { DevicePage, KnobDeck, ParamRow, QuickPicks, Readout, Slider } from "~/components/effects/device";
 import { PushButton, PushButtons } from "~/components/ui/hardware";
 import { parseNumber } from "~/components/ui/knob";
 import { VOICE_DEFAULTS } from "~/lib/defaults";
@@ -52,11 +52,7 @@ const PERCENT_MARKS: [number, string][] = [
   [0.5, "50 %"],
   [1, "100 %"],
 ];
-/** Hz-Wert aus getipptem Text für Regler, die logarithmisch (log2 Hz) laufen. */
-const parseLogHz = (text: string) => {
-  const value = parseNumber(text, /k/i.test(text) ? "kHz" : "Hz");
-  return value && value > 0 ? Math.log2(value) : null;
-};
+const parseHz = (text: string) => parseNumber(text, /k/i.test(text) ? "kHz" : "Hz");
 
 /* ---------- Autotune-Klaviatur ---------- */
 
@@ -75,7 +71,9 @@ function WhiteKey({ note }: CustomKeyProps) {
     <div
       className={cn(
         "flex h-full cursor-default flex-col items-center justify-end gap-1 rounded-b-[7px] pb-1.5 transition-colors duration-150 shadow-[inset_0_-3px_0_oklch(0%_0_0/6%),0_0_0_1px_var(--hairline)]",
-        isRoot ? "bg-[var(--ch-mic)] text-white" : "bg-[oklch(99.5%_0.002_75)] text-foreground hover:bg-[oklch(96%_0.004_75)] dark:bg-[oklch(88%_0.004_75)] dark:text-[oklch(20%_0_0)]",
+        isRoot
+          ? "bg-[var(--ch-mic)] text-white"
+          : "bg-[oklch(99.5%_0.002_75)] text-foreground hover:bg-[oklch(96%_0.004_75)] dark:bg-[oklch(88%_0.004_75)] dark:text-[oklch(20%_0_0)]",
       )}
     >
       {inside && !isRoot && <span className="size-1.5 rounded-full bg-[var(--ch-mic)]" />}
@@ -165,7 +163,15 @@ type EchoValues = { timeMs: number; feedback: number; toneHz: number; mix: numbe
 type ReverbValues = { size: number; damping: number; predelayMs: number; lowCutHz: number; mix: number };
 
 /** Einstellungszeilen eines Echos. */
-export function EchoRows({ params, onChange, mixLabel = t("voice.mix") }: { params: EchoValues; onChange: (patch: Partial<EchoValues>) => void; mixLabel?: string }) {
+export function EchoRows({
+  params,
+  onChange,
+  mixLabel = t("voice.mix"),
+}: {
+  params: EchoValues;
+  onChange: (patch: Partial<EchoValues>) => void;
+  mixLabel?: string;
+}) {
   return (
     <>
       <ParamRow label={t("voice.time")} hint={t("devices.echo.time")}>
@@ -186,68 +192,124 @@ export function EchoRows({ params, onChange, mixLabel = t("voice.mix") }: { para
           onChange={(timeMs) => onChange({ timeMs })}
         />
       </ParamRow>
-      <ParamRow label={t("voice.feedback")} hint={t("devices.echo.feedback")}>
-        <Slider label={t("voice.feedback")} value={params.feedback} min={0} max={0.95} step={0.01} reset={0.35} format={percent} onChange={(feedback) => onChange({ feedback })} />
-      </ParamRow>
-      <ParamRow label={t("voice.echoTone")} hint={t("devices.echo.tone")}>
-        <Slider
-          label={t("voice.echoTone")}
-          value={Math.log2(params.toneHz)}
-          min={Math.log2(500)}
-          max={Math.log2(16000)}
-          step={0.01}
-          reset={Math.log2(4000)}
-          format={(v) => hz(Math.pow(2, v))}
-          parse={parseLogHz}
-          marks={[
-            [Math.log2(500), "500"],
-            [Math.log2(2000), "2k"],
-            [Math.log2(8000), "8k"],
-            [Math.log2(16000), "16k"],
-          ]}
-          onChange={(v) => onChange({ toneHz: Math.round(Math.pow(2, v)) })}
-        />
-      </ParamRow>
-      <ParamRow label={mixLabel} hint={t("devices.echo.mix")}>
-        <Slider label={mixLabel} value={params.mix} min={0} max={1} step={0.01} reset={0.3} format={percent} marks={PERCENT_MARKS} onChange={(mix) => onChange({ mix })} />
-      </ParamRow>
+      <KnobDeck
+        knobs={[
+          {
+            label: t("voice.feedback"),
+            hint: t("devices.echo.feedback"),
+            value: params.feedback,
+            min: 0,
+            max: 0.95,
+            step: 0.01,
+            reset: 0.35,
+            format: percent,
+            onChange: (feedback) => onChange({ feedback }),
+          },
+          {
+            label: t("voice.echoTone"),
+            hint: t("devices.echo.tone"),
+            value: params.toneHz,
+            min: 500,
+            max: 16000,
+            step: 1,
+            log: true,
+            reset: 4000,
+            format: hz,
+            parse: parseHz,
+            onChange: (toneHz) => onChange({ toneHz }),
+          },
+          {
+            label: mixLabel,
+            hint: t("devices.echo.mix"),
+            value: params.mix,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            reset: 0.3,
+            format: percent,
+            onChange: (mix) => onChange({ mix }),
+          },
+        ]}
+      />
     </>
   );
 }
 
 /** Einstellungszeilen eines Halls. */
-export function ReverbRows({ params, onChange, mixLabel = t("voice.mix") }: { params: ReverbValues; onChange: (patch: Partial<ReverbValues>) => void; mixLabel?: string }) {
+export function ReverbRows({
+  params,
+  onChange,
+  mixLabel = t("voice.mix"),
+}: {
+  params: ReverbValues;
+  onChange: (patch: Partial<ReverbValues>) => void;
+  mixLabel?: string;
+}) {
   return (
     <>
       <ParamRow label={t("voice.size")} hint={t("devices.reverb.size")}>
-        <Slider label={t("voice.size")} value={params.size} min={0} max={1} step={0.01} reset={0.6} format={percent} marks={PERCENT_MARKS} onChange={(size) => onChange({ size })} />
-      </ParamRow>
-      <ParamRow label={t("voice.damping")} hint={t("devices.reverb.damping")}>
-        <Slider label={t("voice.damping")} value={params.damping} min={0} max={1} step={0.01} reset={0.5} format={percent} marks={PERCENT_MARKS} onChange={(damping) => onChange({ damping })} />
-      </ParamRow>
-      <ParamRow label={t("voice.predelay")} hint={t("devices.reverb.predelay")}>
         <Slider
-          label={t("voice.predelay")}
-          value={params.predelayMs}
+          label={t("voice.size")}
+          value={params.size}
           min={0}
-          max={200}
-          step={1}
-          reset={20}
-          format={(v) => `${v} ms`}
-          marks={[
-            [0, "0"],
-            [100, "100 ms"],
-            [200, "200 ms"],
-          ]}
-          onChange={(predelayMs) => onChange({ predelayMs })}
+          max={1}
+          step={0.01}
+          reset={0.6}
+          format={percent}
+          marks={PERCENT_MARKS}
+          onChange={(size) => onChange({ size })}
         />
       </ParamRow>
-      <ParamRow label={t("voice.lowCut")} hint={t("devices.reverb.lowCut")}>
-        <Slider label={t("voice.lowCut")} value={params.lowCutHz} min={20} max={1000} step={10} reset={200} format={hz} onChange={(lowCutHz) => onChange({ lowCutHz })} />
-      </ParamRow>
-      <ParamRow label={mixLabel} hint={t("devices.reverb.mix")}>
-        <Slider label={mixLabel} value={params.mix} min={0} max={1} step={0.01} reset={0.25} format={percent} marks={PERCENT_MARKS} onChange={(mix) => onChange({ mix })} />
-      </ParamRow>
+      <KnobDeck
+        knobs={[
+          {
+            label: t("voice.damping"),
+            hint: t("devices.reverb.damping"),
+            value: params.damping,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            reset: 0.5,
+            format: percent,
+            onChange: (damping) => onChange({ damping }),
+          },
+          {
+            label: t("voice.predelay"),
+            hint: t("devices.reverb.predelay"),
+            value: params.predelayMs,
+            min: 0,
+            max: 200,
+            step: 1,
+            reset: 20,
+            format: (v) => `${v} ms`,
+            onChange: (predelayMs) => onChange({ predelayMs }),
+          },
+          {
+            label: t("voice.lowCut"),
+            hint: t("devices.reverb.lowCut"),
+            value: params.lowCutHz,
+            min: 20,
+            max: 1000,
+            step: 1,
+            log: true,
+            reset: 200,
+            format: hz,
+            parse: parseHz,
+            onChange: (lowCutHz) => onChange({ lowCutHz }),
+          },
+          {
+            label: mixLabel,
+            hint: t("devices.reverb.mix"),
+            value: params.mix,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            reset: 0.25,
+            format: percent,
+            onChange: (mix) => onChange({ mix }),
+          },
+        ]}
+      />
     </>
   );
 }
@@ -262,7 +324,6 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
   const set = <K extends VoiceDeviceId>(key: K, patch: Partial<VoiceParams[K]>) => actions.setVoice(key, patch);
   const page = (extra: { live?: ReactNode; columns?: 1 | 2; graph?: ReactNode }, children: ReactNode) => (
     <DevicePage
-      icon={VOICE_ICONS[id]}
       title={t(`voice.${id}`)}
       about={t(`devices.${id}.about`)}
       enabled={p.enabled}
@@ -279,8 +340,16 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
     case "pitch":
       return page(
         {
-          live: <Readout label={t("voice.sung")} value={sung !== null ? noteName(sung) : "—"} sub={sung !== null && voice.pitch.enabled ? `→ ${noteName(sung + voice.pitch.semitones)}` : undefined} />,
-          graph: <PitchPad semitones={voice.pitch.semitones} formant={voice.pitch.formant} onChange={(semitones, formant) => set("pitch", { semitones, formant })} />,
+          live: (
+            <Readout
+              label={t("voice.sung")}
+              value={sung !== null ? noteName(sung) : "—"}
+              sub={sung !== null && voice.pitch.enabled ? `→ ${noteName(sung + voice.pitch.semitones)}` : undefined}
+            />
+          ),
+          graph: (
+            <PitchPad semitones={voice.pitch.semitones} formant={voice.pitch.formant} onChange={(semitones, formant) => set("pitch", { semitones, formant })} />
+          ),
         },
         <>
           <ParamRow label={t("voice.semitones")} hint={t("devices.pitch.semitones")}>
@@ -305,24 +374,22 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
               />
             </div>
           </ParamRow>
-          <ParamRow label={t("voice.formant")} hint={t("devices.pitch.formant")}>
-            <Slider
-              label={t("voice.formant")}
-              value={voice.pitch.formant}
-              min={-8}
-              max={8}
-              step={0.5}
-              reset={0}
-              bipolar
-              format={(v) => signed(v, 1)}
-              marks={[
-                [-8, "−8"],
-                [0, "0"],
-                [8, "+8"],
-              ]}
-              onChange={(formant) => set("pitch", { formant })}
-            />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: t("voice.formant"),
+                hint: t("devices.pitch.formant"),
+                value: voice.pitch.formant,
+                min: -8,
+                max: 8,
+                step: 0.5,
+                reset: 0,
+                bipolar: true,
+                format: (v) => signed(v, 1),
+                onChange: (formant) => set("pitch", { formant }),
+              },
+            ]}
+          />
         </>,
       );
     case "autotune": {
@@ -333,7 +400,11 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
           live: (
             <>
               <Readout label={t("voice.sung")} value={sung !== null ? noteName(sung) : "—"} />
-              <Readout label={t("voice.target")} value={target !== null && voice.autotune.enabled ? noteName(target) : "—"} sub={target !== null && voice.autotune.enabled ? `${signed(Math.round(cents))} ct` : undefined} />
+              <Readout
+                label={t("voice.target")}
+                value={target !== null && voice.autotune.enabled ? noteName(target) : "—"}
+                sub={target !== null && voice.autotune.enabled ? `${signed(Math.round(cents))} ct` : undefined}
+              />
             </>
           ),
           graph: <PitchTrack keyNote={voice.autotune.key} scale={voice.autotune.scale} />,
@@ -383,7 +454,12 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
           return (
             <div key={i} className="flex min-w-0 flex-col">
               <ParamRow label={t("voice.voiceN", { n: i + 1 })}>
-                <PushButton className="max-w-40" label={v.enabled ? t("common.on") : t("common.off")} on={v.enabled} onChange={(enabled) => setVoice(i, { enabled })} />
+                <PushButton
+                  className="max-w-40"
+                  label={v.enabled ? t("common.on") : t("common.off")}
+                  on={v.enabled}
+                  onChange={(enabled) => setVoice(i, { enabled })}
+                />
               </ParamRow>
               <ParamRow label={t("voice.interval")} hint={t("devices.harmonizer.interval")}>
                 <div className="flex flex-col gap-2">
@@ -411,9 +487,22 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
                   />
                 </div>
               </ParamRow>
-              <ParamRow label={t("voice.level")} hint={t("devices.harmonizer.level")}>
-                <Slider label={t("voice.level")} value={v.level} min={0} max={1} step={0.01} reset={0.6} disabled={!v.enabled} format={percent} marks={PERCENT_MARKS} onChange={(level) => setVoice(i, { level })} />
-              </ParamRow>
+              <KnobDeck
+                knobs={[
+                  {
+                    label: t("voice.level"),
+                    hint: t("devices.harmonizer.level"),
+                    value: v.level,
+                    min: 0,
+                    max: 1,
+                    step: 0.01,
+                    reset: 0.6,
+                    disabled: !v.enabled,
+                    format: percent,
+                    onChange: (level) => setVoice(i, { level }),
+                  },
+                ]}
+              />
             </div>
           );
         }),
@@ -421,15 +510,27 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
     }
     case "vocoder":
       return page(
-        { columns: 2, live: <Readout label={t("voice.note")} value={voice.vocoder.follow ? (sung !== null ? noteName(sung) : "—") : noteName(voice.vocoder.note)} /> },
+        {
+          columns: 2,
+          live: <Readout label={t("voice.note")} value={voice.vocoder.follow ? (sung !== null ? noteName(sung) : "—") : noteName(voice.vocoder.note)} />,
+        },
         <>
           <ParamRow label={t("voice.chord")} hint={t("devices.vocoder.chord")}>
-            <PushButtons value={voice.vocoder.chord} onChange={(chord: Chord) => set("vocoder", { chord })} options={CHORDS.map((c) => ({ value: c, label: t(`voice.chord.${c}`) }))} />
+            <PushButtons
+              value={voice.vocoder.chord}
+              onChange={(chord: Chord) => set("vocoder", { chord })}
+              options={CHORDS.map((c) => ({ value: c, label: t(`voice.chord.${c}`) }))}
+            />
           </ParamRow>
           <ParamRow label={t("voice.follow")} hint={t("devices.vocoder.follow")}>
-            <PushButton className="max-w-40" label={voice.vocoder.follow ? t("common.on") : t("common.off")} on={voice.vocoder.follow} onChange={(follow) => set("vocoder", { follow })} />
+            <PushButton
+              className="max-w-40"
+              label={voice.vocoder.follow ? t("common.on") : t("common.off")}
+              on={voice.vocoder.follow}
+              onChange={(follow) => set("vocoder", { follow })}
+            />
           </ParamRow>
-          <ParamRow label={t("voice.note")} hint={t("devices.vocoder.note")}>
+          <ParamRow wide label={t("voice.note")} hint={t("devices.vocoder.note")}>
             <Slider
               label={t("voice.note")}
               value={voice.vocoder.note}
@@ -449,12 +550,32 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
               onChange={(note) => set("vocoder", { note })}
             />
           </ParamRow>
-          <ParamRow label={t("voice.breath")} hint={t("devices.vocoder.breath")}>
-            <Slider label={t("voice.breath")} value={voice.vocoder.breath} min={0} max={1} step={0.01} reset={0.2} format={percent} marks={PERCENT_MARKS} onChange={(breath) => set("vocoder", { breath })} />
-          </ParamRow>
-          <ParamRow label={t("voice.mix")} hint={t("devices.vocoder.mix")}>
-            <Slider label={t("voice.mix")} value={voice.vocoder.mix} min={0} max={1} step={0.01} reset={1} format={percent} marks={PERCENT_MARKS} onChange={(mix) => set("vocoder", { mix })} />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: t("voice.breath"),
+                hint: t("devices.vocoder.breath"),
+                value: voice.vocoder.breath,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                reset: 0.2,
+                format: percent,
+                onChange: (breath) => set("vocoder", { breath }),
+              },
+              {
+                label: t("voice.mix"),
+                hint: t("devices.vocoder.mix"),
+                value: voice.vocoder.mix,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                reset: 1,
+                format: percent,
+                onChange: (mix) => set("vocoder", { mix }),
+              },
+            ]}
+          />
         </>,
       );
     case "character": {
@@ -473,7 +594,9 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
                     onClick={() => set("character", { mode: m.id })}
                     className={cn(
                       "flex h-16 min-w-0 cursor-default flex-col items-center justify-center gap-1.5 rounded-[10px] px-1 text-xs transition-all duration-200 [&_svg]:size-5",
-                      on ? "bg-panel-raised font-semibold text-foreground shadow-[inset_0_0_0_2px_var(--ch-mic),0_4px_10px_-6px_oklch(0%_0_0/40%)] [&_svg]:text-[var(--ch-mic)]" : "bg-[var(--meter-track)] text-muted-foreground hover:text-foreground",
+                      on
+                        ? "bg-panel-raised font-semibold text-foreground shadow-[inset_0_0_0_2px_var(--ch-mic),0_4px_10px_-6px_oklch(0%_0_0/40%)] [&_svg]:text-[var(--ch-mic)]"
+                        : "bg-[var(--meter-track)] text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {m.icon}
@@ -484,59 +607,120 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
             </div>
           </ParamRow>
           <ParamRow label={t("voice.amount")} hint={t("devices.character.amount")}>
-            <Slider label={t("voice.amount")} value={voice.character.amount} min={0} max={1} step={0.01} reset={0.5} format={percent} marks={PERCENT_MARKS} onChange={(amount) => set("character", { amount })} />
+            <Slider
+              label={t("voice.amount")}
+              value={voice.character.amount}
+              min={0}
+              max={1}
+              step={0.01}
+              reset={0.5}
+              format={percent}
+              marks={PERCENT_MARKS}
+              onChange={(amount) => set("character", { amount })}
+            />
           </ParamRow>
-          <ParamRow label={tone.label}>
-            <Slider label={tone.label} value={voice.character.tone} min={0} max={1} step={0.01} reset={0.5} format={() => tone.value} parse={() => null} onChange={(v) => set("character", { tone: v })} />
-          </ParamRow>
-          <ParamRow label={t("voice.mix")} hint={t("devices.character.mix")}>
-            <Slider label={t("voice.mix")} value={voice.character.mix} min={0} max={1} step={0.01} reset={1} format={percent} marks={PERCENT_MARKS} onChange={(mix) => set("character", { mix })} />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: tone.label,
+                value: voice.character.tone,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                reset: 0.5,
+                format: () => tone.value,
+                parse: () => null,
+                onChange: (v) => set("character", { tone: v }),
+              },
+              {
+                label: t("voice.mix"),
+                hint: t("devices.character.mix"),
+                value: voice.character.mix,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                reset: 1,
+                format: percent,
+                onChange: (mix) => set("character", { mix }),
+              },
+            ]}
+          />
         </>,
       );
     }
     case "modulation":
       return page(
         {
-          columns: 2,
           graph: <LfoChart rate={voice.modulation.rateHz} depth={voice.modulation.depth} onChange={(rateHz, depth) => set("modulation", { rateHz, depth })} />,
         },
         <>
           <ParamRow label={t("voice.modeLabel")} hint={t("devices.modulation.mode")}>
-            <PushButtons value={voice.modulation.mode} onChange={(mode: ModulationMode) => set("modulation", { mode })} options={MOD_MODES.map((m) => ({ value: m, label: t(`voice.mod.${m}`) }))} />
-          </ParamRow>
-          <ParamRow label={t("voice.rate")} hint={t("devices.modulation.rate")}>
-            <Slider label={t("voice.rate")} value={voice.modulation.rateHz} min={0.05} max={8} step={0.05} reset={0.8} format={(v) => `${v.toFixed(2)} Hz`} onChange={(rateHz) => set("modulation", { rateHz })} />
-          </ParamRow>
-          <ParamRow label={t("voice.depth")} hint={t("devices.modulation.depth")}>
-            <Slider label={t("voice.depth")} value={voice.modulation.depth} min={0} max={1} step={0.01} reset={0.5} format={percent} marks={PERCENT_MARKS} onChange={(depth) => set("modulation", { depth })} />
-          </ParamRow>
-          <ParamRow label={t("voice.feedback")} hint={t("devices.modulation.feedback")}>
-            <Slider
-              label={t("voice.feedback")}
-              value={voice.modulation.feedback}
-              min={0}
-              max={0.9}
-              step={0.01}
-              reset={0.3}
-              disabled={voice.modulation.mode === "chorus"}
-              format={percent}
-              onChange={(feedback) => set("modulation", { feedback })}
+            <PushButtons
+              value={voice.modulation.mode}
+              onChange={(mode: ModulationMode) => set("modulation", { mode })}
+              options={MOD_MODES.map((m) => ({ value: m, label: t(`voice.mod.${m}`) }))}
             />
           </ParamRow>
-          <ParamRow label={t("voice.mix")} hint={t("devices.modulation.mix")}>
-            <Slider label={t("voice.mix")} value={voice.modulation.mix} min={0} max={1} step={0.01} reset={0.5} format={percent} marks={PERCENT_MARKS} onChange={(mix) => set("modulation", { mix })} />
-          </ParamRow>
+          <KnobDeck
+            knobs={[
+              {
+                label: t("voice.rate"),
+                hint: t("devices.modulation.rate"),
+                value: voice.modulation.rateHz,
+                min: 0.05,
+                max: 8,
+                step: 0.01,
+                log: true,
+                reset: 0.8,
+                format: (v) => `${v.toFixed(2)} Hz`,
+                onChange: (rateHz) => set("modulation", { rateHz }),
+              },
+              {
+                label: t("voice.depth"),
+                hint: t("devices.modulation.depth"),
+                value: voice.modulation.depth,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                reset: 0.5,
+                format: percent,
+                onChange: (depth) => set("modulation", { depth }),
+              },
+              {
+                label: t("voice.feedback"),
+                hint: t("devices.modulation.feedback"),
+                value: voice.modulation.feedback,
+                min: 0,
+                max: 0.9,
+                step: 0.01,
+                reset: 0.3,
+                disabled: voice.modulation.mode === "chorus",
+                format: percent,
+                onChange: (feedback) => set("modulation", { feedback }),
+              },
+              {
+                label: t("voice.mix"),
+                hint: t("devices.modulation.mix"),
+                value: voice.modulation.mix,
+                min: 0,
+                max: 1,
+                step: 0.01,
+                reset: 0.5,
+                format: percent,
+                onChange: (mix) => set("modulation", { mix }),
+              },
+            ]}
+          />
         </>,
       );
     case "echo":
       return page(
-        { columns: 2, graph: <TapsChart params={voice.echo} onChange={(patch) => set("echo", patch)} /> },
+        { graph: <TapsChart params={voice.echo} onChange={(patch) => set("echo", patch)} /> },
         <EchoRows params={voice.echo} onChange={(patch) => set("echo", patch)} />,
       );
     case "reverb":
       return page(
-        { columns: 2, graph: <DecayChart params={voice.reverb} onChange={(patch) => set("reverb", patch)} /> },
+        { graph: <DecayChart params={voice.reverb} onChange={(patch) => set("reverb", patch)} /> },
         <ReverbRows params={voice.reverb} onChange={(patch) => set("reverb", patch)} />,
       );
   }

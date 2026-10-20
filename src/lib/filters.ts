@@ -1,9 +1,11 @@
 /*
- * Frequenzgang der EQs, exakt wie in der Engine: dieselben Biquads nach dem
- * Audio-EQ-Cookbook (src-tauri/src/audio/dsp.rs, `Biquad::design`) mit
- * denselben Frequenzen und Güten (effects.rs `Equalizer`, bus.rs
- * `ChannelTone`). Wer dort etwas ändert, ändert es hier mit.
+ * Frequenzgang der EQs für die Browser-Vorschau ohne Engine: Biquads nach
+ * dem Audio-EQ-Cookbook mit denselben Formen, Frequenzen und Güten wie
+ * src-tauri/src/audio/eq.rs. In der App kommt die Kurve exakt aus der
+ * Engine (Befehl `eq_curve`).
  */
+
+import type { EqSettings } from "./engine";
 
 const RATE = 48_000;
 
@@ -70,24 +72,25 @@ function responseDb([b0, b1, b2, a1, a2]: Coefs, freq: number) {
   return 20 * Math.log10(Math.max(mag, 1e-9));
 }
 
-export type EqSettings = { lowDb: number; midDb: number; highDb: number; lowCutHz?: number; highCutHz?: number };
+/** Regelweg der Bänder je Richtung (eq.rs `GAIN_LIMIT_DB`). */
+export const EQ_GAIN_LIMIT = 15;
+/** Höhe der EQ-Anzeige je Richtung: etwas mehr als der Regelweg. */
+export const EQ_RANGE_DB = 18;
+/** Unter- und Obergrenze, ab der Low- und High-Cut aus sind. */
+export const LOW_CUT_OFF = 20;
+export const HIGH_CUT_OFF = 20_000;
 
-/** Höhe der EQ-Anzeige je Richtung: etwas mehr als der Regelweg (±12 dB). */
-export const EQ_RANGE_DB = 14;
-
-/** Die Bänder der EQs der Engine. */
-export const EQ_BANDS = [
-  { key: "lowDb", shape: "lowShelf", freq: 120, q: 0.707 },
-  { key: "midDb", shape: "peak", freq: 2_500, q: 0.9 },
-  { key: "highDb", shape: "highShelf", freq: 8_000, q: 0.707 },
-] as const;
+/** Form eines Bands wie in eq.rs: das erste und das letzte sind Kuhschwänze. */
+export function bandShape(index: number, count: number): Shape {
+  return index === 0 ? "lowShelf" : index === count - 1 ? "highShelf" : "peak";
+}
 
 /** Gesamter Frequenzgang des EQs in dB an den Frequenzen `freqs`. */
 export function eqResponse(eq: EqSettings, freqs: number[]) {
-  const filters: Coefs[] = EQ_BANDS.map((b) => design(b.shape, b.freq, b.q, eq[b.key]));
-  // Wie bus.rs (LOW_CUT_OFF, HIGH_CUT_OFF): Cuts nur, wenn sie etwas abschneiden.
-  if (eq.lowCutHz !== undefined && eq.lowCutHz > 20) filters.push(design("highPass", eq.lowCutHz, 0.707, 0));
-  if (eq.highCutHz !== undefined && eq.highCutHz < 20_000) filters.push(design("lowPass", eq.highCutHz, 0.707, 0));
+  const filters: Coefs[] = eq.bands.map((b, i) => design(bandShape(i, eq.bands.length), b.freqHz, b.q, b.gainDb));
+  // Cuts nur, wenn sie etwas abschneiden.
+  if (eq.lowCutHz > LOW_CUT_OFF) filters.push(design("highPass", eq.lowCutHz, 0.707, 0));
+  if (eq.highCutHz < HIGH_CUT_OFF) filters.push(design("lowPass", eq.highCutHz, 0.707, 0));
   return freqs.map((f) => filters.reduce((sum, c) => sum + responseDb(c, f), 0));
 }
 

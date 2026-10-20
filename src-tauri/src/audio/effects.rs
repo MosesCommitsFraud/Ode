@@ -18,7 +18,7 @@ use fundsp::prelude32::{
     Shared, Tanh, afollow, dc, highpass, limiter, lowpass, mul, pass, shape, shared, var,
 };
 
-use super::eq::Eq3;
+use super::eq::{EqSettings, ParamEq};
 use super::fund::Fixed;
 use super::insert::InsertSlot;
 use super::spectrum::SpectrumTap;
@@ -90,12 +90,9 @@ impl Default for AgcParams {
 #[serde(rename_all = "camelCase", default)]
 pub struct EqParams {
     pub enabled: bool,
-    /// Tiefen-Kuhschwanz bei 120 Hz.
-    pub low_db: f32,
-    /// Präsenz-Glocke bei 2,5 kHz.
-    pub mid_db: f32,
-    /// Höhen-Kuhschwanz bei 8 kHz.
-    pub high_db: f32,
+    /// Bänder, Low- und High-Cut.
+    #[serde(flatten)]
+    pub eq: EqSettings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -191,13 +188,7 @@ pub struct EffectsParams {
 impl EffectsParams {
     fn clamped(mut self) -> Self {
         self.gate.threshold_db = self.gate.threshold_db.clamp(-80.0, -10.0);
-        for db in [
-            &mut self.eq.low_db,
-            &mut self.eq.mid_db,
-            &mut self.eq.high_db,
-        ] {
-            *db = db.clamp(-12.0, 12.0);
-        }
+        self.eq.eq = self.eq.eq.clamped();
         self.agc.target_db = self.agc.target_db.clamp(-30.0, -10.0);
         self.agc.max_gain_db = self.agc.max_gain_db.clamp(0.0, 30.0);
         self.compressor.threshold_db = self.compressor.threshold_db.clamp(-50.0, 0.0);
@@ -394,20 +385,20 @@ impl Denoiser {
     }
 }
 
-/// Drei-Band-EQ aus fundsp (siehe `eq::Eq3`).
+/// Parametrischer EQ aus fundsp (siehe `eq::ParamEq`).
 struct Equalizer {
-    eq: Eq3,
+    eq: ParamEq,
 }
 
 impl Equalizer {
     fn new() -> Self {
-        let mut eq = Self { eq: Eq3::new() };
+        let mut eq = Self { eq: ParamEq::new() };
         eq.configure(&EqParams::default());
         eq
     }
 
     fn configure(&mut self, p: &EqParams) {
-        self.eq.set(p.low_db, p.mid_db, p.high_db);
+        self.eq.set(&p.eq);
     }
 
     fn process(&mut self, buf: &mut [f32]) {
@@ -821,7 +812,7 @@ mod tests {
     fn eq_boosts_bass() {
         let mut p = EffectsParams::default();
         p.eq.enabled = true;
-        p.eq.low_db = 6.0;
+        p.eq.eq.bands[0].gain_db = 6.0;
         let input = sine(60.0, 0.1, 48_000);
         let out = run(p, &input);
         let gain = to_db(rms(&out[24_000..]) / rms(&input[24_000..]));

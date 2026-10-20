@@ -734,7 +734,10 @@ impl OutputProcessor {
             preview.report();
         }
         self.deck.report();
-        if self.output == OutputId::B || !self.mixer.out_b.is_active() {
+        let primary = self.output == OutputId::B || !self.mixer.out_b.is_active();
+        self.bus
+            .publish(&self.mixer.buses, primary, self.mono.len());
+        if primary {
             let db = if duck_min < 1.0 {
                 20.0 * duck_min.max(1e-6).log10()
             } else {

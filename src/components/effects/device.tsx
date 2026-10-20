@@ -3,7 +3,7 @@ import * as RadixSlider from "@radix-ui/react-slider";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type WheelEvent } from "react";
 import { Toggle } from "~/components/ui/hardware";
 import { Pill, PillGroup } from "~/components/ui/pills";
-import { parseNumber } from "~/components/ui/knob";
+import { Knob, parseNumber, type KnobProps } from "~/components/ui/knob";
 import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
 
@@ -14,7 +14,8 @@ import { cn } from "~/lib/utils";
  * Alles aus echten Bedienelementen, keine Zeichnungen.
  */
 
-const accentStyle = (accent?: string) => (accent ? ({ "--ch-mic": accent, "--key": accent } as CSSProperties) : ({ "--key": "var(--ch-mic)" } as CSSProperties));
+const accentStyle = (accent?: string) =>
+  accent ? ({ "--ch-mic": accent, "--key": accent } as CSSProperties) : ({ "--key": "var(--ch-mic)" } as CSSProperties);
 
 export type DeviceKey = { id: string; title: string; icon: ReactNode; enabled: boolean; accent?: string };
 
@@ -23,7 +24,17 @@ export type DeviceKey = { id: string; title: string; icon: ReactNode; enabled: b
  * sich hell heraus (die Markierung gleitet mit), das Symbol trägt die
  * Gerätefarbe, solange das Gerät an ist. Gruppen trennt ein feiner Strich.
  */
-export function DeviceBar({ groups, value, onChange, className }: { groups: DeviceKey[][]; value: string; onChange: (id: string) => void; className?: string }) {
+export function DeviceBar({
+  groups,
+  value,
+  onChange,
+  className,
+}: {
+  groups: DeviceKey[][];
+  value: string;
+  onChange: (id: string) => void;
+  className?: string;
+}) {
   const ids = groups.flat().map((d) => d.id);
   return (
     <div
@@ -48,7 +59,9 @@ export function DeviceBar({ groups, value, onChange, className }: { groups: Devi
               style={accentStyle(d.accent)}
               className="min-w-0 shrink"
             >
-              <span className={cn("transition-colors duration-300 [&_svg]:size-3.5", d.enabled ? "text-[var(--key)]" : "text-muted-foreground/60")}>{d.icon}</span>
+              <span className={cn("transition-colors duration-300 [&_svg]:size-3.5", d.enabled ? "text-[var(--key)]" : "text-muted-foreground/60")}>
+                {d.icon}
+              </span>
               <span className="truncate">{d.title}</span>
             </Pill>
           )),
@@ -59,12 +72,11 @@ export function DeviceBar({ groups, value, onChange, className }: { groups: Devi
 }
 
 /**
- * Ein Gerät als Seite: Symbol, Name und ein Satz, was es tut; rechts
+ * Ein Gerät als Seite: Name und ein Satz, was es tut; rechts
  * Zurücksetzen und der Schalter. Darunter optional Live-Werte (`live`) und
  * die Einstellungen als Zeilen, bei Bedarf in zwei Spalten.
  */
 export function DevicePage({
-  icon,
   title,
   about,
   enabled,
@@ -76,7 +88,6 @@ export function DevicePage({
   accent,
   children,
 }: {
-  icon: ReactNode;
   title: string;
   about: string;
   enabled: boolean;
@@ -92,14 +103,6 @@ export function DevicePage({
   return (
     <section style={accentStyle(accent)} className="panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl">
       <header className="flex shrink-0 items-start gap-4 px-6 pt-5 pb-4">
-        <span
-          className={cn(
-            "flex size-11 shrink-0 items-center justify-center rounded-[12px] transition-colors duration-300 [&_svg]:size-6",
-            enabled ? "bg-[var(--key)] text-white" : "bg-[var(--meter-track)] text-muted-foreground",
-          )}
-        >
-          {icon}
-        </span>
         <div className="min-w-0 flex-1">
           <h2 className="font-display text-2xl leading-tight font-semibold tracking-tight">{title}</h2>
           <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{about}</p>
@@ -122,12 +125,22 @@ export function DevicePage({
         </div>
       </header>
       {live && (
-        <div className={cn("mx-6 mb-2 flex shrink-0 flex-wrap items-center gap-x-8 gap-y-3 rounded-[12px] bg-[var(--meter-track)] px-5 py-3 transition-opacity duration-300", !enabled && "opacity-50")}>
+        <div
+          className={cn(
+            "mx-6 mb-2 flex shrink-0 flex-wrap items-center gap-x-8 gap-y-3 rounded-[12px] bg-[var(--meter-track)] px-5 py-3 transition-opacity duration-300",
+            !enabled && "opacity-50",
+          )}
+        >
           {live}
         </div>
       )}
       {graph && (
-        <div className={cn("well relative mx-6 mb-1 min-h-[140px] flex-1 overflow-hidden rounded-[12px] transition-opacity duration-300", !enabled && "opacity-50")}>
+        <div
+          className={cn(
+            "well relative mx-6 mb-1 min-h-[140px] flex-1 overflow-hidden rounded-[12px] transition-opacity duration-300",
+            !enabled && "opacity-50",
+          )}
+        >
           {graph}
         </div>
       )}
@@ -304,8 +317,36 @@ export function Slider({
   );
 }
 
+/**
+ * Mehrere Werte eines Geräts als Drehregler nebeneinander, jeder mit einem
+ * Satz, was er tut. Für Nebenwerte; der Hauptwert bleibt ein Schieberegler.
+ */
+export function KnobDeck({ knobs }: { knobs: (KnobProps & { hint?: string })[] }) {
+  return (
+    <div
+      className="col-span-full grid min-w-0 gap-x-6 border-b border-hairline py-3 last:border-b-0"
+      style={{ gridTemplateColumns: `repeat(${Math.max(knobs.length, 2)}, minmax(0, 1fr))` }}
+    >
+      {knobs.map(({ hint, ...knob }) => (
+        <div key={knob.label} className="flex min-w-0 items-center gap-3">
+          <Knob {...knob} />
+          {hint && <p className="line-clamp-3 min-w-0 text-xs leading-snug text-muted-foreground">{hint}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Schnellwahl unter oder neben einer Einstellung: kleine Tasten, die Werte setzen. */
-export function QuickPicks<T>({ options, onPick, isActive }: { options: { label: string; value: T }[]; onPick: (value: T) => void; isActive?: (value: T) => boolean }) {
+export function QuickPicks<T>({
+  options,
+  onPick,
+  isActive,
+}: {
+  options: { label: string; value: T }[];
+  onPick: (value: T) => void;
+  isActive?: (value: T) => boolean;
+}) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => {
@@ -370,7 +411,11 @@ export function Meter({
         {scale && (
           <div className="relative h-3.5">
             {scale.map(([p, s]) => (
-              <span key={p} className="absolute top-0.5 -translate-x-1/2 font-mono text-[9px] text-muted-foreground tabular-nums" style={{ left: `${p * 100}%` }}>
+              <span
+                key={p}
+                className="absolute top-0.5 -translate-x-1/2 font-mono text-[9px] text-muted-foreground tabular-nums"
+                style={{ left: `${p * 100}%` }}
+              >
                 {s}
               </span>
             ))}
@@ -434,7 +479,19 @@ export function useSelected<T extends string>(key: string, ids: readonly T[], fa
  * schon darüber einblendet; nie ein leerer Moment. Die Richtung folgt der
  * Reihenfolge in `order`.
  */
-export function Crossfade({ id, order, children, className, axis = "x" }: { id: string; order: string[]; children: ReactNode; className?: string; axis?: "x" | "y" }) {
+export function Crossfade({
+  id,
+  order,
+  children,
+  className,
+  axis = "x",
+}: {
+  id: string;
+  order: string[];
+  children: ReactNode;
+  className?: string;
+  axis?: "x" | "y";
+}) {
   const [shown, setShown] = useState(id);
   const last = useRef<ReactNode>(children);
   const [leaving, setLeaving] = useState<{ id: string; node: ReactNode; dir: number } | null>(null);
@@ -455,7 +512,11 @@ export function Crossfade({ id, order, children, className, axis = "x" }: { id: 
   return (
     <div className={cn("relative grid min-h-0 min-w-0 flex-1", className)} style={shift}>
       {leaving && (
-        <div key={leaving.id} aria-hidden className="pointer-events-none col-start-1 row-start-1 flex min-h-0 min-w-0 animate-[page-out_260ms_ease-in_forwards]">
+        <div
+          key={leaving.id}
+          aria-hidden
+          className="pointer-events-none col-start-1 row-start-1 flex min-h-0 min-w-0 animate-[page-out_260ms_ease-in_forwards]"
+        >
           {leaving.node}
         </div>
       )}

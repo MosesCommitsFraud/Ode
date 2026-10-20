@@ -8,25 +8,18 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use super::eq::Eq3;
+use super::eq::{EqSettings, ParamEq};
 use super::mixer::ChannelId;
+use super::spectrum::{FFT_SIZE, SpectrumTap};
 use super::voice::space::{Echo, EchoParams, Reverb, ReverbParams};
-
-/// Unterhalb davon ist der Low-Cut aus.
-pub const LOW_CUT_OFF: f32 = 20.0;
-/// Oberhalb davon ist der High-Cut aus.
-pub const HIGH_CUT_OFF: f32 = 20_000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ChannelFx {
     /// Klang-EQ samt Low- und High-Cut.
     pub eq_enabled: bool,
-    pub low_db: f32,
-    pub mid_db: f32,
-    pub high_db: f32,
-    pub low_cut_hz: f32,
-    pub high_cut_hz: f32,
+    #[serde(flatten)]
+    pub eq: EqSettings,
     /// Anteil auf dem Hall-Bus, 0–1.
     pub reverb_send: f32,
     /// Anteil auf dem Echo-Bus, 0–1.
@@ -37,11 +30,7 @@ impl Default for ChannelFx {
     fn default() -> Self {
         Self {
             eq_enabled: false,
-            low_db: 0.0,
-            mid_db: 0.0,
-            high_db: 0.0,
-            low_cut_hz: LOW_CUT_OFF,
-            high_cut_hz: HIGH_CUT_OFF,
+            eq: EqSettings::default(),
             reverb_send: 0.0,
             echo_send: 0.0,
         }
@@ -50,11 +39,7 @@ impl Default for ChannelFx {
 
 impl ChannelFx {
     fn clamped(mut self) -> Self {
-        for db in [&mut self.low_db, &mut self.mid_db, &mut self.high_db] {
-            *db = db.clamp(-12.0, 12.0);
-        }
-        self.low_cut_hz = self.low_cut_hz.clamp(LOW_CUT_OFF, 1_000.0);
-        self.high_cut_hz = self.high_cut_hz.clamp(1_000.0, HIGH_CUT_OFF);
+        self.eq = self.eq.clamped();
         self.reverb_send = self.reverb_send.clamp(0.0, 1.0);
         self.echo_send = self.echo_send.clamp(0.0, 1.0);
         self
@@ -135,6 +120,8 @@ impl BusParams {
 pub struct BusShared {
     params: Mutex<BusParams>,
     version: AtomicU64,
+    /// Spektrum vor und nach dem Klang-EQ von Soundboard, Musik und Live.
+    pub spectra: [(SpectrumTap, SpectrumTap); 3],
 }
 
 impl BusShared {
@@ -148,11 +135,14 @@ impl BusShared {
     }
 }
 
-/// Klang-EQ eines Kanals: Tiefen, Präsenz, Höhen, Low-Cut, High-Cut (fundsp, siehe `eq::Eq3`).
+/// Klang-EQ eines Kanals (fundsp, siehe `eq::ParamEq`).
 #[derive(Default)]
 struct ChannelEq {
-    eq: Eq3,
+    eq: ParamEq,
     on: bool,
+    /// Signal vor und nach dem EQ für das Spektrum, seit dem letzten Abgeben.
+    before: Vec<f32>,
+    after: Vec<f32>,
 }
 
 impl ChannelEq {
@@ -161,13 +151,30 @@ impl ChannelEq {
             self.eq.reset();
         }
         self.on = fx.eq_enabled;
-        self.eq.set(fx.low_db, fx.mid_db, fx.high_db);
-        self.eq.set_cuts(fx.low_cut_hz, fx.high_cut_hz);
+        self.eq.set(&fx.eq);
     }
 
     #[inline]
-    fn process(&mut self, x: f32) -> f32 {
-        if self.on { self.eq.tick(x) } else { x }
+    fn process(&mut self, x: f32, record: bool) -> f32 {
+        let y = if self.on { self.eq.tick(x) } else { x };
+        // Nur bis zur vorab reservierten Größe, damit nichts neu belegt wird.
+        if record && self.before.len() < self.before.capacity() {
+            self.before.push(x);
+            self.after.push(y);
+        }
+        y
+    }
+
+    /// Gesammeltes an die Spektren geben; ohne Signal Stille.
+    fn publish(&mut self, taps: &(SpectrumTap, SpectrumTap), frames: usize) {
+        if self.before.is_empty() {
+            self.before.resize(frames.min(self.before.capacity()), 0.0);
+            self.after.resize(self.before.len(), 0.0);
+        }
+        taps.0.push(&self.before);
+        taps.1.push(&self.after);
+        self.before.clear();
+        self.after.clear();
     }
 }
 
@@ -179,6 +186,8 @@ pub struct BusChain {
     echo: Echo,
     /// Soundboard, Musik, Live.
     eqs: [ChannelEq; 3],
+    /// Nur ein Ausgang liefert die Spektren.
+    record: bool,
 }
 
 impl Default for BusChain {
@@ -203,7 +212,12 @@ impl BusChain {
             reverb: Reverb::new(),
             echo: Echo::new(),
             eqs: Default::default(),
+            record: false,
         };
+        for eq in &mut chain.eqs {
+            eq.before.reserve_exact(FFT_SIZE);
+            eq.after.reserve_exact(FFT_SIZE);
+        }
         chain.apply(BusParams::default());
         chain
     }
@@ -247,7 +261,17 @@ impl BusChain {
 
     #[inline]
     pub fn eq(&mut self, channel: EqChannel, x: f32) -> f32 {
-        self.eqs[channel as usize].process(x)
+        self.eqs[channel as usize].process(x, self.record)
+    }
+
+    /// Nach jedem Callback: die Spektren füllen, wenn dieser Ausgang sie liefert.
+    pub fn publish(&mut self, shared: &BusShared, record: bool, frames: usize) {
+        if record {
+            for (eq, taps) in self.eqs.iter_mut().zip(&shared.spectra) {
+                eq.publish(taps, frames);
+            }
+        }
+        self.record = record;
     }
 
     /// Rückführung beider Busse für ein Sample.
@@ -303,7 +327,7 @@ mod tests {
         let shared = BusShared::default();
         let mut params = BusParams::default();
         params.channels.live.eq_enabled = true;
-        params.channels.live.low_cut_hz = 400.0;
+        params.channels.live.eq.low_cut_hz = 400.0;
         shared.set(params);
         let mut chain = BusChain::new();
         chain.sync(&shared);

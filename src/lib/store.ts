@@ -436,7 +436,14 @@ function demoSpectrum(t: number, level: number) {
   });
   const fx = state.effects;
   const eq = fx.eq.enabled ? eqResponse(fx.eq, spectrumFrequencies) : spectrumFrequencies.map(() => 0);
-  return { spectrumIn, spectrumOut: spectrumIn.map((v, i) => Math.max(SPECTRUM_FLOOR, v + eq[i])) };
+  // Kanäle der Busse: breites, leicht bewegtes Spektrum wie Musik, darüber ihr Klang-EQ.
+  const busSpectra = (["soundboard", "music", "live"] as const).map((id, n): [number[], number[]] => {
+    const input = spectrumFrequencies.map((f, i) => Math.max(-85, -24 - Math.log2(f / 60) * 3.5 + Math.sin(t * (1.3 + n) + i * 0.4) * 4 - (f > 12_000 ? (f - 12_000) / 400 : 0)));
+    const channel = state.buses.channels[id];
+    const tone = channel.eqEnabled ? eqResponse(channel, spectrumFrequencies) : null;
+    return [input, tone ? input.map((v, i) => Math.max(SPECTRUM_FLOOR, v + tone[i])) : input];
+  });
+  return { spectrumIn, spectrumOut: spectrumIn.map((v, i) => Math.max(SPECTRUM_FLOOR, v + eq[i])), busSpectra };
 }
 
 /** Simulierte Anzeigen der Stimm-Effekte für die Vorschau im Browser. */

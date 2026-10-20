@@ -1,12 +1,13 @@
-import { useRef, useState, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useState, type WheelEvent } from "react";
+import { KnobHeadless, useKnobKeyboardControls } from "react-knob-headless";
 import { Engraved } from "~/components/ui/hardware";
 import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
 
 /*
  * Analoge Bedienelemente: Drehregler und Zeigerinstrument (VU-Nadel).
- * Drehregler reagieren auf Ziehen (hoch/rechts = mehr, Shift = fein),
- * Mausrad, Pfeiltasten und Doppelklick (zurücksetzen). Fader, Tasten und
+ * Drehregler (Verhalten aus react-knob-headless) reagieren auf Ziehen
+ * (hoch/rechts = mehr), Mausrad, Pfeiltasten und Doppelklick (zurücksetzen). Fader, Tasten und
  * Kippschalter liegen in hardware.tsx.
  */
 
@@ -48,6 +49,8 @@ export interface KnobProps {
   size?: "sm" | "md" | "lg";
   /** Getippten Wert lesen; ohne liest `parseNumber` anhand der Einheit in `format`. */
   parse?: (text: string) => number | null;
+  /** Logarithmischer Weg, z. B. für Frequenzen; `min` muss dann über 0 liegen. */
+  log?: boolean;
 }
 
 /**
@@ -78,46 +81,52 @@ export function Knob({
   bipolar,
   size = "md",
   parse,
+  log,
 }: KnobProps) {
   const [editing, setEditing] = useState(false);
   const [dragging, setDragging] = useState(false);
   // Bipolare Regler ruhen in der Mitte, alle anderen am Anfang.
   const reset = resetValue ?? (bipolar ? (min + max) / 2 : min);
-  const drag = useRef<{ y: number; x: number; value: number } | null>(null);
   const range = max - min;
-  const clamp = (v: number) => Math.min(max, Math.max(min, Math.round((v - min) / step) * step + min));
-  const set = (v: number) => {
-    const next = clamp(v);
-    if (next !== value) onChange(Number(next.toFixed(6)));
-  };
-
-  const pos = range > 0 ? (value - min) / range : 0;
-  const angle = START + pos * SWEEP;
-  const origin = bipolar ? START + ((reset - min) / range) * SWEEP : START;
-
-  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-    if (disabled || e.button !== 0) return;
-    // Strg-, Cmd- oder Alt-Klick setzt zurück, wie in den meisten Plugins.
-    if (e.ctrlKey || e.metaKey || e.altKey) {
-      set(reset);
-      return;
+  const round = (v: number) => {
+    const clamped = Math.min(max, Math.max(min, v));
+    // Logarithmische Regler runden auf zwei bis drei gültige Stellen statt auf feste Schritte.
+    if (log) {
+      const digits = Math.pow(10, Math.floor(Math.log10(clamped)) - (clamped < 1000 ? 1 : 2));
+      return Number((Math.round(clamped / digits) * digits).toFixed(6));
     }
-    e.currentTarget.setPointerCapture(e.pointerId);
-    e.currentTarget.focus();
-    drag.current = { y: e.clientY, x: e.clientX, value };
-    setDragging(true);
+    return Number((Math.round((clamped - min) / step) * step + min).toFixed(6));
   };
-  const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    if (!d) return;
-    // 180 px für den ganzen Weg, mit Shift viermal feiner.
-    const moved = (d.y - e.clientY + (e.clientX - d.x)) / (e.shiftKey ? 720 : 180);
-    set(d.value + moved * range);
+  // Die Bibliothek braucht den ungerundeten Wert beim Ziehen; von außen gilt der gerundete.
+  const [raw, setRaw] = useState(value);
+  const shownRaw = round(raw) === value ? raw : value;
+  const set = (v: number) => {
+    setRaw(v);
+    const next = round(v);
+    if (next !== value) onChange(next);
   };
-  const onPointerUp = () => {
-    drag.current = null;
-    setDragging(false);
-  };
+  const to01 = (v: number) => (log ? Math.log(v / min) / Math.log(max / min) : range > 0 ? (v - min) / range : 0);
+  const from01 = (p: number) => (log ? min * Math.pow(max / min, p) : min + p * range);
+  const keyboard = useKnobKeyboardControls({
+    valueRaw: shownRaw,
+    valueMin: min,
+    valueMax: max,
+    step: log ? shownRaw * 0.02 : step,
+    stepLarger: log ? shownRaw * 0.2 : Math.max(step, Math.round(range / step / 10) * step),
+    onValueRawChange: set,
+  });
+
+  useEffect(() => {
+    if (!dragging) return;
+    const stop = () => setDragging(false);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+  }, [dragging]);
+
   const commit = (text: string) => {
     setEditing(false);
     const next = parse ? parse(text) : parseNumber(text, format(value));
@@ -125,49 +134,47 @@ export function Knob({
   };
   const onWheel = (e: WheelEvent) => {
     if (disabled) return;
-    const steps = Math.max(1, Math.round(range / step / (e.shiftKey ? 200 : 50)));
-    set(value + (e.deltaY < 0 ? 1 : -1) * steps * step);
-  };
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (disabled) return;
-    const big = Math.max(step, Math.round(range / step / 10) * step);
-    const delta: Record<string, number> = {
-      ArrowUp: step,
-      ArrowRight: step,
-      ArrowDown: -step,
-      ArrowLeft: -step,
-      PageUp: big,
-      PageDown: -big,
-    };
-    if (e.key in delta) set(value + delta[e.key]);
-    else if (e.key === "Home") set(min);
-    else if (e.key === "End") set(max);
-    else return;
-    e.preventDefault();
+    const delta = (e.deltaY < 0 ? 1 : -1) / (e.shiftKey ? 200 : 50);
+    set(from01(Math.min(1, Math.max(0, to01(shownRaw) + delta))));
   };
 
+  const pos = Math.min(1, Math.max(0, to01(value)));
+  const angle = START + pos * SWEEP;
+  const origin = bipolar ? START + Math.min(1, Math.max(0, to01(reset))) * SWEEP : START;
   const [px, py] = polar(angle, 25);
   const [cx, cy] = polar(angle, 11);
 
   return (
     // Feste Breite: wechselnde Werte unter dem Regler verschieben nichts daneben.
-    <div className={cn("knob relative flex shrink-0 flex-col items-center gap-1 select-none", size === "sm" ? "w-16" : size === "lg" ? "w-24" : "w-20", disabled && "opacity-45")}>
-      <div
-        role="slider"
-        tabIndex={disabled ? -1 : 0}
+    <div
+      className={cn(
+        "knob relative flex shrink-0 flex-col items-center gap-1 select-none",
+        size === "sm" ? "w-16" : size === "lg" ? "w-24" : "w-20",
+        disabled && "pointer-events-none opacity-45",
+      )}
+    >
+      {/* Ziehen, Tastatur und Bedienhilfen kommen aus react-knob-headless; Mausrad und Zurücksetzen von hier. */}
+      <KnobHeadless
         aria-label={label}
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        aria-valuetext={format(value)}
-        aria-disabled={disabled}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        valueRaw={shownRaw}
+        valueMin={min}
+        valueMax={max}
+        dragSensitivity={0.006}
+        axis="xy"
+        includeIntoTabOrder={!disabled}
+        valueRawRoundFn={round}
+        valueRawDisplayFn={(v) => format(round(v))}
+        onValueRawChange={set}
+        mapTo01={log ? (x) => to01(x) : undefined}
+        mapFrom01={log ? (p) => from01(p) : undefined}
+        onPointerDown={(e) => {
+          // Strg-, Cmd- oder Alt-Klick setzt zurück, wie in den meisten Plugins.
+          if (e.ctrlKey || e.metaKey || e.altKey) set(reset);
+          else setDragging(true);
+        }}
         onWheel={onWheel}
-        onKeyDown={onKeyDown}
-        onDoubleClick={() => !disabled && set(reset)}
+        onKeyDown={keyboard.onKeyDown}
+        onDoubleClick={() => set(reset)}
         className={cn(
           "knob-dial relative shrink-0 cursor-default touch-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring",
           size === "sm" ? "size-9" : size === "lg" ? "size-16" : "size-12",
@@ -187,7 +194,7 @@ export function Knob({
           <circle cx="50" cy="50" r="31" fill="var(--panel-raised)" stroke="var(--hairline)" strokeWidth="1.5" />
           <line x1={cx} y1={cy} x2={px} y2={py} stroke="var(--foreground)" strokeWidth="5" strokeLinecap="round" />
         </svg>
-      </div>
+      </KnobHeadless>
       {/* Beim Ziehen steht der Wert groß über dem Regler. */}
       {dragging && (
         <span className="pointer-events-none absolute -top-7 left-1/2 z-20 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 font-mono text-[11px] whitespace-nowrap text-background tabular-nums shadow-md">

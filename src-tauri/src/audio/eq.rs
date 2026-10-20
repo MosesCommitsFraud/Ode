@@ -1,38 +1,109 @@
-//! Der Drei-Band-EQ (Tiefen, Präsenz, Höhen) mit optionalem Low- und
-//! High-Cut, gebaut aus den State-Variable-Filtern von fundsp. Dieselben
-//! Filter liefern über `response` den exakten Frequenzgang für die Anzeige.
+//! Parametrischer EQ: ein Tiefen-Kuhschwanz, drei Glocken und ein
+//! Höhen-Kuhschwanz, jeweils mit Frequenz, Verstärkung und Güte, dazu
+//! Low- und High-Cut. Gebaut aus den State-Variable-Filtern von fundsp;
+//! dieselben Filter liefern über `response` den exakten Frequenzgang.
 
 use fundsp::prelude32::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::ENGINE_RATE;
 use super::fund::{Fixed, unit};
 
-/// Mitten und Güten der drei Bänder.
-const LOW: (f32, f32) = (120.0, 0.707);
-const MID: (f32, f32) = (2_500.0, 0.9);
-const HIGH: (f32, f32) = (8_000.0, 0.707);
+pub const BANDS: usize = 5;
 const CUT_Q: f32 = 0.707;
 /// Ab hier gilt ein Low-Cut als aus, bis hier ein High-Cut.
 pub const LOW_CUT_OFF: f32 = 20.0;
 pub const HIGH_CUT_OFF: f32 = 20_000.0;
+pub const GAIN_LIMIT_DB: f32 = 15.0;
 
-/// Einstellung, wie sie die Oberfläche für die Kurve schickt.
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EqCurve {
-    pub low_db: f32,
-    pub mid_db: f32,
-    pub high_db: f32,
-    pub low_cut_hz: Option<f32>,
-    pub high_cut_hz: Option<f32>,
+/// Form eines Bands: das erste und das letzte sind Kuhschwänze.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Shape {
+    LowShelf,
+    Bell,
+    HighShelf,
 }
 
-/// Drei Bänder, live über `Shared` (Verstärkung als Faktor).
-pub struct Eq3 {
-    low: Shared,
-    mid: Shared,
-    high: Shared,
+fn shape(band: usize) -> Shape {
+    match band {
+        0 => Shape::LowShelf,
+        b if b == BANDS - 1 => Shape::HighShelf,
+        _ => Shape::Bell,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct EqBand {
+    pub freq_hz: f32,
+    pub gain_db: f32,
+    pub q: f32,
+}
+
+impl Default for EqBand {
+    fn default() -> Self {
+        Self {
+            freq_hz: 1_000.0,
+            gain_db: 0.0,
+            q: 1.0,
+        }
+    }
+}
+
+/// Einstellung eines EQs, gleich für Mikrofon und Kanäle.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct EqSettings {
+    pub bands: [EqBand; BANDS],
+    pub low_cut_hz: f32,
+    pub high_cut_hz: f32,
+}
+
+impl Default for EqSettings {
+    fn default() -> Self {
+        let band = |freq_hz, q| EqBand {
+            freq_hz,
+            gain_db: 0.0,
+            q,
+        };
+        Self {
+            bands: [
+                band(100.0, 0.707),
+                band(300.0, 1.0),
+                band(1_000.0, 1.0),
+                band(3_000.0, 1.0),
+                band(10_000.0, 0.707),
+            ],
+            low_cut_hz: LOW_CUT_OFF,
+            high_cut_hz: HIGH_CUT_OFF,
+        }
+    }
+}
+
+impl EqSettings {
+    pub fn clamped(mut self) -> Self {
+        for (i, b) in self.bands.iter_mut().enumerate() {
+            b.freq_hz = b.freq_hz.clamp(20.0, 20_000.0);
+            b.gain_db = b.gain_db.clamp(-GAIN_LIMIT_DB, GAIN_LIMIT_DB);
+            let max_q = if shape(i) == Shape::Bell { 10.0 } else { 2.0 };
+            b.q = b.q.clamp(0.3, max_q);
+        }
+        self.low_cut_hz = self.low_cut_hz.clamp(LOW_CUT_OFF, 2_000.0);
+        self.high_cut_hz = self.high_cut_hz.clamp(1_000.0, HIGH_CUT_OFF);
+        self
+    }
+}
+
+/// Live-Werte eines Bands (Frequenz, Güte, Verstärkung als Faktor).
+struct BandVars {
+    freq: Shared,
+    q: Shared,
+    gain: Shared,
+}
+
+/// Der EQ im Audio-Thread, live über `Shared`.
+pub struct ParamEq {
+    vars: Vec<BandVars>,
     bands: Fixed,
     low_cut_hz: Shared,
     high_cut_hz: Shared,
@@ -41,23 +112,34 @@ pub struct Eq3 {
     cuts: (bool, bool),
 }
 
-impl Default for Eq3 {
+impl Default for ParamEq {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Eq3 {
+impl ParamEq {
     pub fn new() -> Self {
-        let (low, mid, high) = (shared(1.0), shared(1.0), shared(1.0));
-        let bands = Fixed::new(Box::new(
-            (pass() | dc(LOW) | var(&low))
-                >> lowshelf()
-                >> (pass() | dc(MID) | var(&mid))
-                >> bell()
-                >> (pass() | dc(HIGH) | var(&high))
-                >> highshelf(),
-        ));
+        let defaults = EqSettings::default();
+        let vars: Vec<BandVars> = defaults
+            .bands
+            .iter()
+            .map(|b| BandVars {
+                freq: shared(b.freq_hz),
+                q: shared(b.q),
+                gain: shared(1.0),
+            })
+            .collect();
+        let mut chain = Net::wrap(Box::new(pass()));
+        for (i, v) in vars.iter().enumerate() {
+            let inputs = pass() | var(&v.freq) | var(&v.q) | var(&v.gain);
+            let band: Box<dyn AudioUnit> = match shape(i) {
+                Shape::LowShelf => Box::new(inputs >> lowshelf()),
+                Shape::Bell => Box::new(inputs >> bell()),
+                Shape::HighShelf => Box::new(inputs >> highshelf()),
+            };
+            chain = chain >> Net::wrap(band);
+        }
         let (low_cut_hz, high_cut_hz) = (shared(LOW_CUT_OFF), shared(HIGH_CUT_OFF));
         let low_cut = Fixed::new(Box::new(
             (pass() | var(&low_cut_hz) | dc(CUT_Q)) >> highpass(),
@@ -66,10 +148,8 @@ impl Eq3 {
             (pass() | var(&high_cut_hz) | dc(CUT_Q)) >> lowpass(),
         ));
         Self {
-            low,
-            mid,
-            high,
-            bands,
+            vars,
+            bands: Fixed::new(Box::new(chain)),
             low_cut_hz,
             high_cut_hz,
             low_cut,
@@ -78,15 +158,14 @@ impl Eq3 {
         }
     }
 
-    pub fn set(&mut self, low_db: f32, mid_db: f32, high_db: f32) {
-        self.low.set_value(db_amp(low_db));
-        self.mid.set_value(db_amp(mid_db));
-        self.high.set_value(db_amp(high_db));
-    }
-
-    /// Low- und High-Cut; außerhalb der Grenzen sind sie ganz aus dem Weg.
-    pub fn set_cuts(&mut self, low_cut_hz: f32, high_cut_hz: f32) {
-        let cuts = (low_cut_hz > LOW_CUT_OFF, high_cut_hz < HIGH_CUT_OFF);
+    pub fn set(&mut self, s: &EqSettings) {
+        for (v, b) in self.vars.iter().zip(&s.bands) {
+            v.freq.set_value(b.freq_hz);
+            v.q.set_value(b.q);
+            v.gain.set_value(db_amp(b.gain_db));
+        }
+        // Außerhalb der Grenzen sind die Cuts ganz aus dem Weg.
+        let cuts = (s.low_cut_hz > LOW_CUT_OFF, s.high_cut_hz < HIGH_CUT_OFF);
         if cuts.0 && !self.cuts.0 {
             self.low_cut.reset();
         }
@@ -94,8 +173,8 @@ impl Eq3 {
             self.high_cut.reset();
         }
         self.cuts = cuts;
-        self.low_cut_hz.set_value(low_cut_hz);
-        self.high_cut_hz.set_value(high_cut_hz);
+        self.low_cut_hz.set_value(s.low_cut_hz);
+        self.high_cut_hz.set_value(s.high_cut_hz);
     }
 
     #[inline]
@@ -119,18 +198,25 @@ impl Eq3 {
 
 /// Exakter Frequenzgang in dB an den Frequenzen `freqs`, aus denselben
 /// fundsp-Filtern mit festen Werten.
-pub fn response(curve: &EqCurve, freqs: &[f64]) -> Vec<f32> {
-    let bands = lowshelf_hz(LOW.0, LOW.1, db_amp(curve.low_db))
-        >> bell_hz(MID.0, MID.1, db_amp(curve.mid_db))
-        >> highshelf_hz(HIGH.0, HIGH.1, db_amp(curve.high_db));
-    let mut graph: Box<dyn AudioUnit> = Box::new(bands);
-    if let Some(hz) = curve.low_cut_hz.filter(|&hz| hz > LOW_CUT_OFF) {
-        graph = Box::new(Net::wrap(graph) >> Net::wrap(Box::new(highpass_hz(hz, CUT_Q))));
+pub fn response(s: &EqSettings, freqs: &[f64]) -> Vec<f32> {
+    let s = s.clamped();
+    let mut chain = Net::wrap(Box::new(pass()));
+    for (i, b) in s.bands.iter().enumerate() {
+        let (f, q, g) = (b.freq_hz, b.q, db_amp(b.gain_db));
+        let band: Box<dyn AudioUnit> = match shape(i) {
+            Shape::LowShelf => Box::new(lowshelf_hz(f, q, g)),
+            Shape::Bell => Box::new(bell_hz(f, q, g)),
+            Shape::HighShelf => Box::new(highshelf_hz(f, q, g)),
+        };
+        chain = chain >> Net::wrap(band);
     }
-    if let Some(hz) = curve.high_cut_hz.filter(|&hz| hz < HIGH_CUT_OFF) {
-        graph = Box::new(Net::wrap(graph) >> Net::wrap(Box::new(lowpass_hz(hz, CUT_Q))));
+    if s.low_cut_hz > LOW_CUT_OFF {
+        chain = chain >> Net::wrap(Box::new(highpass_hz(s.low_cut_hz, CUT_Q)));
     }
-    let mut graph = unit(graph);
+    if s.high_cut_hz < HIGH_CUT_OFF {
+        chain = chain >> Net::wrap(Box::new(lowpass_hz(s.high_cut_hz, CUT_Q)));
+    }
+    let mut graph = unit(Box::new(chain));
     graph.set_sample_rate(ENGINE_RATE as f64);
     freqs
         .iter()
@@ -142,7 +228,8 @@ pub fn response(curve: &EqCurve, freqs: &[f64]) -> Vec<f32> {
 mod tests {
     use super::*;
 
-    fn sine_gain(eq: &mut Eq3, freq: f32) -> f32 {
+    fn sine_gain(eq: &mut ParamEq, freq: f32) -> f32 {
+        eq.reset();
         let mut peak = 0.0f32;
         for i in 0..48_000 {
             let y = eq.tick((i as f32 * std::f32::consts::TAU * freq / 48_000.0).sin());
@@ -155,18 +242,22 @@ mod tests {
 
     #[test]
     fn processing_matches_the_drawn_curve() {
-        let mut eq = Eq3::new();
-        eq.set(6.0, -4.0, 3.0);
-        let curve = EqCurve {
-            low_db: 6.0,
-            mid_db: -4.0,
-            high_db: 3.0,
-            low_cut_hz: None,
-            high_cut_hz: None,
+        let mut s = EqSettings::default();
+        s.bands[0].gain_db = 6.0;
+        s.bands[2] = EqBand {
+            freq_hz: 800.0,
+            gain_db: -8.0,
+            q: 4.0,
         };
-        for f in [60.0, 2_500.0, 12_000.0] {
+        s.bands[3].gain_db = 4.0;
+        s.bands[4].gain_db = 3.0;
+        s.low_cut_hz = 40.0;
+        s.high_cut_hz = 16_000.0;
+        let mut eq = ParamEq::new();
+        eq.set(&s);
+        for f in [60.0, 800.0, 3_000.0, 11_000.0] {
             let measured = sine_gain(&mut eq, f);
-            let drawn = response(&curve, &[f as f64])[0];
+            let drawn = response(&s, &[f as f64])[0];
             assert!(
                 (measured - drawn).abs() < 0.3,
                 "{f} Hz: gemessen {measured}, gezeichnet {drawn}"
@@ -176,17 +267,7 @@ mod tests {
 
     #[test]
     fn flat_is_transparent() {
-        let curve = EqCurve {
-            low_db: 0.0,
-            mid_db: 0.0,
-            high_db: 0.0,
-            low_cut_hz: Some(20.0),
-            high_cut_hz: Some(20_000.0),
-        };
-        assert!(
-            response(&curve, &[50.0, 1_000.0, 15_000.0])
-                .iter()
-                .all(|db| db.abs() < 0.01)
-        );
+        let curve = response(&EqSettings::default(), &[50.0, 1_000.0, 15_000.0]);
+        assert!(curve.iter().all(|db| db.abs() < 0.01), "{curve:?}");
     }
 }

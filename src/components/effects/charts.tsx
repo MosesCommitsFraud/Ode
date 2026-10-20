@@ -1,7 +1,8 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import uPlot, { type AlignedData, type Options } from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { EQ_BANDS, EQ_RANGE_DB, eqResponse, spectrumFrequencies, SPECTRUM_FLOOR, type EqSettings } from "~/lib/filters";
+import { bandShape, EQ_GAIN_LIMIT, EQ_RANGE_DB, eqResponse, HIGH_CUT_OFF, LOW_CUT_OFF, spectrumFrequencies, SPECTRUM_FLOOR } from "~/lib/filters";
+import type { EqBand, EqSettings } from "~/lib/engine";
 import { engine, isTauri } from "~/lib/engine";
 import { cn } from "~/lib/utils";
 
@@ -171,7 +172,28 @@ function freqAxis(el: HTMLElement, scale = "x"): uPlot.Axis {
 /* ---------- EQ ---------- */
 
 export const EQ_FREQS = spectrumFrequencies;
-const BAND_KEYS = EQ_BANDS.map((b) => b.key);
+/** Angezeigter Pegelbereich der Spektren in dB. */
+const SPECTRUM_RANGE: [number, number] = [-90, 0];
+
+/** Was im EQ gewählt ist: ein Band (Index) oder einer der Cuts. */
+export type EqTarget = number | "lowCut" | "highCut";
+
+/** Frequenz auf zwei bis drei gültige Stellen, wie man sie liest: 87 Hz, 1,25 kHz. */
+export function roundHz(f: number) {
+  const clamped = Math.min(20_000, Math.max(20, f));
+  const digits = Math.pow(10, Math.floor(Math.log10(clamped)) - (clamped < 1000 ? 1 : 2));
+  return Number((Math.round(clamped / digits) * digits).toFixed(3));
+}
+
+export const formatHz = (f: number) => (f >= 1000 ? `${Number((f / 1000).toFixed(f >= 10_000 ? 1 : 2))} kHz` : `${Math.round(f)} Hz`);
+
+/** Größte Güte eines Bands (eq.rs `clamped`): Glocken bis 10, Kuhschwänze bis 2. */
+export const maxQ = (index: number, count: number) => (bandShape(index, count) === "peak" ? 10 : 2);
+
+/** Neue Bänder mit einer Änderung an Band `index`. */
+export function withBand(eq: EqSettings, index: number, patch: Partial<EqBand>) {
+  return eq.bands.map((b, i) => (i === index ? { ...b, ...patch } : b));
+}
 
 /**
  * Frequenzgang eines EQs: in der App exakt aus der Engine (dieselben
@@ -179,14 +201,15 @@ const BAND_KEYS = EQ_BANDS.map((b) => b.key);
  */
 export function useEqCurve(eq: EqSettings) {
   const [curve, setCurve] = useState(() => eqResponse(eq, EQ_FREQS));
-  const key = `${eq.lowDb}|${eq.midDb}|${eq.highDb}|${eq.lowCutHz}|${eq.highCutHz}`;
+  const key = JSON.stringify([eq.bands, eq.lowCutHz, eq.highCutHz]);
   useEffect(() => {
     if (!isTauri) {
       setCurve(eqResponse(eq, EQ_FREQS));
       return;
     }
     let current = true;
-    void engine.eqCurve(eq).then((c) => current && setCurve(c));
+    const { bands, lowCutHz, highCutHz } = eq;
+    void engine.eqCurve({ bands, lowCutHz, highCutHz }).then((c) => current && setCurve(c));
     return () => {
       current = false;
     };
@@ -197,29 +220,58 @@ export function useEqCurve(eq: EqSettings) {
 }
 
 /**
- * EQ-Kurve in der Gerätefarbe über dem gemessenen Spektrum: grau vor dem EQ,
- * farbig getönt danach. Die drei Bänder sind Punkte auf der Kurve; Ziehen
- * nach oben hebt an, nach unten senkt ab.
+ * Parametrischer EQ als Kurve in der Gerätefarbe über dem gemessenen
+ * Spektrum (grau vor dem EQ, farbig danach). Jedes Band ist ein Punkt:
+ * waagrecht ziehen ändert die Frequenz, senkrecht die Verstärkung, das
+ * Mausrad die Breite; Low- und High-Cut sitzen auf der Nulllinie und
+ * lassen sich seitlich schieben. Doppelklick setzt einen Punkt zurück.
  */
 export function EqChart({
   eq,
-  labels,
+  name,
+  offText,
+  selected,
+  onSelect,
   onChange,
   spectrumIn,
   spectrumOut,
 }: {
   eq: EqSettings;
-  /** Namen der Bänder für die Marken, z. B. „Bass“. */
-  labels: [string, string, string];
-  onChange: (key: "lowDb" | "midDb" | "highDb", db: number) => void;
+  /** Name eines Punkts für die Marke, z. B. „Mitten“. */
+  name: (target: EqTarget) => string;
+  /** Anzeige eines ausgeschalteten Cuts. */
+  offText: string;
+  selected: EqTarget;
+  onSelect: (target: EqTarget) => void;
+  onChange: (patch: Partial<EqSettings>) => void;
   spectrumIn?: number[];
   spectrumOut?: number[];
 }) {
-  const state = useRef({ eq, labels, onChange, active: 0 });
-  state.current = { ...state.current, eq, labels, onChange };
+  const state = useRef({ eq, name, offText, selected, onSelect, onChange, drag: null as { target: EqTarget; dx: number; dy: number } | null });
+  state.current = { ...state.current, eq, name, offText, selected, onSelect, onChange };
   const curve = useEqCurve(eq);
   const empty = EQ_FREQS.map(() => SPECTRUM_FLOOR);
   const data: AlignedData = [EQ_FREQS, spectrumIn?.length ? spectrumIn : empty, spectrumOut?.length ? spectrumOut : empty, curve];
+
+  /** Punkte mit Lage in CSS-Pixeln des Zeichenbereichs. */
+  const handles = (u: uPlot, current: EqSettings) => {
+    const list: { target: EqTarget; x: number; y: number; off: boolean }[] = [
+      { target: "lowCut", x: u.valToPos(current.lowCutHz, "x"), y: u.valToPos(0, "db"), off: current.lowCutHz <= LOW_CUT_OFF },
+      ...current.bands.map((b, i) => ({ target: i as EqTarget, x: u.valToPos(b.freqHz, "x"), y: u.valToPos(b.gainDb, "db"), off: false })),
+      { target: "highCut", x: u.valToPos(current.highCutHz, "x"), y: u.valToPos(0, "db"), off: current.highCutHz >= HIGH_CUT_OFF },
+    ];
+    return list;
+  };
+
+  const move = (target: EqTarget, freq: number, gain: number) => {
+    const s = state.current;
+    if (target === "lowCut") s.onChange({ lowCutHz: Math.min(2000, roundHz(freq)) });
+    else if (target === "highCut") s.onChange({ highCutHz: Math.max(1000, roundHz(freq)) });
+    else
+      s.onChange({
+        bands: withBand(s.eq, target, { freqHz: roundHz(freq), gainDb: Math.round(Math.min(EQ_GAIN_LIMIT, Math.max(-EQ_GAIN_LIMIT, gain)) * 10) / 10 }),
+      });
+  };
 
   return (
     <Plot
@@ -231,7 +283,7 @@ export function EqChart({
         scales: {
           x: { time: false, distr: 3, log: 10, range: [20, 20000] },
           db: { range: [-EQ_RANGE_DB, EQ_RANGE_DB] },
-          spec: { range: [-90, 0] },
+          spec: { range: SPECTRUM_RANGE },
         },
         axes: [
           freqAxis(el),
@@ -239,44 +291,124 @@ export function EqChart({
         ],
         series: [
           {},
-          { scale: "spec", stroke: () => token(el, "--muted-foreground", 0.35), fill: () => token(el, "--muted-foreground", 0.12), width: 1, points: { show: false } },
-          { scale: "spec", stroke: () => token(el, "--ch-mic", 0.45), fill: () => token(el, "--ch-mic", 0.14), width: 1, points: { show: false } },
-          { scale: "db", stroke: () => token(el, "--ch-mic"), width: 2.5, points: { show: false } },
+          {
+            scale: "spec",
+            stroke: () => token(el, "--muted-foreground", 0.35),
+            fill: () => token(el, "--muted-foreground", 0.12),
+            width: 1,
+            points: { show: false },
+            // Von unten füllen; uPlot füllt bei nur negativen Werten sonst zur Oberkante.
+            fillTo: SPECTRUM_RANGE[0],
+          },
+          { scale: "spec", stroke: () => token(el, "--ch-mic", 0.45), fill: () => token(el, "--ch-mic", 0.14), fillTo: SPECTRUM_RANGE[0], width: 1, points: { show: false } },
+          { scale: "db", stroke: () => token(el, "--ch-mic"), fill: () => token(el, "--ch-mic", 0.08), fillTo: 0, width: 2.5, points: { show: false } },
         ],
         hooks: {
           draw: [
             (u) => {
-              const { eq: current, labels: names } = state.current;
-              EQ_BANDS.forEach((b, i) => {
-                const x = u.valToPos(b.freq, "x", true);
-                const y = u.valToPos(current[b.key], "db", true);
-                dot(u, x, y, token(el, "--ch-mic"), "white");
-                const v = current[b.key];
-                tag(u, x, y, `${names[i]} ${v > 0 ? "+" : ""}${v.toFixed(1)} dB`, token(el, "--foreground"), token(el, "--panel-raised", 0.92));
-              });
+              const s = state.current;
+              const pr = uPlot.pxRatio;
+              const accent = token(el, "--ch-mic");
+              const list = handles(u, s.eq);
+              // Der gewählte Punkt zuletzt, damit er über den anderen liegt.
+              list.sort((a, b) => Number(a.target === s.selected) - Number(b.target === s.selected));
+              for (const h of list) {
+                const x = u.bbox.left + h.x * pr;
+                const y = u.bbox.top + h.y * pr;
+                const chosen = h.target === s.selected;
+                if (chosen) dot(u, x, y, accent, "white");
+                else ring(u, x, y, h.off ? token(el, "--muted-foreground", 0.7) : accent, token(el, "--panel-raised"));
+              }
+              const chosen = list.find((h) => h.target === s.selected);
+              if (chosen) {
+                const t = s.selected;
+                const text =
+                  typeof t === "number"
+                    ? `${s.name(t)} · ${formatHz(s.eq.bands[t].freqHz)} · ${s.eq.bands[t].gainDb > 0 ? "+" : ""}${s.eq.bands[t].gainDb.toFixed(1)} dB`
+                    : `${s.name(t)} · ${chosen.off ? s.offText : formatHz(t === "lowCut" ? s.eq.lowCutHz : s.eq.highCutHz)}`;
+                tag(u, u.bbox.left + chosen.x * pr, u.bbox.top + chosen.y * pr, text, token(el, "--foreground"), token(el, "--panel-raised", 0.92));
+              }
             },
           ],
           ready: [
-            (u) =>
-              draggable(
-                u,
-                (f, db, start) => {
+            (u) => {
+              const over = u.over;
+              over.style.touchAction = "none";
+              const local = (e: MouseEvent) => {
+                const r = over.getBoundingClientRect();
+                return [e.clientX - r.left, e.clientY - r.top] as const;
+              };
+              /** Punkt unter dem Zeiger, sonst das Band mit der nächsten Frequenz. */
+              const pick = (x: number, y: number) => {
+                const list = handles(u, state.current.eq);
+                const near = list.map((h) => ({ h, d: Math.hypot(h.x - x, h.y - y) })).sort((a, b) => a.d - b.d)[0];
+                if (near && near.d < 16) return { target: near.h.target, dx: near.h.x - x, dy: near.h.y - y };
+                const bands = list.filter((h) => typeof h.target === "number");
+                const nearest = bands.reduce((best, h) => (Math.abs(h.x - x) < Math.abs(best.x - x) ? h : best), bands[0]);
+                return { target: nearest.target, dx: 0, dy: 0 };
+              };
+              over.addEventListener("pointerdown", (e) => {
+                if (e.button !== 0) return;
+                over.setPointerCapture(e.pointerId);
+                const [x, y] = local(e);
+                const grab = pick(x, y);
+                state.current.drag = grab;
+                state.current.onSelect(grab.target);
+                // Ein Klick neben die Punkte holt das nächste Band gleich unter den Zeiger.
+                if (grab.dx === 0 && grab.dy === 0) move(grab.target, u.posToVal(x, "x"), u.posToVal(y, "db"));
+              });
+              over.addEventListener("pointermove", (e) => {
+                const grab = state.current.drag;
+                if (!grab || !over.hasPointerCapture(e.pointerId)) return;
+                const [x, y] = local(e);
+                move(grab.target, u.posToVal(x + grab.dx, "x"), u.posToVal(y + grab.dy, "db"));
+              });
+              const end = () => (state.current.drag = null);
+              over.addEventListener("pointerup", end);
+              over.addEventListener("lostpointercapture", end);
+              over.addEventListener("dblclick", (e) => {
+                const [x, y] = local(e);
+                const { target } = pick(x, y);
+                const s = state.current;
+                if (target === "lowCut") s.onChange({ lowCutHz: LOW_CUT_OFF });
+                else if (target === "highCut") s.onChange({ highCutHz: HIGH_CUT_OFF });
+                else s.onChange({ bands: withBand(s.eq, target, { gainDb: 0 }) });
+              });
+              // Mausrad: Breite des gewählten Bands (nach oben schmaler).
+              over.addEventListener(
+                "wheel",
+                (e) => {
                   const s = state.current;
-                  // Beim Drücken das nächste Band wählen (auf der log. Achse), dann nur noch die Höhe.
-                  if (start) {
-                    const distance = (freq: number) => Math.abs(Math.log(freq / f));
-                    s.active = EQ_BANDS.reduce((best, b, i) => (distance(b.freq) < distance(EQ_BANDS[best].freq) ? i : best), 0);
-                  }
-                  const value = Math.round(Math.min(12, Math.max(-12, db)) * 2) / 2;
-                  s.onChange(BAND_KEYS[s.active], value);
+                  if (typeof s.selected !== "number") return;
+                  e.preventDefault();
+                  const band = s.eq.bands[s.selected];
+                  const q = band.q * (e.deltaY < 0 ? 1.12 : 1 / 1.12);
+                  const clamped = Math.min(maxQ(s.selected, s.eq.bands.length), Math.max(0.3, q));
+                  s.onChange({ bands: withBand(s.eq, s.selected, { q: Math.round(clamped * 100) / 100 }) });
                 },
-                { x: "x", y: "db" },
-              ),
+                { passive: false },
+              );
+            },
           ],
         },
       })}
     />
   );
+}
+
+/** Nicht gewählter Punkt: farbiger Ring auf Grund der Fläche. */
+function ring(u: uPlot, x: number, y: number, color: string, fill: string) {
+  const ctx = u.ctx;
+  const pr = uPlot.pxRatio;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, 5.5 * pr, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.lineWidth = 2 * pr;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**
@@ -307,9 +439,20 @@ export function SpectrumChart({
         padding: [10, 12, 0, 0],
         legend: { show: false },
         cursor: { show: false, drag: { x: false, y: false } },
-        scales: { x: { time: false, distr: 3, log: 10, range: [20, 20000] }, spec: { range: [-90, 0] } },
+        scales: { x: { time: false, distr: 3, log: 10, range: [20, 20000] }, spec: { range: SPECTRUM_RANGE } },
         axes: [freqAxis(el), { ...axisStyle(el), scale: "spec", size: 34, splits: () => [-80, -60, -40, -20, 0], values: (_u, s) => s.map(String) }],
-        series: [{}, { scale: "spec", stroke: () => token(el, "--muted-foreground", 0.5), fill: () => token(el, "--muted-foreground", 0.14), width: 1, points: { show: false } }],
+        series: [
+          {},
+          {
+            scale: "spec",
+            stroke: () => token(el, "--muted-foreground", 0.5),
+            fill: () => token(el, "--muted-foreground", 0.14),
+            width: 1,
+            points: { show: false },
+            // Von unten füllen; uPlot füllt bei nur negativen Werten sonst zur Oberkante.
+            fillTo: SPECTRUM_RANGE[0],
+          },
+        ],
         hooks: {
           draw: [
             (u) => {
@@ -388,10 +531,7 @@ export function HistoryChart({
         legend: { show: false },
         cursor: { show: false, drag: { x: false, y: false } },
         scales: { x: { time: false, range: [0, Math.max(1, length - 1)] }, level: { range }, gr: { range: [-grMax, 0] } },
-        axes: [
-          { show: false },
-          { ...axisStyle(el), scale: "level", size: 34, splits: () => splits, values: (_u, s) => s.map(String) },
-        ],
+        axes: [{ show: false }, { ...axisStyle(el), scale: "level", size: 34, splits: () => splits, values: (_u, s) => s.map(String) }],
         series: [
           {},
           ...series.map((s) => ({

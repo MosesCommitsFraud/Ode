@@ -72,7 +72,7 @@ fn main() -> anyhow::Result<()> {
         fx.gate.enabled = true;
         fx.denoise.enabled = true;
         fx.eq.enabled = true;
-        fx.eq.mid_db = 3.0;
+        fx.eq.eq.bands[2].gain_db = 3.0;
         fx.compressor.enabled = true;
         fx.limiter.enabled = true;
         engine.mixer.effects.set(fx);

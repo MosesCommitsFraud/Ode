@@ -1,4 +1,4 @@
-import type { BusParams, ChannelFx, EffectsParams, Preset, VoiceParams } from "./engine";
+import type { BusParams, ChannelFx, EffectsParams, EqSettings, Preset, VoiceParams } from "./engine";
 
 /* Auslieferungszustand, wie in der Engine (src-tauri/src/audio/…). */
 
@@ -20,10 +20,23 @@ export const VOICE_DEFAULTS: VoiceParams = {
   reverb: { enabled: false, size: 0.6, damping: 0.5, predelayMs: 20, lowCutHz: 200, mix: 0.25 },
 };
 
+/** Wie `EqSettings::default` in eq.rs: alle Bänder flach, Cuts aus. */
+export const EQ_DEFAULTS: EqSettings = {
+  bands: [
+    { freqHz: 100, gainDb: 0, q: 0.707 },
+    { freqHz: 300, gainDb: 0, q: 1 },
+    { freqHz: 1000, gainDb: 0, q: 1 },
+    { freqHz: 3000, gainDb: 0, q: 1 },
+    { freqHz: 10000, gainDb: 0, q: 0.707 },
+  ],
+  lowCutHz: 20,
+  highCutHz: 20000,
+};
+
 export const EFFECTS_DEFAULTS: EffectsParams = {
   gate: { enabled: false, thresholdDb: -50 },
   denoise: { enabled: false, voiceGate: true, strength: 1 },
-  eq: { enabled: false, lowDb: 0, midDb: 0, highDb: 0 },
+  eq: { enabled: false, ...EQ_DEFAULTS },
   agc: { enabled: false, targetDb: -20, maxGainDb: 18 },
   compressor: { enabled: false, thresholdDb: -20, ratio: 3, makeupDb: 4 },
   deEsser: { enabled: false, thresholdDb: -30, frequencyHz: 6000 },
@@ -34,11 +47,7 @@ export const EFFECTS_DEFAULTS: EffectsParams = {
 
 export const CHANNEL_FX_DEFAULTS: ChannelFx = {
   eqEnabled: false,
-  lowDb: 0,
-  midDb: 0,
-  highDb: 0,
-  lowCutHz: 20,
-  highCutHz: 20000,
+  ...EQ_DEFAULTS,
   reverbSend: 0,
   echoSend: 0,
 };
