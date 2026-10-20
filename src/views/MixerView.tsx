@@ -7,10 +7,12 @@ import {
   VinylRecord as Disc3,
   Waveform as AudioWaveform,
 } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { BusesPanel } from "~/components/mixer/BusesPanel";
 import { ChannelStrip, StripToggle } from "~/components/mixer/ChannelStrip";
 import { CHANNEL_DEFAULTS, OUTPUT_DEFAULTS, same } from "~/components/mixer/PageChannel";
 import { Card, SectionLabel, Segmented, Switch } from "~/components/ui/misc";
+import { Pill, PillGroup } from "~/components/ui/pills";
 import type { ChannelId, Meters, OutputId } from "~/lib/engine";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
@@ -52,7 +54,7 @@ function Console() {
             onClick={() => actions.resetLevels()}
             className="flex h-6 cursor-default items-center gap-1.5 rounded-full bg-muted px-2.5 font-mono text-3xs font-semibold text-muted-foreground uppercase transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 [&_svg]:size-3"
           >
-            <RotateCcw /> Alles auf 0 dB
+            <RotateCcw /> {t("mixer.resetAllLabel")}
           </button>
         </div>
         <div className="flex flex-1 divide-x divide-hairline">
@@ -189,11 +191,47 @@ function DuckingBar() {
   );
 }
 
+type Page = "console" | "buses";
+const PAGE_KEY = "ode.mixer-page";
+
+function readPage(): Page {
+  try {
+    return localStorage.getItem(PAGE_KEY) === "buses" ? "buses" : "console";
+  } catch {
+    return "console";
+  }
+}
+
 export function MixerView() {
+  const [page, setPageState] = useState<Page>(readPage);
+  const setPage = (next: Page) => {
+    setPageState(next);
+    try {
+      localStorage.setItem(PAGE_KEY, next);
+    } catch {
+      // Nur Komfort.
+    }
+  };
   return (
     <div className="flex h-full flex-col gap-3 overflow-hidden pl-6 pr-3 pt-3 pb-3">
-      <Console />
-      <DuckingBar />
+      <div className="flex shrink-0 items-center gap-2">
+        <PillGroup>
+          <Pill active={page === "console"} onClick={() => setPage("console")}>
+            {t("mixer.console")}
+          </Pill>
+          <Pill active={page === "buses"} onClick={() => setPage("buses")}>
+            {t("mixer.buses")}
+          </Pill>
+        </PillGroup>
+      </div>
+      {page === "console" ? (
+        <>
+          <Console />
+          <DuckingBar />
+        </>
+      ) : (
+        <BusesPanel />
+      )}
     </div>
   );
 }

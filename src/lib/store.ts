@@ -3,6 +3,8 @@ import { t } from "./i18n";
 import {
   engine,
   isTauri,
+  type BusParams,
+  type ChannelFx,
   type ChannelId,
   type ChannelParams,
   type DeviceList,
@@ -13,7 +15,10 @@ import {
   type Meters,
   type OutputId,
   type OutputParams,
+  type Preset,
+  type VoiceParams,
 } from "./engine";
+import { BUS_DEFAULTS, DEMO_PRESETS, EFFECTS_DEFAULTS } from "./defaults";
 
 export interface State {
   devices: DeviceList;
@@ -23,6 +28,12 @@ export interface State {
   outputs: Record<OutputId, OutputParams>;
   ducking: DuckingParams;
   effects: EffectsParams;
+  buses: BusParams;
+  presets: Preset[];
+  /** Zuletzt gewähltes Preset, null = eigene Einstellung oder aus. */
+  activePreset: string | null;
+  /** Fehler beim Anmelden von Preset-Hotkeys. */
+  presetErrors: string[];
   meters: Meters | null;
   starting: boolean;
   error: string | null;
@@ -62,14 +73,11 @@ let state: State = {
     b: { gainDb: 0, muted: false, limiter: true },
   },
   ducking: { enabled: false, amountDb: 12, thresholdDb: -40 },
-  effects: {
-    gate: { enabled: false, thresholdDb: -50 },
-    denoise: { enabled: false, voiceGate: true },
-    eq: { enabled: false, lowDb: 0, midDb: 0, highDb: 0 },
-    agc: { enabled: false, targetDb: -20, maxGainDb: 18 },
-    compressor: { enabled: false, thresholdDb: -20, ratio: 3, makeupDb: 4 },
-    limiter: { enabled: false, ceilingDb: -3 },
-  },
+  effects: EFFECTS_DEFAULTS,
+  buses: BUS_DEFAULTS,
+  presets: [],
+  activePreset: null,
+  presetErrors: [],
   meters: null,
   starting: false,
   error: null,
@@ -125,13 +133,17 @@ export const actions = {
       return;
     }
     await engine.onMeters((meters) => set({ meters }));
-    const [mixer, info] = await Promise.all([engine.getMixer(), engine.info()]);
+    await engine.onVoiceChanged(({ effects, active }) => set({ effects, activePreset: active }));
+    const [mixer, info, presets] = await Promise.all([engine.getMixer(), engine.info(), engine.presetsState()]);
     set({
       info,
       channels: Object.fromEntries(mixer.channels) as State["channels"],
       outputs: { a: mixer.outA, b: mixer.outB },
       ducking: mixer.ducking,
       effects: mixer.effects,
+      buses: mixer.buses,
+      presets: presets.presets,
+      activePreset: presets.active,
     });
     await actions.refreshDevices();
     // Ohne laufende Engine bleibt das Soundboard stumm – also gleich starten.
@@ -190,10 +202,101 @@ export const actions = {
   },
 
   /** Ändert einen Effekt, z. B. setEffect("gate", { enabled: true }). */
-  setEffect<K extends keyof EffectsParams>(key: K, patch: Partial<EffectsParams[K]>) {
-    const effects = { ...state.effects, [key]: { ...state.effects[key], ...patch } };
+  setEffect<K extends Exclude<keyof EffectsParams, "voice">>(key: K, patch: Partial<EffectsParams[K]>) {
+    actions.setEffects({ ...state.effects, [key]: { ...state.effects[key], ...patch } });
+  },
+
+  /** Ändert einen Stimm-Effekt, z. B. setVoice("reverb", { mix: 0.4 }). */
+  setVoice<K extends Exclude<keyof VoiceParams, "enabled">>(key: K, patch: Partial<VoiceParams[K]>) {
+    const voice = { ...state.effects.voice, [key]: { ...state.effects.voice[key], ...patch } };
+    actions.setEffects({ ...state.effects, voice });
+  },
+
+  /** Hauptschalter der Stimm-Effekte. */
+  setVoiceEnabled(enabled: boolean) {
+    actions.setEffects({ ...state.effects, voice: { ...state.effects.voice, enabled } });
+  },
+
+  setEffects(effects: EffectsParams) {
     set({ effects });
     if (isTauri) void engine.setEffects(effects);
+  },
+
+  setChannelFx(id: ChannelId, patch: Partial<ChannelFx>) {
+    const channels = { ...state.buses.channels, [id]: { ...state.buses.channels[id], ...patch } };
+    actions.setBuses({ ...state.buses, channels });
+  },
+
+  setBus<K extends "reverb" | "echo">(key: K, patch: Partial<BusParams[K]>) {
+    actions.setBuses({ ...state.buses, [key]: { ...state.buses[key], ...patch } });
+  },
+
+  setBuses(buses: BusParams) {
+    set({ buses });
+    if (isTauri) void engine.setBuses(buses);
+  },
+
+  async applyPreset(id: string) {
+    const preset = state.presets.find((p) => p.id === id);
+    if (!preset) return;
+    if (!isTauri) {
+      set({ effects: { ...state.effects, voice: { ...preset.voice, enabled: true } }, activePreset: id });
+      return;
+    }
+    // Das Ergebnis kommt über „effects://changed“.
+    await engine.presetApply(id);
+  },
+
+  async presetOff() {
+    if (!isTauri) {
+      set({ effects: { ...state.effects, voice: { ...state.effects.voice, enabled: false } }, activePreset: null });
+      return;
+    }
+    await engine.presetOff();
+  },
+
+  async savePreset(preset: Preset) {
+    if (!isTauri) {
+      const exists = state.presets.some((p) => p.id === preset.id);
+      set({ presets: exists ? state.presets.map((p) => (p.id === preset.id ? preset : p)) : [...state.presets, preset] });
+      return;
+    }
+    const { state: next, hotkeyErrors } = await engine.presetSave(preset);
+    set({ presets: next.presets, activePreset: next.active, presetErrors: hotkeyErrors });
+  },
+
+  async deletePreset(id: string) {
+    if (!isTauri) {
+      set({
+        presets: state.presets.filter((p) => p.id !== id),
+        activePreset: state.activePreset === id ? null : state.activePreset,
+      });
+      return;
+    }
+    const next = await engine.presetDelete(id);
+    set({ presets: next.presets, activePreset: next.active });
+  },
+
+  async reorderPresets(ids: string[]) {
+    const byId = new Map(state.presets.map((p) => [p.id, p]));
+    set({ presets: ids.map((id) => byId.get(id)).filter((p): p is Preset => !!p) });
+    if (isTauri) {
+      const next = await engine.presetsReorder(ids);
+      set({ presets: next.presets });
+    }
+  },
+
+  async restorePresets() {
+    if (!isTauri) {
+      set({ presets: DEMO_PRESETS });
+      return;
+    }
+    const next = await engine.presetsRestore();
+    set({ presets: next.presets, activePreset: next.active });
+  },
+
+  dismissPresetErrors() {
+    set({ presetErrors: [] });
   },
 
   setDucking(patch: Partial<DuckingParams>) {
@@ -253,6 +356,7 @@ function startDemo() {
   const stream = (deviceName: string) => ({ deviceName, sampleRate: 48000, channels: 2, sampleFormat: "f32" });
   set({
     devices,
+    presets: DEMO_PRESETS,
     config: withDefaults(state.config, devices),
     info: {
       input: stream(devices.inputs[0].name),
@@ -294,10 +398,31 @@ function startDemo() {
           voiceOpen: !state.effects.denoise.voiceGate || voice > 0.4,
           agcGainDb: state.effects.agc.enabled ? 6 + Math.sin(t * 0.3) * 2 : 0,
           compressorDb: state.effects.compressor.enabled ? -Math.max(0, voice * 12 - 3) : 0,
+          deEsserDb: state.effects.deEsser.enabled ? -Math.max(0, Math.sin(t * 5.3) * 6) : 0,
           limiterDb: state.effects.limiter.enabled && voice > 0.6 ? -1.2 : 0,
+          ...demoVoice(t, voice),
         },
         duckingDb: state.ducking.enabled && voice > 0.05 ? -state.ducking.amountDb : 0,
       },
     });
   }, 33);
+}
+
+/** Simulierte Anzeigen der Stimm-Effekte für die Vorschau im Browser. */
+function demoVoice(t: number, level: number) {
+  const v = state.effects.voice;
+  const shifts = v.enabled && (v.pitch.enabled || v.autotune.enabled || v.harmonizer.enabled);
+  const detects = shifts || (v.enabled && v.vocoder.enabled && v.vocoder.follow);
+  const sung = 57.3 + Math.sin(t * 0.7) * 2.4 + Math.sin(t * 6) * 0.15;
+  const voiced = detects && level > 0.15;
+  const target = Math.round(sung);
+  return {
+    pitchHz: voiced ? 440 * Math.pow(2, (sung - 69) / 12) : 0,
+    targetNote: voiced && v.autotune.enabled ? target : -1,
+    correctionCents: voiced && v.autotune.enabled ? (target - sung) * 100 * (1 - v.autotune.speed * 0.6) : 0,
+    voiceLatencyMs: shifts ? 25 : 0,
+    vocoder: Array.from({ length: 16 }, (_, i) =>
+      v.enabled && v.vocoder.enabled ? level * Math.max(0, 0.6 + 0.4 * Math.sin(t * 3 + i * 0.7)) * Math.exp(-i / 9) * 0.3 : 0,
+    ),
+  };
 }

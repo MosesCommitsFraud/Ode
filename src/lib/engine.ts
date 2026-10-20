@@ -57,6 +57,56 @@ export interface DuckingParams {
   thresholdDb: number;
 }
 
+export type Scale = "chromatic" | "major" | "minor" | "pentatonic" | "blues";
+export type CharacterMode = "robot" | "radio" | "telephone" | "megaphone" | "distortion" | "bitcrusher";
+export type ModulationMode = "chorus" | "flanger" | "phaser";
+export type Chord = "single" | "fifth" | "major" | "minor";
+
+export interface ReverbParams {
+  enabled: boolean;
+  /** Raumgröße 0–1. */
+  size: number;
+  /** Höhendämpfung 0–1. */
+  damping: number;
+  predelayMs: number;
+  lowCutHz: number;
+  /** Anteil 0–1; auf dem Bus die Rückführung. */
+  mix: number;
+}
+
+export interface EchoParams {
+  enabled: boolean;
+  timeMs: number;
+  /** 0–0,95. */
+  feedback: number;
+  toneHz: number;
+  /** Anteil 0–1; auf dem Bus die Rückführung. */
+  mix: number;
+}
+
+export interface HarmonyVoice {
+  enabled: boolean;
+  semitones: number;
+  level: number;
+}
+
+/** Stimm-Effekte; Presets speichern genau diesen Teil. */
+export interface VoiceParams {
+  /** Hauptschalter aller Stimm-Effekte. */
+  enabled: boolean;
+  pitch: { enabled: boolean; semitones: number; formant: number };
+  /** key: 0 = C … 11 = H; speed: 0 = sofort, 1 = langsam. */
+  autotune: { enabled: boolean; key: number; scale: Scale; speed: number };
+  harmonizer: { enabled: boolean; voices: [HarmonyVoice, HarmonyVoice] };
+  /** note: Midi-Note des Trägers; follow: Träger folgt der Stimme. */
+  vocoder: { enabled: boolean; note: number; follow: boolean; chord: Chord; breath: number; mix: number };
+  /** amount und tone 0–1, ihre Bedeutung hängt vom Modus ab. */
+  character: { enabled: boolean; mode: CharacterMode; amount: number; tone: number; mix: number };
+  modulation: { enabled: boolean; mode: ModulationMode; rateHz: number; depth: number; feedback: number; mix: number };
+  echo: EchoParams;
+  reverb: ReverbParams;
+}
+
 export interface EffectsParams {
   gate: { enabled: boolean; thresholdDb: number };
   /** voiceGate: senkt alles ab, was RNNoise nicht als Sprache erkennt (Klicks, Tippen). */
@@ -65,7 +115,30 @@ export interface EffectsParams {
   /** Automatische Lautstärke: Ziel −30…−10 dBFS, Anhebung höchstens 0…30 dB. */
   agc: { enabled: boolean; targetDb: number; maxGainDb: number };
   compressor: { enabled: boolean; thresholdDb: number; ratio: number; makeupDb: number };
+  deEsser: { enabled: boolean; thresholdDb: number; frequencyHz: number };
+  exciter: { enabled: boolean; frequencyHz: number; amount: number };
   limiter: { enabled: boolean; ceilingDb: number };
+  voice: VoiceParams;
+}
+
+/** Klang-EQ und Sends eines Kanals im Pult. */
+export interface ChannelFx {
+  eqEnabled: boolean;
+  lowDb: number;
+  midDb: number;
+  highDb: number;
+  /** 20 = aus. */
+  lowCutHz: number;
+  /** 20000 = aus. */
+  highCutHz: number;
+  reverbSend: number;
+  echoSend: number;
+}
+
+export interface BusParams {
+  reverb: ReverbParams;
+  echo: EchoParams;
+  channels: Record<ChannelId, ChannelFx>;
 }
 
 export interface MixerState {
@@ -74,6 +147,23 @@ export interface MixerState {
   outB: OutputParams;
   ducking: DuckingParams;
   effects: EffectsParams;
+  buses: BusParams;
+}
+
+export interface Preset {
+  id: string;
+  /** Leer bei mitgelieferten Presets: dann gilt der übersetzte Name. */
+  name: string;
+  icon: string;
+  hotkey: string | null;
+  hotkeyLabel: string | null;
+  builtin: boolean;
+  voice: VoiceParams;
+}
+
+export interface PresetState {
+  presets: Preset[];
+  active: string | null;
 }
 
 export interface OutputMeters {
@@ -105,7 +195,17 @@ export interface Meters {
     /** Aktuelle Verstärkung der AGC in dB. */
     agcGainDb: number;
     compressorDb: number;
+    deEsserDb: number;
     limiterDb: number;
+    /** Erkannte Tonhöhe in Hz, 0 = keine. */
+    pitchHz: number;
+    /** Zielnote des Autotune (Midi), −1 = keine. */
+    targetNote: number;
+    correctionCents: number;
+    /** Zusätzliche Verzögerung der Stimm-Effekte in ms. */
+    voiceLatencyMs: number;
+    /** 16 Bandpegel des Vocoders. */
+    vocoder: number[];
   };
 }
 
@@ -123,6 +223,18 @@ export const engine = {
     invoke<void>("set_output", { output, params }),
   setDucking: (params: DuckingParams) => invoke<void>("set_ducking", { params }),
   setEffects: (params: EffectsParams) => invoke<void>("set_effects", { params }),
+  setBuses: (params: BusParams) => invoke<void>("set_buses", { params }),
   onMeters: (handler: (meters: Meters) => void): Promise<UnlistenFn> =>
     listen<Meters>("engine://meters", (event) => handler(event.payload)),
+  /** Preset per Hotkey gewechselt: neue Effekte und aktives Preset. */
+  onVoiceChanged: (handler: (change: { effects: EffectsParams; active: string | null }) => void): Promise<UnlistenFn> =>
+    listen<{ effects: EffectsParams; active: string | null }>("effects://changed", (event) => handler(event.payload)),
+  presetsState: () => invoke<PresetState>("presets_state"),
+  presetApply: (id: string) => invoke<void>("preset_apply", { id }),
+  presetOff: () => invoke<void>("preset_off"),
+  presetSave: (preset: Preset) =>
+    invoke<{ state: PresetState; hotkeyErrors: string[] }>("preset_save", { preset }),
+  presetDelete: (id: string) => invoke<PresetState>("preset_delete", { id }),
+  presetsReorder: (ids: string[]) => invoke<PresetState>("presets_reorder", { ids }),
+  presetsRestore: () => invoke<PresetState>("presets_restore"),
 };

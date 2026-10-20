@@ -1,4 +1,4 @@
-import { Broadcast, DownloadSimple, GearSix, Moon, Plus, Sliders, Star, Sun, VinylRecord, Waveform, Waves } from "@phosphor-icons/react";
+import { Broadcast, DownloadSimple, GearSix, Moon, Plus, Sliders, Star, Sun, UserSound, VinylRecord, Waveform, Waves } from "@phosphor-icons/react";
 import { useEffect, type ReactNode } from "react";
 import { library, useLibrary } from "~/lib/library";
 import { music, useMusic } from "~/lib/music";
@@ -7,7 +7,7 @@ import { cn } from "~/lib/utils";
 import { OutputVolume } from "./OutputVolume";
 import { t } from "~/lib/i18n";
 
-export type View = "soundboard" | "music" | "live" | "mixer" | "effects" | "downloads" | "settings";
+export type View = "soundboard" | "music" | "live" | "mixer" | "effects" | "voice" | "downloads" | "settings";
 
 export const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
   { id: "soundboard", get label() { return t("shell.soundboard"); }, icon: <Waveform /> },
@@ -15,6 +15,7 @@ export const VIEWS: { id: View; label: string; icon: ReactNode }[] = [
   { id: "live", get label() { return t("shell.live"); }, icon: <Broadcast /> },
   { id: "mixer", get label() { return t("shell.mixer"); }, icon: <Sliders /> },
   { id: "effects", get label() { return t("shell.effects"); }, icon: <Waves /> },
+  { id: "voice", get label() { return t("shell.voice"); }, icon: <UserSound /> },
   { id: "downloads", get label() { return t("shell.downloads"); }, icon: <DownloadSimple /> },
 ];
 

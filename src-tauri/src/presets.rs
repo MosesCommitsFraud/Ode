@@ -36,6 +36,9 @@ pub struct Preset {
     pub icon: String,
     #[serde(default)]
     pub hotkey: Option<String>,
+    /// Beschriftung wie auf der eigenen Tastatur, siehe Sounds.
+    #[serde(default)]
+    pub hotkey_label: Option<String>,
     #[serde(default)]
     pub builtin: bool,
     pub voice: VoiceParams,
@@ -74,6 +77,7 @@ fn builtin(id: &str, icon: &str, build: impl FnOnce(&mut VoiceParams)) -> Preset
         name: String::new(),
         icon: icon.into(),
         hotkey: None,
+        hotkey_label: None,
         builtin: true,
         voice: voice(build),
     }
@@ -442,7 +446,12 @@ pub fn presets_restore(app: AppHandle) -> PresetState {
             match list.iter_mut().find(|p| p.id == preset.id) {
                 Some(existing) => {
                     let hotkey = existing.hotkey.take();
-                    *existing = Preset { hotkey, ..preset };
+                    let hotkey_label = existing.hotkey_label.take();
+                    *existing = Preset {
+                        hotkey,
+                        hotkey_label,
+                        ..preset
+                    };
                 }
                 None => list.push(preset),
             }

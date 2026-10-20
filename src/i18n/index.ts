@@ -11,6 +11,7 @@ import settings from "./settings";
 import setup from "./setup";
 import shell from "./shell";
 import soundboard from "./soundboard";
+import voice from "./voice";
 
 export type Dictionary = { de: Record<string, string>; en: Record<string, string> };
 
@@ -27,4 +28,5 @@ export const dictionaries: Record<string, Dictionary> = {
   setup,
   shell,
   soundboard,
+  voice,
 };

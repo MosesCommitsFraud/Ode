@@ -10,6 +10,7 @@ import { MixerView } from "~/views/MixerView";
 import { SettingsView } from "~/views/SettingsView";
 import { DownloadsView, EffectsView, MusicView } from "~/views/Placeholders";
 import { SoundboardView } from "~/views/SoundboardView";
+import { VoiceView } from "~/views/VoiceView";
 
 const ALL_VIEWS = [...VIEWS, SETTINGS];
 
@@ -91,6 +92,7 @@ export default function App() {
           {view === "live" && <LiveView />}
           {view === "mixer" && <MixerView />}
           {view === "effects" && <EffectsView />}
+          {view === "voice" && <VoiceView />}
           {view === "downloads" && <DownloadsView />}
           {view === "settings" && <SettingsView />}
         </div>

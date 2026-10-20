@@ -1,112 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { EqDisplay, GridLine, Module, PageBar, PLOT, Range, Reading, Tick, Toggle, freqX } from "~/components/effects/rack";
 import { Bars, LedBar, cssColor } from "~/components/ui/canvas";
-import { Badge, Card, Switch } from "~/components/ui/misc";
+import { Pill, PillGroup } from "~/components/ui/pills";
 import { actions, useStore } from "~/lib/store";
-import { cn, formatDb, gainToDb } from "~/lib/utils";
+import { formatDb, gainToDb } from "~/lib/utils";
 import { t } from "~/lib/i18n";
 
-/* Die Mikrofon-Kette als Rack: fünf Module nebeneinander, jedes mit einer
-   Anzeige, die zeigt, was der Effekt gerade tut, und den Reglern darunter. */
-
-function Range({
-  label,
-  value,
-  min,
-  max,
-  step,
-  format,
-  onChange,
-  reset = 0,
-  disabled,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  format: (v: number) => string;
-  onChange: (v: number) => void;
-  /** Wert für Doppelklick. */
-  reset?: number;
-  disabled?: boolean;
-}) {
-  const fill = ((value - min) / (max - min)) * 100;
-  return (
-    <label className={cn("block space-y-1.5", disabled && "opacity-45")}>
-      <div className="flex flex-wrap justify-between gap-x-2 text-2xs">
-        <span className="whitespace-nowrap text-muted-foreground">{label}</span>
-        <span className="ml-auto font-mono whitespace-nowrap tabular-nums">{format(value)}</span>
-      </div>
-      <input
-        type="range"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        disabled={disabled}
-        onChange={(e) => onChange(Number(e.target.value))}
-        onDoubleClick={() => onChange(Math.min(max, Math.max(min, reset)))}
-        className="h-1.5 w-full cursor-default appearance-none rounded-full [&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_1px_3px_oklch(0%_0_0/45%)]"
-        style={{ background: `linear-gradient(to right, var(--ch-mic) ${fill}%, var(--meter-track) 0)` }}
-      />
-    </label>
-  );
-}
-
-/** Ein Effekt als Karte: Kopf mit Schalter, große Anzeige, Regler nebeneinander darunter. */
-function Module({
-  title,
-  enabled,
-  onToggle,
-  status,
-  display,
-  className,
-  inline,
-  children,
-}: {
-  title: string;
-  enabled: boolean;
-  onToggle: (on: boolean) => void;
-  status?: ReactNode;
-  display: ReactNode;
-  className?: string;
-  /** Regler nebeneinander statt untereinander, damit die Anzeige Platz behält. */
-  inline?: boolean;
-  children?: ReactNode;
-}) {
-  return (
-    <Card className={cn("flex min-h-0 min-w-0 flex-col gap-3 p-4", className)}>
-      <div className="flex h-7 items-center gap-3">
-        <Switch label={title} checked={enabled} onCheckedChange={onToggle} />
-        <h3 className="min-w-0 flex-1 truncate font-display text-base font-semibold tracking-tight">{title}</h3>
-        {status}
-      </div>
-      <div className={cn("well relative min-h-0 flex-1 overflow-hidden rounded-xl transition-opacity", !enabled && "opacity-40")}>
-        {display}
-      </div>
-      {children && <div className={inline ? "grid grid-flow-col auto-cols-fr gap-3" : "space-y-2.5"}>{children}</div>}
-    </Card>
-  );
-}
-
-/* ---------- Anzeigen ---------- */
+/* Die Aufbereitung des Mikrofons als Rack auf zwei Seiten: erst säubern
+   (Gate, Rauschfilter, EQ, Auto-Lautstärke), dann Dynamik (Kompressor,
+   De-Esser, Exciter, Limiter). Jedes Modul zeigt, was es gerade tut. */
 
 const GATE_FLOOR = -80;
-
-/** Beschriftung einer Achse; `at` ist die Position in Prozent. */
-function Tick({ at, axis, children }: { at: number; axis: "x" | "y"; children: ReactNode }) {
-  return (
-    <span
-      className={cn(
-        "pointer-events-none absolute font-mono text-[9px] leading-none text-muted-foreground/70 tabular-nums",
-        axis === "x" ? "bottom-1.5 -translate-x-1/2" : "left-2 -translate-y-1/2",
-      )}
-      style={axis === "x" ? { left: `${at}%` } : { top: `${at}%` }}
-    >
-      {children}
-    </span>
-  );
-}
 
 /** Pegel des Mikrofons gegen die Schwelle des Gates. */
 function GateDisplay({ peak, thresholdDb, open }: { peak: number; thresholdDb: number; open: boolean }) {
@@ -173,78 +77,6 @@ function VoiceDisplay({ voice, enabled }: { voice: number; enabled: boolean }) {
   );
 }
 
-/* Zeichenfläche für Kurven mit Platz für die Achsen links und unten. */
-const PLOT = "absolute top-3 right-3 bottom-6 left-9";
-
-const EQ_RANGE = 15;
-const EQ_DB_TICKS = [12, 6, 0, -6, -12];
-const EQ_FREQ_TICKS: [number, string][] = [
-  [50, "50"],
-  [200, "200"],
-  [1000, "1k"],
-  [5000, "5k"],
-  [15000, "15k"],
-];
-
-/** Frequenzgang aus Tiefen-Shelf, Präsenz-Glocke und Höhen-Shelf, grob angenähert. */
-function EqDisplay({ low, mid, high }: { low: number; mid: number; high: number }) {
-  const points: string[] = [];
-  for (let i = 0; i <= 80; i++) {
-    const x = i / 80;
-    const f = 20 * Math.pow(1000, x); // 20 Hz … 20 kHz, logarithmisch
-    const lf = Math.log2(f);
-    const shelfLow = low / (1 + Math.pow(2, (lf - Math.log2(120)) * 2));
-    const shelfHigh = high / (1 + Math.pow(2, (Math.log2(8000) - lf) * 2));
-    const bell = mid * Math.exp(-Math.pow(lf - Math.log2(2500), 2) / 1.2);
-    const db = shelfLow + shelfHigh + bell;
-    points.push(`${x * 100},${50 - (db / EQ_RANGE) * 50}`);
-  }
-  const line = points.join(" ");
-  const fx = (f: number) => (Math.log10(f / 20) / 3) * 100;
-  const dy = (db: number) => 50 - (db / EQ_RANGE) * 50;
-
-  return (
-    <>
-      <div className={PLOT}>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
-        {EQ_FREQ_TICKS.map(([f]) => (
-          <line key={f} x1={fx(f)} x2={fx(f)} y1="0" y2="100" stroke="var(--muted-foreground)" strokeOpacity=".15" vectorEffect="non-scaling-stroke" />
-        ))}
-        {EQ_DB_TICKS.map((db) => (
-          <line
-            key={db}
-            x1="0"
-            x2="100"
-            y1={dy(db)}
-            y2={dy(db)}
-            stroke="var(--muted-foreground)"
-            strokeOpacity={db === 0 ? ".4" : ".12"}
-            strokeDasharray={db === 0 ? "3 3" : undefined}
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-        <polygon points={`0,50 ${line} 100,50`} fill="var(--ch-mic)" fillOpacity=".16" />
-        <polyline points={line} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-      </svg>
-      </div>
-      <div className="pointer-events-none absolute top-3 bottom-6 left-0 w-9">
-        {EQ_DB_TICKS.map((db) => (
-          <Tick key={db} axis="y" at={dy(db)}>
-            {db > 0 ? `+${db}` : db}
-          </Tick>
-        ))}
-      </div>
-      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
-        {EQ_FREQ_TICKS.map(([f, label]) => (
-          <Tick key={f} axis="x" at={fx(f)}>
-            {label}
-          </Tick>
-        ))}
-      </div>
-    </>
-  );
-}
-
 const COMP_RANGE = 60;
 const COMP_TICKS = [-60, -40, -20, 0];
 
@@ -256,17 +88,17 @@ function CompressorDisplay({ thresholdDb, ratio, makeupDb }: { thresholdDb: numb
   return (
     <>
       <div className={PLOT}>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
-        {COMP_TICKS.map((db) => (
-          <g key={db} stroke="var(--muted-foreground)" strokeOpacity=".12">
-            <line x1={map(db)} x2={map(db)} y1="0" y2="100" vectorEffect="non-scaling-stroke" />
-            <line x1="0" x2="100" y1={100 - map(db)} y2={100 - map(db)} vectorEffect="non-scaling-stroke" />
-          </g>
-        ))}
-        <line x1="0" y1="100" x2="100" y2="0" stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
-        <line x1={map(thresholdDb)} x2={map(thresholdDb)} y1="0" y2="100" stroke="var(--ch-mic)" strokeOpacity=".45" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
-        <polyline points={pts} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-      </svg>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
+          {COMP_TICKS.map((db) => (
+            <g key={db}>
+              <GridLine x={map(db)} />
+              <GridLine y={100 - map(db)} />
+            </g>
+          ))}
+          <line x1="0" y1="100" x2="100" y2="0" stroke="var(--muted-foreground)" strokeOpacity=".35" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+          <line x1={map(thresholdDb)} x2={map(thresholdDb)} y1="0" y2="100" stroke="var(--ch-mic)" strokeOpacity=".45" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+          <polyline points={pts} fill="none" stroke="var(--ch-mic)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        </svg>
       </div>
       <div className="pointer-events-none absolute top-3 bottom-6 left-0 w-9">
         {COMP_TICKS.map((db) => (
@@ -338,8 +170,57 @@ function ReductionDisplay({ db, max }: { db: number; max: number }) {
   );
 }
 
-function Reading({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "success" | "warning" }) {
-  return <Badge tone={tone}>{children}</Badge>;
+const SPECTRUM_TICKS: [number, string][] = [
+  [100, "100"],
+  [1000, "1k"],
+  [5000, "5k"],
+  [15000, "15k"],
+];
+
+/** Bereich ab der Trennfrequenz als Fläche, darin die aktuelle Absenkung bzw. Anhebung. */
+function HighBandDisplay({ frequencyHz, db, max }: { frequencyHz: number; db: number; max: number }) {
+  const x = freqX(frequencyHz);
+  const y = 50 - (Math.max(-max, Math.min(max, db)) / max) * 45;
+  return (
+    <>
+      <div className={PLOT}>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="size-full overflow-visible">
+          {SPECTRUM_TICKS.map(([f]) => (
+            <GridLine key={f} x={freqX(f)} />
+          ))}
+          <GridLine y={50} strong />
+          <rect x={x} y={Math.min(50, y)} width={100 - x} height={Math.abs(50 - y)} fill="var(--ch-mic)" fillOpacity=".2" />
+          <polyline
+            points={`0,50 ${Math.max(0, x - 6)},50 ${x},${y} 100,${y}`}
+            fill="none"
+            stroke="var(--ch-mic)"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+            strokeLinejoin="round"
+          />
+          <line x1={x} x2={x} y1="0" y2="100" stroke="var(--ch-mic)" strokeOpacity=".45" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" />
+        </svg>
+      </div>
+      <div className="pointer-events-none absolute right-3 bottom-0 left-9 h-6">
+        {SPECTRUM_TICKS.map(([f, label]) => (
+          <Tick key={f} axis="x" at={freqX(f)}>
+            {label}
+          </Tick>
+        ))}
+      </div>
+    </>
+  );
+}
+
+const PAGE_KEY = "ode.effects-page";
+type Page = "clean" | "dynamics";
+
+function readPage(): Page {
+  try {
+    return localStorage.getItem(PAGE_KEY) === "dynamics" ? "dynamics" : "clean";
+  } catch {
+    return "clean";
+  }
 }
 
 export function EffectsView() {
@@ -347,226 +228,300 @@ export function EffectsView() {
   const live = useStore((s) => s.meters?.effects);
   const micPeak = useStore((s) => s.meters?.channels.find((c) => c.id === "mic")?.peak ?? 0);
   const running = useStore((s) => s.info !== null);
+  const [page, setPageState] = useState<Page>(readPage);
+  const setPage = (next: Page) => {
+    setPageState(next);
+    try {
+      localStorage.setItem(PAGE_KEY, next);
+    } catch {
+      // Nur Komfort.
+    }
+  };
 
   const compressorDb = running ? (live?.compressorDb ?? 0) : 0;
+  const deEsserDb = running ? (live?.deEsserDb ?? 0) : 0;
   const limiterDb = running ? (live?.limiterDb ?? 0) : 0;
   const voice = running ? (live?.voice ?? 0) : 0;
   const voiceOpen = fx.denoise.voiceGate ? !!live?.voiceOpen : voice > 0.6;
   const agcGainDb = running ? (live?.agcGainDb ?? 0) : 0;
 
   return (
-    <div className="grid h-full grid-cols-6 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 overflow-hidden pl-6 pr-3 pt-3 pb-3">
-      <Module
-        className="col-span-2"
-        title={t("effects.gate")}
-        enabled={fx.gate.enabled}
-        onToggle={(enabled) => actions.setEffect("gate", { enabled })}
-        status={
-          fx.gate.enabled &&
-          running && <Reading tone={live?.gateOpen ? "success" : "default"}>{live?.gateOpen ? t("effects.open") : t("effects.closed")}</Reading>
-        }
-        display={
-          <GateDisplay
-            peak={running ? micPeak : 0}
-            thresholdDb={fx.gate.thresholdDb}
-            open={!fx.gate.enabled || !!live?.gateOpen}
-          />
-        }
-      >
-        <Range
-          label={t("effects.threshold")}
-          value={fx.gate.thresholdDb}
-          min={-80}
-          max={-10}
-          step={1}
-          reset={-50}
-          format={(v) => `${v} dB`}
-          disabled={!fx.gate.enabled}
-          onChange={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
-        />
-      </Module>
+    <div className="flex h-full flex-col overflow-hidden">
+      <PageBar>
+        <PillGroup>
+          <Pill active={page === "clean"} onClick={() => setPage("clean")}>
+            {t("effects.cleanPage")}
+          </Pill>
+          <Pill active={page === "dynamics"} onClick={() => setPage("dynamics")}>
+            {t("effects.dynamicsPage")}
+          </Pill>
+        </PillGroup>
+      </PageBar>
 
-      <Module
-        className="col-span-2"
-        title={t("effects.denoise")}
-        enabled={fx.denoise.enabled}
-        onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
-        status={
-          fx.denoise.enabled &&
-          running && (
-            <Reading tone={voiceOpen ? "success" : "default"}>{voiceOpen ? t("effects.voice") : fx.denoise.voiceGate ? t("effects.blocked") : t("effects.quiet")}</Reading>
-          )
-        }
-        display={<VoiceDisplay voice={voice} enabled={fx.denoise.enabled} />}
+      <div
+        key={page}
+        className="grid min-h-0 flex-1 animate-[layout-in_260ms_var(--ease-drawer)] grid-cols-2 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 pr-3 pb-3 pl-6"
       >
-        <label
-          className={cn(
-            "flex items-center justify-between gap-3 text-2xs",
-            !fx.denoise.enabled && "opacity-45",
-          )}
-        >
-          <span className="text-muted-foreground">{t("effects.voiceGate")}</span>
-          <Switch
-            label={t("effects.voiceGateLabel")}
-            checked={fx.denoise.voiceGate}
-            disabled={!fx.denoise.enabled}
-            onCheckedChange={(voiceGate) => actions.setEffect("denoise", { voiceGate })}
-          />
-        </label>
-      </Module>
+        {page === "clean" ? (
+          <>
+            <Module
+              title={t("effects.gate")}
+              enabled={fx.gate.enabled}
+              onToggle={(enabled) => actions.setEffect("gate", { enabled })}
+              status={
+                fx.gate.enabled &&
+                running && <Reading tone={live?.gateOpen ? "success" : "default"}>{live?.gateOpen ? t("effects.open") : t("effects.closed")}</Reading>
+              }
+              display={
+                <GateDisplay peak={running ? micPeak : 0} thresholdDb={fx.gate.thresholdDb} open={!fx.gate.enabled || !!live?.gateOpen} />
+              }
+            >
+              <Range
+                label={t("effects.threshold")}
+                value={fx.gate.thresholdDb}
+                min={-80}
+                max={-10}
+                step={1}
+                reset={-50}
+                format={(v) => `${v} dB`}
+                disabled={!fx.gate.enabled}
+                onChange={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
+              />
+            </Module>
 
-      <Module
-        className="col-span-2"
-        title={t("effects.eq")}
-        inline
-        enabled={fx.eq.enabled}
-        onToggle={(enabled) => actions.setEffect("eq", { enabled })}
-        display={<EqDisplay low={fx.eq.lowDb} mid={fx.eq.midDb} high={fx.eq.highDb} />}
-      >
-        {(
-          [
-            ["lowDb", t("effects.bass")],
-            ["midDb", t("effects.presence")],
-            ["highDb", t("effects.treble")],
-          ] as const
-        ).map(([key, label]) => (
-          <Range
-            key={key}
-            label={label}
-            value={fx.eq[key]}
-            min={-12}
-            max={12}
-            step={0.5}
-            format={(v) => `${formatDb(v)} dB`}
-            disabled={!fx.eq.enabled}
-            onChange={(v) => actions.setEffect("eq", { [key]: v })}
-          />
-        ))}
-      </Module>
+            <Module
+              title={t("effects.denoise")}
+              enabled={fx.denoise.enabled}
+              onToggle={(enabled) => actions.setEffect("denoise", { enabled })}
+              status={
+                fx.denoise.enabled &&
+                running && (
+                  <Reading tone={voiceOpen ? "success" : "default"}>
+                    {voiceOpen ? t("effects.voice") : fx.denoise.voiceGate ? t("effects.blocked") : t("effects.quiet")}
+                  </Reading>
+                )
+              }
+              display={<VoiceDisplay voice={voice} enabled={fx.denoise.enabled} />}
+            >
+              <Toggle
+                label={t("effects.voiceGate")}
+                checked={fx.denoise.voiceGate}
+                disabled={!fx.denoise.enabled}
+                onChange={(voiceGate) => actions.setEffect("denoise", { voiceGate })}
+              />
+            </Module>
 
-      <Module
-        className="col-span-2"
-        title={t("effects.agc")}
-        enabled={fx.agc.enabled}
-        onToggle={(enabled) => actions.setEffect("agc", { enabled })}
-        status={
-          fx.agc.enabled &&
-          running && (
-            <Reading tone={Math.abs(agcGainDb) > 0.5 ? "warning" : "default"}>
-              {`${formatDb(agcGainDb)} dB`}
-            </Reading>
-          )
-        }
-        display={<AgcDisplay gainDb={agcGainDb} maxGainDb={fx.agc.maxGainDb} />}
-      >
-        <Range
-          label={t("effects.target")}
-          value={fx.agc.targetDb}
-          min={-30}
-          max={-10}
-          step={1}
-          reset={-20}
-          format={(v) => `${v} dB`}
-          disabled={!fx.agc.enabled}
-          onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
-        />
-        <Range
-          label={t("effects.maxGain")}
-          value={fx.agc.maxGainDb}
-          min={0}
-          max={30}
-          step={1}
-          reset={18}
-          format={(v) => `+${v} dB`}
-          disabled={!fx.agc.enabled}
-          onChange={(maxGainDb) => actions.setEffect("agc", { maxGainDb })}
-        />
-      </Module>
+            <Module
+              title={t("effects.eq")}
+              columns={3}
+              enabled={fx.eq.enabled}
+              onToggle={(enabled) => actions.setEffect("eq", { enabled })}
+              display={<EqDisplay low={fx.eq.lowDb} mid={fx.eq.midDb} high={fx.eq.highDb} />}
+            >
+              {(
+                [
+                  ["lowDb", t("effects.bass")],
+                  ["midDb", t("effects.presence")],
+                  ["highDb", t("effects.treble")],
+                ] as const
+              ).map(([key, label]) => (
+                <Range
+                  key={key}
+                  label={label}
+                  value={fx.eq[key]}
+                  min={-12}
+                  max={12}
+                  step={0.5}
+                  format={(v) => `${formatDb(v)} dB`}
+                  disabled={!fx.eq.enabled}
+                  onChange={(v) => actions.setEffect("eq", { [key]: v })}
+                />
+              ))}
+            </Module>
 
-      <Module
-        className="col-span-2"
-        title={t("effects.compressor")}
-        inline
-        enabled={fx.compressor.enabled}
-        onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
-        status={
-          fx.compressor.enabled &&
-          running && (
-            <Reading tone={compressorDb < -0.5 ? "warning" : "default"}>
-              {compressorDb < -0.05 ? `${compressorDb.toFixed(1)} dB` : "—"}
-            </Reading>
-          )
-        }
-        display={
-          <CompressorDisplay
-            thresholdDb={fx.compressor.thresholdDb}
-            ratio={fx.compressor.ratio}
-            makeupDb={fx.compressor.makeupDb}
-          />
-        }
-      >
-        <Range
-          label={t("effects.threshold")}
-          value={fx.compressor.thresholdDb}
-          min={-50}
-          max={0}
-          step={1}
-          reset={-20}
-          format={(v) => `${v} dB`}
-          disabled={!fx.compressor.enabled}
-          onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
-        />
-        <Range
-          label={t("effects.ratio")}
-          value={fx.compressor.ratio}
-          min={1}
-          max={10}
-          step={0.5}
-          reset={3}
-          format={(v) => `${v.toFixed(1)} : 1`}
-          disabled={!fx.compressor.enabled}
-          onChange={(ratio) => actions.setEffect("compressor", { ratio })}
-        />
-        <Range
-          label={t("effects.makeup")}
-          value={fx.compressor.makeupDb}
-          min={0}
-          max={18}
-          step={0.5}
-          reset={4}
-          format={(v) => `+${v.toFixed(1)} dB`}
-          disabled={!fx.compressor.enabled}
-          onChange={(makeupDb) => actions.setEffect("compressor", { makeupDb })}
-        />
-      </Module>
+            <Module
+              title={t("effects.agc")}
+              columns={2}
+              enabled={fx.agc.enabled}
+              onToggle={(enabled) => actions.setEffect("agc", { enabled })}
+              status={
+                fx.agc.enabled &&
+                running && <Reading tone={Math.abs(agcGainDb) > 0.5 ? "warning" : "default"}>{`${formatDb(agcGainDb)} dB`}</Reading>
+              }
+              display={<AgcDisplay gainDb={agcGainDb} maxGainDb={fx.agc.maxGainDb} />}
+            >
+              <Range
+                label={t("effects.target")}
+                value={fx.agc.targetDb}
+                min={-30}
+                max={-10}
+                step={1}
+                reset={-20}
+                format={(v) => `${v} dB`}
+                disabled={!fx.agc.enabled}
+                onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
+              />
+              <Range
+                label={t("effects.maxGain")}
+                value={fx.agc.maxGainDb}
+                min={0}
+                max={30}
+                step={1}
+                reset={18}
+                format={(v) => `+${v} dB`}
+                disabled={!fx.agc.enabled}
+                onChange={(maxGainDb) => actions.setEffect("agc", { maxGainDb })}
+              />
+            </Module>
+          </>
+        ) : (
+          <>
+            <Module
+              title={t("effects.compressor")}
+              columns={3}
+              enabled={fx.compressor.enabled}
+              onToggle={(enabled) => actions.setEffect("compressor", { enabled })}
+              status={
+                fx.compressor.enabled &&
+                running && (
+                  <Reading tone={compressorDb < -0.5 ? "warning" : "default"}>
+                    {compressorDb < -0.05 ? `${compressorDb.toFixed(1)} dB` : "—"}
+                  </Reading>
+                )
+              }
+              display={<CompressorDisplay thresholdDb={fx.compressor.thresholdDb} ratio={fx.compressor.ratio} makeupDb={fx.compressor.makeupDb} />}
+            >
+              <Range
+                label={t("effects.threshold")}
+                value={fx.compressor.thresholdDb}
+                min={-50}
+                max={0}
+                step={1}
+                reset={-20}
+                format={(v) => `${v} dB`}
+                disabled={!fx.compressor.enabled}
+                onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
+              />
+              <Range
+                label={t("effects.ratio")}
+                value={fx.compressor.ratio}
+                min={1}
+                max={10}
+                step={0.5}
+                reset={3}
+                format={(v) => `${v.toFixed(1)} : 1`}
+                disabled={!fx.compressor.enabled}
+                onChange={(ratio) => actions.setEffect("compressor", { ratio })}
+              />
+              <Range
+                label={t("effects.makeup")}
+                value={fx.compressor.makeupDb}
+                min={0}
+                max={18}
+                step={0.5}
+                reset={4}
+                format={(v) => `+${v.toFixed(1)} dB`}
+                disabled={!fx.compressor.enabled}
+                onChange={(makeupDb) => actions.setEffect("compressor", { makeupDb })}
+              />
+            </Module>
 
-      <Module
-        className="col-span-2"
-        title={t("effects.limiter")}
-        enabled={fx.limiter.enabled}
-        onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
-        status={
-          fx.limiter.enabled &&
-          running && (
-            <Reading tone={limiterDb < -0.5 ? "warning" : "default"}>
-              {limiterDb < -0.05 ? `${limiterDb.toFixed(1)} dB` : "—"}
-            </Reading>
-          )
-        }
-        display={<ReductionDisplay db={limiterDb} max={12} />}
-      >
-        <Range
-          label={t("effects.ceiling")}
-          value={fx.limiter.ceilingDb}
-          min={-20}
-          max={0}
-          step={0.5}
-          reset={-3}
-          format={(v) => `${formatDb(v)} dB`}
-          disabled={!fx.limiter.enabled}
-          onChange={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
-        />
-      </Module>
+            <Module
+              title={t("effects.deEsser")}
+              columns={2}
+              enabled={fx.deEsser.enabled}
+              onToggle={(enabled) => actions.setEffect("deEsser", { enabled })}
+              status={
+                fx.deEsser.enabled &&
+                running && (
+                  <Reading tone={deEsserDb < -0.5 ? "warning" : "default"}>{deEsserDb < -0.05 ? `${deEsserDb.toFixed(1)} dB` : "—"}</Reading>
+                )
+              }
+              display={<HighBandDisplay frequencyHz={fx.deEsser.frequencyHz} db={fx.deEsser.enabled ? deEsserDb : 0} max={18} />}
+            >
+              <Range
+                label={t("effects.threshold")}
+                value={fx.deEsser.thresholdDb}
+                min={-60}
+                max={0}
+                step={1}
+                reset={-30}
+                format={(v) => `${v} dB`}
+                disabled={!fx.deEsser.enabled}
+                onChange={(thresholdDb) => actions.setEffect("deEsser", { thresholdDb })}
+              />
+              <Range
+                label={t("effects.frequency")}
+                value={fx.deEsser.frequencyHz}
+                min={3000}
+                max={10000}
+                step={100}
+                reset={6000}
+                format={(v) => `${(v / 1000).toFixed(1)} kHz`}
+                disabled={!fx.deEsser.enabled}
+                onChange={(frequencyHz) => actions.setEffect("deEsser", { frequencyHz })}
+              />
+            </Module>
+
+            <Module
+              title={t("effects.exciter")}
+              columns={2}
+              enabled={fx.exciter.enabled}
+              onToggle={(enabled) => actions.setEffect("exciter", { enabled })}
+              display={<HighBandDisplay frequencyHz={fx.exciter.frequencyHz} db={fx.exciter.amount * 9} max={12} />}
+            >
+              <Range
+                label={t("effects.frequency")}
+                value={fx.exciter.frequencyHz}
+                min={1000}
+                max={8000}
+                step={100}
+                reset={3000}
+                format={(v) => `${(v / 1000).toFixed(1)} kHz`}
+                disabled={!fx.exciter.enabled}
+                onChange={(frequencyHz) => actions.setEffect("exciter", { frequencyHz })}
+              />
+              <Range
+                label={t("effects.amount")}
+                value={fx.exciter.amount}
+                min={0}
+                max={1}
+                step={0.01}
+                reset={0.3}
+                format={(v) => `${Math.round(v * 100)} %`}
+                disabled={!fx.exciter.enabled}
+                onChange={(amount) => actions.setEffect("exciter", { amount })}
+              />
+            </Module>
+
+            <Module
+              title={t("effects.limiter")}
+              enabled={fx.limiter.enabled}
+              onToggle={(enabled) => actions.setEffect("limiter", { enabled })}
+              status={
+                fx.limiter.enabled &&
+                running && (
+                  <Reading tone={limiterDb < -0.5 ? "warning" : "default"}>{limiterDb < -0.05 ? `${limiterDb.toFixed(1)} dB` : "—"}</Reading>
+                )
+              }
+              display={<ReductionDisplay db={limiterDb} max={12} />}
+            >
+              <Range
+                label={t("effects.ceiling")}
+                value={fx.limiter.ceilingDb}
+                min={-20}
+                max={0}
+                step={0.5}
+                reset={-3}
+                format={(v) => `${formatDb(v)} dB`}
+                disabled={!fx.limiter.enabled}
+                onChange={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
+              />
+            </Module>
+          </>
+        )}
+      </div>
     </div>
   );
 }
+

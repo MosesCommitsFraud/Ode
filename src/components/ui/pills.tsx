@@ -7,7 +7,16 @@ import { cn } from "~/lib/utils";
  * ActionGroup bündelt Knöpfe einer Seite im selben Look.
  */
 
-export function PillGroup({ children, className }: { children: ReactNode; className?: string }) {
+export function PillGroup({
+  children,
+  className,
+  size = "default",
+}: {
+  children: ReactNode;
+  className?: string;
+  /** `sm` für Umschalter innerhalb von Karten. */
+  size?: "default" | "sm";
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [mark, setMark] = useState<{ left: number; width: number } | null>(null);
 
@@ -29,11 +38,22 @@ export function PillGroup({ children, className }: { children: ReactNode; classN
   });
 
   return (
-    <div ref={ref} className={cn("well relative flex h-9 items-center gap-0.5 rounded-full p-1", className)}>
+    <div
+      ref={ref}
+      data-size={size}
+      className={cn(
+        "group/pills well relative flex items-center gap-0.5 rounded-full",
+        size === "sm" ? "h-7 p-0.5" : "h-9 p-1",
+        className,
+      )}
+    >
       {mark && (
         <span
           aria-hidden
-          className="absolute inset-y-1 left-0 rounded-full bg-panel-raised shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)] transition-[transform,width] duration-300 ease-drawer"
+          className={cn(
+            "absolute left-0 rounded-full bg-panel-raised shadow-[0_1px_0_var(--hairline),0_4px_10px_-4px_oklch(0%_0_0/40%)] transition-[transform,width] duration-300 ease-drawer",
+            size === "sm" ? "inset-y-0.5" : "inset-y-1",
+          )}
           style={{ width: mark.width, transform: `translateX(${mark.left}px)` }}
         />
       )}
@@ -49,7 +69,8 @@ export function Pill({ active, className, ...props }: ComponentProps<"button"> &
       data-active={active}
       aria-pressed={active}
       className={cn(
-        "relative flex h-7 cursor-default items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors duration-200 [&_svg]:size-3.5 [&_svg]:shrink-0",
+        "relative flex h-7 cursor-default items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-colors duration-200 disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-3.5 [&_svg]:shrink-0",
+        "group-data-[size=sm]/pills:h-6 group-data-[size=sm]/pills:px-2.5 group-data-[size=sm]/pills:text-2xs",
         active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
         className,
       )}
