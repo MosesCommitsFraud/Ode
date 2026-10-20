@@ -22,6 +22,10 @@ use crate::library::Library;
 
 const PRESETS_KEY: &str = "voice_presets";
 const ACTIVE_KEY: &str = "voice_preset_active";
+const VERSION_KEY: &str = "voice_presets_version";
+/// Steigt, wenn sich die mitgelieferten Presets ändern; ältere Listen
+/// bekommen die neuen Fassungen (Hotkeys und eigene Namen bleiben).
+const PRESETS_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +38,9 @@ pub struct Preset {
     /// Name eines Symbols der Oberfläche.
     #[serde(default)]
     pub icon: String,
+    /// Farbe der Taste (Name aus der Palette der Oberfläche).
+    #[serde(default)]
+    pub color: String,
     #[serde(default)]
     pub hotkey: Option<String>,
     /// Beschriftung wie auf der eigenen Tastatur, siehe Sounds.
@@ -71,11 +78,12 @@ fn voice(build: impl FnOnce(&mut VoiceParams)) -> VoiceParams {
     v
 }
 
-fn builtin(id: &str, icon: &str, build: impl FnOnce(&mut VoiceParams)) -> Preset {
+fn builtin(id: &str, icon: &str, color: &str, build: impl FnOnce(&mut VoiceParams)) -> Preset {
     Preset {
         id: id.into(),
         name: String::new(),
         icon: icon.into(),
+        color: color.into(),
         hotkey: None,
         hotkey_label: None,
         builtin: true,
@@ -164,30 +172,30 @@ fn shift(semitones: f32, formant: f32) -> PitchParams {
 
 pub fn builtins() -> Vec<Preset> {
     vec![
-        builtin("helium", "balloon", |v| v.pitch = shift(8.0, 5.0)),
-        builtin("giant", "person", |v| {
+        builtin("helium", "balloon", "cyan", |v| v.pitch = shift(8.0, 5.0)),
+        builtin("giant", "person", "amber", |v| {
             v.pitch = shift(-5.0, -4.0);
             v.reverb = reverb(0.5, 0.6, 10.0, 0.15);
         }),
-        builtin("demon", "skull", |v| {
+        builtin("demon", "skull", "orange", |v| {
             v.pitch = shift(-9.0, -3.0);
             v.character = character(CharacterMode::Distortion, 0.25, 0.4);
             v.reverb = reverb(0.7, 0.5, 20.0, 0.25);
         }),
-        builtin("robot", "robot", |v| {
+        builtin("robot", "robot", "blue", |v| {
             v.character = character(CharacterMode::Robot, 0.85, 0.25);
         }),
-        builtin("radio", "radio", |v| {
+        builtin("radio", "radio", "lime", |v| {
             v.character = character(CharacterMode::Radio, 0.5, 0.4);
         }),
-        builtin("phone", "phone", |v| {
+        builtin("phone", "phone", "emerald", |v| {
             v.character = character(CharacterMode::Telephone, 0.4, 0.2);
         }),
-        builtin("megaphone", "megaphone", |v| {
+        builtin("megaphone", "megaphone", "orange", |v| {
             v.character = character(CharacterMode::Megaphone, 0.6, 0.6);
             v.reverb = reverb(0.4, 0.5, 15.0, 0.15);
         }),
-        builtin("cave", "mountains", |v| {
+        builtin("cave", "mountains", "violet", |v| {
             v.reverb = reverb(0.92, 0.3, 45.0, 0.45);
             v.echo = EchoParams {
                 enabled: true,
@@ -197,10 +205,10 @@ pub fn builtins() -> Vec<Preset> {
                 mix: 0.25,
             };
         }),
-        builtin("cathedral", "church", |v| {
+        builtin("cathedral", "church", "violet", |v| {
             v.reverb = reverb(1.0, 0.2, 70.0, 0.55);
         }),
-        builtin("hard-tune", "music-notes", |v| {
+        builtin("hard-tune", "music-notes", "pink", |v| {
             v.autotune = AutotuneParams {
                 enabled: true,
                 key: 0,
@@ -209,7 +217,7 @@ pub fn builtins() -> Vec<Preset> {
             };
             v.reverb = reverb(0.4, 0.4, 20.0, 0.12);
         }),
-        builtin("soft-tune", "music-note", |v| {
+        builtin("soft-tune", "music-note", "pink", |v| {
             v.autotune = AutotuneParams {
                 enabled: true,
                 key: 0,
@@ -217,26 +225,26 @@ pub fn builtins() -> Vec<Preset> {
                 speed: 0.55,
             };
         }),
-        builtin("choir", "users-three", |v| {
+        builtin("choir", "users-three", "amber", |v| {
             v.harmonizer = HarmonizerParams {
                 enabled: true,
                 voices: [
                     HarmonyVoice {
                         enabled: true,
                         semitones: 4.0,
-                        level: 0.55,
+                        level: 0.5,
                     },
                     HarmonyVoice {
                         enabled: true,
-                        semitones: -5.0,
-                        level: 0.5,
+                        semitones: 7.0,
+                        level: 0.42,
                     },
                 ],
             };
-            v.modulation = modulation(ModulationMode::Chorus, 0.6, 0.5, 0.35);
-            v.reverb = reverb(0.75, 0.4, 30.0, 0.3);
+            v.modulation = modulation(ModulationMode::Chorus, 0.5, 0.35, 0.3);
+            v.reverb = reverb(0.8, 0.45, 30.0, 0.32);
         }),
-        builtin("vocoder", "piano-keys", |v| {
+        builtin("vocoder", "piano-keys", "blue", |v| {
             v.vocoder = VocoderParams {
                 enabled: true,
                 note: 48.0,
@@ -247,11 +255,11 @@ pub fn builtins() -> Vec<Preset> {
             };
             v.modulation = modulation(ModulationMode::Chorus, 0.4, 0.4, 0.3);
         }),
-        builtin("alien", "alien", |v| {
+        builtin("alien", "alien", "lime", |v| {
             v.pitch = shift(3.0, 6.0);
             v.modulation = modulation(ModulationMode::Flanger, 0.35, 0.8, 0.6);
         }),
-        builtin("ghost", "ghost", |v| {
+        builtin("ghost", "ghost", "cyan", |v| {
             v.pitch = shift(-2.0, 0.0);
             v.modulation = modulation(ModulationMode::Chorus, 0.3, 0.8, 0.5);
             v.echo = EchoParams {
@@ -263,8 +271,8 @@ pub fn builtins() -> Vec<Preset> {
             };
             v.reverb = reverb(0.95, 0.5, 40.0, 0.6);
         }),
-        builtin("lofi", "cassette-tape", |v| {
-            v.character = character(CharacterMode::Bitcrusher, 0.55, 0.35);
+        builtin("lofi", "cassette-tape", "amber", |v| {
+            v.character = character(CharacterMode::Lofi, 0.6, 0.35);
         }),
     ]
 }
@@ -274,8 +282,21 @@ impl Presets {
         let saved = library
             .setting(PRESETS_KEY)
             .and_then(|s| serde_json::from_str::<Vec<Preset>>(&s).ok());
-        *self.list.lock() = saved.unwrap_or_else(builtins);
+        let version = library
+            .setting(VERSION_KEY)
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(1);
+        let mut list = saved.unwrap_or_else(builtins);
+        let outdated = version < PRESETS_VERSION;
+        if outdated {
+            refresh_builtins(&mut list, false);
+        }
+        *self.list.lock() = list;
         *self.active.lock() = library.setting(ACTIVE_KEY).filter(|s| !s.is_empty());
+        if outdated {
+            self.save(library);
+            let _ = library.set_setting(VERSION_KEY, &PRESETS_VERSION.to_string());
+        }
     }
 
     fn save(&self, library: &Library) {
@@ -294,6 +315,32 @@ impl Presets {
         PresetState {
             presets: self.list(),
             active: self.active.lock().clone(),
+        }
+    }
+}
+
+/// Holt fehlende mitgelieferte Presets zurück und ersetzt deren Einstellungen
+/// durch die aktuelle Fassung. Hotkeys bleiben; eigene Namen nur, wenn
+/// `reset_names` nicht gesetzt ist.
+fn refresh_builtins(list: &mut Vec<Preset>, reset_names: bool) {
+    for preset in builtins() {
+        match list.iter_mut().find(|p| p.id == preset.id) {
+            Some(existing) => {
+                let hotkey = existing.hotkey.take();
+                let hotkey_label = existing.hotkey_label.take();
+                let name = if reset_names {
+                    String::new()
+                } else {
+                    std::mem::take(&mut existing.name)
+                };
+                *existing = Preset {
+                    name,
+                    hotkey,
+                    hotkey_label,
+                    ..preset
+                };
+            }
+            None => list.push(preset),
         }
     }
 }
@@ -440,23 +487,7 @@ pub fn presets_reorder(app: AppHandle, ids: Vec<String>) -> PresetState {
 #[tauri::command]
 pub fn presets_restore(app: AppHandle) -> PresetState {
     let presets = app.state::<Presets>();
-    {
-        let mut list = presets.list.lock();
-        for preset in builtins() {
-            match list.iter_mut().find(|p| p.id == preset.id) {
-                Some(existing) => {
-                    let hotkey = existing.hotkey.take();
-                    let hotkey_label = existing.hotkey_label.take();
-                    *existing = Preset {
-                        hotkey,
-                        hotkey_label,
-                        ..preset
-                    };
-                }
-                None => list.push(preset),
-            }
-        }
-    }
+    refresh_builtins(&mut presets.list.lock(), true);
     presets.save(&app.state::<Library>());
     presets.state()
 }
@@ -485,5 +516,27 @@ mod tests {
         let back: Vec<Preset> = serde_json::from_str(&json).unwrap();
         assert_eq!(back.len(), builtins().len());
         assert_eq!(back[0].voice, builtins()[0].voice);
+    }
+}
+
+#[cfg(test)]
+mod refresh_tests {
+    use super::*;
+
+    #[test]
+    fn refresh_keeps_hotkeys_and_names_but_updates_sound() {
+        let mut list = builtins();
+        let lofi = list.iter_mut().find(|p| p.id == "lofi").unwrap();
+        lofi.hotkey = Some("F9".into());
+        lofi.name = "Kassette".into();
+        lofi.voice.character.mode = CharacterMode::Bitcrusher;
+        list.retain(|p| p.id != "choir");
+        refresh_builtins(&mut list, false);
+        let lofi = list.iter().find(|p| p.id == "lofi").unwrap();
+        assert_eq!(lofi.hotkey.as_deref(), Some("F9"));
+        assert_eq!(lofi.name, "Kassette");
+        assert_eq!(lofi.voice.character.mode, CharacterMode::Lofi);
+        assert!(list.iter().any(|p| p.id == "choir"));
+        assert!(list.iter().all(|p| !p.color.is_empty()));
     }
 }

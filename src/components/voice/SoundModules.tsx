@@ -1,5 +1,5 @@
 import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Tick, Wide } from "~/components/effects/rack";
-import { Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
+import { CassetteTape, Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
 import { PushButtons, SlideFader } from "~/components/ui/hardware";
 import { Knob } from "~/components/ui/knob";
 import type { CharacterMode, ModulationMode } from "~/lib/engine";
@@ -18,6 +18,7 @@ const MODES: { id: CharacterMode; icon: React.ReactNode }[] = [
   { id: "megaphone", icon: <Megaphone /> },
   { id: "distortion", icon: <Lightning /> },
   { id: "bitcrusher", icon: <WaveSquare /> },
+  { id: "lofi", icon: <CassetteTape /> },
 ];
 
 /** Bedeutung und Anzeige des Farb-Reglers je Modus. */
@@ -37,6 +38,8 @@ function toneOf(mode: CharacterMode, tone: number): { label: string; value: stri
       return { label: t("voice.brightness"), value: hz(1000 * Math.pow(12, tone)) };
     case "bitcrusher":
       return { label: t("voice.sampleRate"), value: hz(48000 / (1 + Math.floor(tone * tone * 31))) };
+    case "lofi":
+      return { label: t("voice.brightness"), value: hz(2000 * Math.pow(3, tone)) };
   }
 }
 
@@ -63,6 +66,11 @@ function CharacterDisplay({ mode, amount, tone, mix }: { mode: CharacterMode; am
         const levels = Math.round(16 - amount * 12);
         const held = Math.sin(Math.PI * 2 * (Math.floor(phase * 24) / 24));
         return sat(Math.round(held * levels) / levels, 1 + amount * 3) * 0.9;
+      }
+      case "lofi": {
+        // Leiernde, abgerundete Welle mit etwas Rauschen.
+        const wobble = Math.sin(Math.PI * 2 * phase + Math.sin(phase * 3) * amount * 0.6);
+        return sat(wobble, 1.8) * 0.85 + (Math.sin(i * 12.9898) * 43758.5453 % 1) * 0.04 * amount;
       }
       case "bitcrusher": {
         const levels = Math.min(64, Math.pow(2, 15 - amount * 14));

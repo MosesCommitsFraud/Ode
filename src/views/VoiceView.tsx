@@ -49,6 +49,7 @@ function newPreset(): Preset {
     id: `u${Date.now().toString(36)}`,
     name: t("voice.newPreset"),
     icon: "waveform",
+    color: "orange",
     hotkey: null,
     hotkeyLabel: null,
     builtin: false,

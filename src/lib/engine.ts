@@ -58,7 +58,7 @@ export interface DuckingParams {
 }
 
 export type Scale = "chromatic" | "major" | "minor" | "pentatonic" | "blues";
-export type CharacterMode = "robot" | "radio" | "telephone" | "megaphone" | "distortion" | "bitcrusher";
+export type CharacterMode = "robot" | "radio" | "telephone" | "megaphone" | "distortion" | "bitcrusher" | "lofi";
 export type ModulationMode = "chorus" | "flanger" | "phaser";
 export type Chord = "single" | "fifth" | "major" | "minor";
 
@@ -155,6 +155,8 @@ export interface Preset {
   /** Leer bei mitgelieferten Presets: dann gilt der übersetzte Name. */
   name: string;
   icon: string;
+  /** Farbe der Taste, Name aus SOUND_COLORS. */
+  color: string;
   hotkey: string | null;
   hotkeyLabel: string | null;
   builtin: boolean;

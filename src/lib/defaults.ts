@@ -54,8 +54,14 @@ export const BUS_DEFAULTS: BusParams = {
   },
 };
 
+const DEMO_COLORS: Record<string, string> = {
+  helium: "cyan", giant: "amber", demon: "orange", robot: "blue", radio: "lime", phone: "emerald",
+  megaphone: "orange", cave: "violet", cathedral: "violet", "hard-tune": "pink", "soft-tune": "pink",
+  choir: "amber", vocoder: "blue", alien: "lime", ghost: "cyan", lofi: "amber",
+};
+
 function demo(id: string, icon: string, voice: Partial<VoiceParams>): Preset {
-  return { id, name: "", icon, hotkey: null, hotkeyLabel: null, builtin: true, voice: { ...VOICE_DEFAULTS, ...voice } };
+  return { id, name: "", icon, color: DEMO_COLORS[id] ?? "orange", hotkey: null, hotkeyLabel: null, builtin: true, voice: { ...VOICE_DEFAULTS, ...voice } };
 }
 
 const reverb = (size: number, mix: number) => ({ ...VOICE_DEFAULTS.reverb, enabled: true, size, mix });
@@ -77,5 +83,5 @@ export const DEMO_PRESETS: Preset[] = [
   demo("vocoder", "piano-keys", { vocoder: { ...VOICE_DEFAULTS.vocoder, enabled: true, follow: true, chord: "fifth" } }),
   demo("alien", "alien", { pitch: { enabled: true, semitones: 3, formant: 6 } }),
   demo("ghost", "ghost", { pitch: { enabled: true, semitones: -2, formant: 0 }, reverb: reverb(0.95, 0.6) }),
-  demo("lofi", "cassette-tape", { character: { enabled: true, mode: "bitcrusher", amount: 0.55, tone: 0.35, mix: 1 } }),
+  demo("lofi", "cassette-tape", { character: { enabled: true, mode: "lofi", amount: 0.6, tone: 0.35, mix: 1 } }),
 ];

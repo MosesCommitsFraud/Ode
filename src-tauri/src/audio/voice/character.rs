@@ -1,5 +1,5 @@
 //! Klangcharakter: Roboter (Ringmodulator), Radio, Telefon, Megafon,
-//! Verzerrung und Bitcrusher. Jeder Modus hat zwei Regler, `amount` (wie
+//! Verzerrung, Bitcrusher und Lo-Fi (Kassette). Jeder Modus hat zwei Regler, `amount` (wie
 //! stark) und `tone` (Farbe), deren Bedeutung der Modus festlegt.
 
 use std::f32::consts::TAU;
@@ -27,6 +27,9 @@ pub enum CharacterMode {
     Distortion,
     /// Weniger Bits und Abtastrate. Tone: Abtastrate.
     Bitcrusher,
+    /// Alte Kassette: schmales Band, warm gesättigt, leiernd, mit Rauschen
+    /// und Knistern. Amount: wie abgenutzt. Tone: Höhen.
+    Lofi,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -79,6 +82,10 @@ pub struct Character {
     filters: [Biquad; 3],
     comb: DelayLine,
     phase: f32,
+    /// Zweiter Oszillator: schnelles Flattern des Bandes.
+    flutter: f32,
+    /// Abklingendes Knacken.
+    crackle: f32,
     hold: f32,
     hold_count: usize,
     noise: u32,
@@ -100,6 +107,8 @@ impl Character {
             filters: [Biquad::default(); 3],
             comb: DelayLine::new(1024),
             phase: 0.0,
+            flutter: 0.0,
+            crackle: 0.0,
             hold: 0.0,
             hold_count: 0,
             noise: 0x1234_5678,
@@ -139,6 +148,12 @@ impl Character {
                 (Shape::HighPass, 80.0, 0.7, 0.0),
                 (Shape::LowPass, 1_000.0 * 12f32.powf(p.tone), 0.7, 0.0),
                 flat,
+            ],
+            CharacterMode::Lofi => [
+                (Shape::HighPass, 180.0, 0.7, 0.0),
+                (Shape::LowPass, 2_000.0 * 3f32.powf(p.tone), 0.6, 0.0),
+                // Etwas Wärme in den unteren Mitten, wie bei Band.
+                (Shape::Peak, 400.0, 0.8, 2.5),
             ],
         };
         // Nur die Koeffizienten tauschen, damit Regler nicht knacken.
@@ -212,6 +227,30 @@ impl Character {
                     let d = soft_clip(y * drive + 0.1) - 0.1f32.tanh();
                     self.filters[1].process(d) / (1.0 + p.amount * 1.5)
                 }
+                CharacterMode::Lofi => {
+                    // Leiern (0,5 Hz) und Flattern (6 Hz) über eine gleitende Verzögerung.
+                    self.phase = (self.phase + 0.5 / RATE).fract();
+                    self.flutter = (self.flutter + 6.0 / RATE).fract();
+                    let wobble = (TAU * self.phase).sin() * 30.0 * p.amount
+                        + (TAU * self.flutter).sin() * 3.0 * p.amount;
+                    self.comb.push(x);
+                    let mut y = self.comb.read(160.0 + wobble);
+                    for f in &mut self.filters {
+                        y = f.process(y);
+                    }
+                    // Warme Sättigung, Pegel bleibt gleich.
+                    let y = soft_clip(y * 1.8) / 1.8f32.tanh();
+                    // Bandrauschen, leise und dunkel.
+                    let hiss = self.noise() * 0.006 * p.amount;
+                    // Seltenes Knistern wie Staub auf der Platte.
+                    if self.noise() > 1.0 - 0.0004 * p.amount {
+                        self.crackle = self.noise() * 0.25 * p.amount;
+                    }
+                    self.crackle *= 0.85;
+                    // 12 Bit.
+                    let q = ((y + hiss + self.crackle) * 2048.0).round() / 2048.0;
+                    q * 1.1
+                }
                 CharacterMode::Bitcrusher => {
                     let factor = 1 + (p.tone * p.tone * 31.0) as usize;
                     if self.hold_count == 0 {
@@ -233,6 +272,7 @@ impl Character {
         self.comb.clear();
         self.hold = 0.0;
         self.hold_count = 0;
+        self.crackle = 0.0;
     }
 }
 
@@ -249,6 +289,7 @@ mod tests {
             CharacterMode::Megaphone,
             CharacterMode::Distortion,
             CharacterMode::Bitcrusher,
+            CharacterMode::Lofi,
         ] {
             for amount in [0.0, 1.0] {
                 let mut c = Character::new();
