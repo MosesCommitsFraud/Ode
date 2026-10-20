@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { EqDisplay, GridLine, Module, PageBar, PLOT, Range, Reading, Tick, Toggle, freqX } from "~/components/effects/rack";
+import { EqDisplay, GridLine, Module, PageBar, PLOT, Reading, Tick, freqX } from "~/components/effects/rack";
+import { Knob, Lever, Needle } from "~/components/ui/knob";
 import { Bars, LedBar, cssColor } from "~/components/ui/canvas";
 import { Pill, PillGroup } from "~/components/ui/pills";
 import { actions, useStore } from "~/lib/store";
@@ -118,55 +119,30 @@ function CompressorDisplay({ thresholdDb, ratio, makeupDb }: { thresholdDb: numb
   );
 }
 
-/** Aktuelle Anhebung oder Absenkung der automatischen Lautstärke, von der Mitte aus. */
+/** Zeigerinstrument für die automatische Lautstärke: Mitte = 0 dB. */
 function AgcDisplay({ gainDb, maxGainDb }: { gainDb: number; maxGainDb: number }) {
   const range = Math.max(6, maxGainDb);
-  const amount = Math.min(1, Math.abs(gainDb) / range) * 50;
   const ticks = [-range, -range / 2, 0, range / 2, range].map((t) => Math.round(t));
   return (
-    <div className="absolute inset-0 flex flex-col justify-center gap-2 px-4">
-      <LedBar
-        segment={2}
-        color={(pos) => {
-          const lit = gainDb >= 0 ? pos >= 0.5 && pos <= 0.5 + amount / 100 : pos <= 0.5 && pos >= 0.5 - amount / 100;
-          return lit ? (gainDb >= 0 ? "on" : "warning") : "off";
-        }}
-        deps={[gainDb, amount]}
-        className="h-10 w-full [--ch:var(--ch-mic)]"
-      />
-      <div className="absolute top-1/2 left-1/2 h-12 w-0.5 -translate-x-1/2 -translate-y-[calc(50%+0.625rem)] rounded-full bg-foreground/60" />
-      <div className="relative h-3">
-        {ticks.map((t) => (
-          <Tick key={t} axis="x" at={50 + (t / range) * 50}>
-            {t > 0 ? `+${t}` : t}
-          </Tick>
-        ))}
-      </div>
-    </div>
+    <Needle
+      className="absolute inset-2"
+      value={0.5 + gainDb / range / 2}
+      label="GAIN dB"
+      scale={ticks.map((t) => [0.5 + t / range / 2, t > 0 ? `+${t}` : String(t)])}
+    />
   );
 }
 
-const GR_TICKS = [0, -3, -6, -9, -12];
-
-/** Absenkung als Balken von rechts, darunter die Skala in dB. */
+/** Zeigerinstrument für die Absenkung: Ruhe rechts bei 0, Ausschlag nach links. */
 function ReductionDisplay({ db, max }: { db: number; max: number }) {
-  const amount = Math.min(1, Math.max(0, -db / max));
+  const ticks = [0, -3, -6, -9, -12, -18].filter((t) => -t <= max);
   return (
-    <div className="absolute inset-0 flex flex-col justify-center gap-2 px-4">
-      <LedBar
-        segment={2}
-        color={(pos) => (pos >= 1 - amount ? "warning" : "off")}
-        deps={[amount]}
-        className="h-10 w-full"
-      />
-      <div className="relative h-3">
-        {GR_TICKS.filter((t) => -t <= max).map((t) => (
-          <Tick key={t} axis="x" at={100 - (-t / max) * 100}>
-            {t}
-          </Tick>
-        ))}
-      </div>
-    </div>
+    <Needle
+      className="absolute inset-2"
+      value={1 - Math.min(1, Math.max(0, -db / max))}
+      label="GR dB"
+      scale={ticks.map((t) => [1 + t / max, String(t)])}
+    />
   );
 }
 
@@ -276,7 +252,7 @@ export function EffectsView() {
                 <GateDisplay peak={running ? micPeak : 0} thresholdDb={fx.gate.thresholdDb} open={!fx.gate.enabled || !!live?.gateOpen} />
               }
             >
-              <Range
+              <Knob
                 label={t("effects.threshold")}
                 value={fx.gate.thresholdDb}
                 min={-80}
@@ -303,10 +279,12 @@ export function EffectsView() {
               }
               display={<VoiceDisplay voice={voice} enabled={fx.denoise.enabled} />}
             >
-              <Toggle
+              <Lever
                 label={t("effects.voiceGate")}
                 checked={fx.denoise.voiceGate}
                 disabled={!fx.denoise.enabled}
+                on={t("voice.leverOn")}
+                off={t("voice.leverOff")}
                 onChange={(voiceGate) => actions.setEffect("denoise", { voiceGate })}
               />
             </Module>
@@ -325,13 +303,14 @@ export function EffectsView() {
                   ["highDb", t("effects.treble")],
                 ] as const
               ).map(([key, label]) => (
-                <Range
+                <Knob
                   key={key}
                   label={label}
                   value={fx.eq[key]}
                   min={-12}
                   max={12}
                   step={0.5}
+                  bipolar
                   format={(v) => `${formatDb(v)} dB`}
                   disabled={!fx.eq.enabled}
                   onChange={(v) => actions.setEffect("eq", { [key]: v })}
@@ -350,7 +329,7 @@ export function EffectsView() {
               }
               display={<AgcDisplay gainDb={agcGainDb} maxGainDb={fx.agc.maxGainDb} />}
             >
-              <Range
+              <Knob
                 label={t("effects.target")}
                 value={fx.agc.targetDb}
                 min={-30}
@@ -361,7 +340,7 @@ export function EffectsView() {
                 disabled={!fx.agc.enabled}
                 onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
               />
-              <Range
+              <Knob
                 label={t("effects.maxGain")}
                 value={fx.agc.maxGainDb}
                 min={0}
@@ -391,7 +370,7 @@ export function EffectsView() {
               }
               display={<CompressorDisplay thresholdDb={fx.compressor.thresholdDb} ratio={fx.compressor.ratio} makeupDb={fx.compressor.makeupDb} />}
             >
-              <Range
+              <Knob
                 label={t("effects.threshold")}
                 value={fx.compressor.thresholdDb}
                 min={-50}
@@ -402,7 +381,7 @@ export function EffectsView() {
                 disabled={!fx.compressor.enabled}
                 onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
               />
-              <Range
+              <Knob
                 label={t("effects.ratio")}
                 value={fx.compressor.ratio}
                 min={1}
@@ -413,7 +392,7 @@ export function EffectsView() {
                 disabled={!fx.compressor.enabled}
                 onChange={(ratio) => actions.setEffect("compressor", { ratio })}
               />
-              <Range
+              <Knob
                 label={t("effects.makeup")}
                 value={fx.compressor.makeupDb}
                 min={0}
@@ -439,7 +418,7 @@ export function EffectsView() {
               }
               display={<HighBandDisplay frequencyHz={fx.deEsser.frequencyHz} db={fx.deEsser.enabled ? deEsserDb : 0} max={18} />}
             >
-              <Range
+              <Knob
                 label={t("effects.threshold")}
                 value={fx.deEsser.thresholdDb}
                 min={-60}
@@ -450,7 +429,7 @@ export function EffectsView() {
                 disabled={!fx.deEsser.enabled}
                 onChange={(thresholdDb) => actions.setEffect("deEsser", { thresholdDb })}
               />
-              <Range
+              <Knob
                 label={t("effects.frequency")}
                 value={fx.deEsser.frequencyHz}
                 min={3000}
@@ -470,7 +449,7 @@ export function EffectsView() {
               onToggle={(enabled) => actions.setEffect("exciter", { enabled })}
               display={<HighBandDisplay frequencyHz={fx.exciter.frequencyHz} db={fx.exciter.amount * 9} max={12} />}
             >
-              <Range
+              <Knob
                 label={t("effects.frequency")}
                 value={fx.exciter.frequencyHz}
                 min={1000}
@@ -481,7 +460,7 @@ export function EffectsView() {
                 disabled={!fx.exciter.enabled}
                 onChange={(frequencyHz) => actions.setEffect("exciter", { frequencyHz })}
               />
-              <Range
+              <Knob
                 label={t("effects.amount")}
                 value={fx.exciter.amount}
                 min={0}
@@ -506,7 +485,7 @@ export function EffectsView() {
               }
               display={<ReductionDisplay db={limiterDb} max={12} />}
             >
-              <Range
+              <Knob
                 label={t("effects.ceiling")}
                 value={fx.limiter.ceilingDb}
                 min={-20}

@@ -1,7 +1,5 @@
-import { Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
-import type { ReactNode } from "react";
-import { EchoDisplay, GridLine, Module, PLOT, Range, ReverbDisplay, Tick } from "~/components/effects/rack";
-import { Pill, PillGroup } from "~/components/ui/pills";
+import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Tick } from "~/components/effects/rack";
+import { Knob, StepKnob } from "~/components/ui/knob";
 import type { CharacterMode, ModulationMode } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -9,21 +7,9 @@ import { actions, useStore } from "~/lib/store";
 const percent = (v: number) => `${Math.round(v * 100)} %`;
 const hz = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)} kHz` : `${Math.round(v)} Hz`);
 
-/** Ganze Zeile im Regler-Raster. */
-function Row({ children, disabled }: { children: ReactNode; disabled?: boolean }) {
-  return <div className={`col-span-full ${disabled ? "opacity-45" : ""}`}>{children}</div>;
-}
-
 /* ---------- Charakter ---------- */
 
-const MODES: { id: CharacterMode; icon: ReactNode }[] = [
-  { id: "robot", icon: <Robot /> },
-  { id: "radio", icon: <Radio /> },
-  { id: "telephone", icon: <Phone /> },
-  { id: "megaphone", icon: <Megaphone /> },
-  { id: "distortion", icon: <Lightning /> },
-  { id: "bitcrusher", icon: <WaveSquare /> },
-];
+const MODES: CharacterMode[] = ["robot", "radio", "telephone", "megaphone", "distortion", "bitcrusher"];
 
 /** Bedeutung und Anzeige des Farb-Reglers je Modus. */
 function toneOf(mode: CharacterMode, tone: number): { label: string; value: string } {
@@ -101,29 +87,19 @@ export function CharacterModule() {
   return (
     <Module
       title={t("voice.character")}
-      columns={3}
+      columns={4}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("character", { enabled })}
       display={<CharacterDisplay mode={p.mode} amount={p.amount} tone={p.tone} mix={p.mix} />}
     >
-      <Row disabled={!p.enabled}>
-        <PillGroup size="sm" className="w-fit max-w-full">
-          {MODES.map((m) => (
-            <Pill
-              key={m.id}
-              active={p.mode === m.id}
-              title={t(`voice.mode.${m.id}`)}
-              disabled={!p.enabled}
-              className="px-2"
-              onClick={() => actions.setVoice("character", { mode: m.id })}
-            >
-              {m.icon}
-              {p.mode === m.id && <span>{t(`voice.mode.${m.id}`)}</span>}
-            </Pill>
-          ))}
-        </PillGroup>
-      </Row>
-      <Range
+      <StepKnob
+        label={t("voice.modeLabel")}
+        value={p.mode}
+        disabled={!p.enabled}
+        onChange={(mode: CharacterMode) => actions.setVoice("character", { mode })}
+        options={MODES.map((m) => ({ value: m, label: t(`voice.mode.${m}`) }))}
+      />
+      <Knob
         label={t("voice.amount")}
         value={p.amount}
         min={0}
@@ -134,7 +110,7 @@ export function CharacterModule() {
         disabled={!p.enabled}
         onChange={(amount) => actions.setVoice("character", { amount })}
       />
-      <Range
+      <Knob
         label={tone.label}
         value={p.tone}
         min={0}
@@ -145,7 +121,7 @@ export function CharacterModule() {
         disabled={!p.enabled}
         onChange={(v) => actions.setVoice("character", { tone: v })}
       />
-      <Range
+      <Knob
         label={t("voice.mix")}
         value={p.mix}
         min={0}
@@ -214,21 +190,19 @@ export function ModulationModule() {
   return (
     <Module
       title={t("voice.modulation")}
-      columns={4}
+      columns={5}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("modulation", { enabled })}
       display={<ModulationDisplay mode={p.mode} rateHz={p.rateHz} depth={p.depth} />}
     >
-      <Row disabled={!p.enabled}>
-        <PillGroup size="sm" className="w-fit">
-          {MOD_MODES.map((m) => (
-            <Pill key={m} active={p.mode === m} disabled={!p.enabled} onClick={() => actions.setVoice("modulation", { mode: m })}>
-              {t(`voice.mod.${m}`)}
-            </Pill>
-          ))}
-        </PillGroup>
-      </Row>
-      <Range
+      <StepKnob
+        label={t("voice.modeLabel")}
+        value={p.mode}
+        disabled={!p.enabled}
+        onChange={(mode: ModulationMode) => actions.setVoice("modulation", { mode })}
+        options={MOD_MODES.map((m) => ({ value: m, label: t(`voice.mod.${m}`) }))}
+      />
+      <Knob
         label={t("voice.rate")}
         value={p.rateHz}
         min={0.05}
@@ -239,7 +213,7 @@ export function ModulationModule() {
         disabled={!p.enabled}
         onChange={(rateHz) => actions.setVoice("modulation", { rateHz })}
       />
-      <Range
+      <Knob
         label={t("voice.depth")}
         value={p.depth}
         min={0}
@@ -250,7 +224,7 @@ export function ModulationModule() {
         disabled={!p.enabled}
         onChange={(depth) => actions.setVoice("modulation", { depth })}
       />
-      <Range
+      <Knob
         label={t("voice.feedback")}
         value={p.feedback}
         min={0}
@@ -261,7 +235,7 @@ export function ModulationModule() {
         disabled={!p.enabled || p.mode === "chorus"}
         onChange={(feedback) => actions.setVoice("modulation", { feedback })}
       />
-      <Range
+      <Knob
         label={t("voice.mix")}
         value={p.mix}
         min={0}
@@ -294,7 +268,7 @@ export function EchoControls({
 }) {
   return (
     <>
-      <Range
+      <Knob
         label={t("voice.time")}
         value={params.timeMs}
         min={20}
@@ -306,7 +280,7 @@ export function EchoControls({
         color={color}
         onChange={(timeMs) => onChange({ timeMs })}
       />
-      <Range
+      <Knob
         label={t("voice.feedback")}
         value={params.feedback}
         min={0}
@@ -318,7 +292,7 @@ export function EchoControls({
         color={color}
         onChange={(feedback) => onChange({ feedback })}
       />
-      <Range
+      <Knob
         label={t("voice.echoTone")}
         value={Math.log2(params.toneHz)}
         min={Math.log2(500)}
@@ -330,7 +304,7 @@ export function EchoControls({
         color={color}
         onChange={(v) => onChange({ toneHz: Math.round(Math.pow(2, v)) })}
       />
-      <Range
+      <Knob
         label={mixLabel}
         value={params.mix}
         min={0}
@@ -361,7 +335,7 @@ export function ReverbControls({
 }) {
   return (
     <>
-      <Range
+      <Knob
         label={t("voice.size")}
         value={params.size}
         min={0}
@@ -373,7 +347,7 @@ export function ReverbControls({
         color={color}
         onChange={(size) => onChange({ size })}
       />
-      <Range
+      <Knob
         label={t("voice.damping")}
         value={params.damping}
         min={0}
@@ -385,7 +359,7 @@ export function ReverbControls({
         color={color}
         onChange={(damping) => onChange({ damping })}
       />
-      <Range
+      <Knob
         label={t("voice.predelay")}
         value={params.predelayMs}
         min={0}
@@ -397,7 +371,7 @@ export function ReverbControls({
         color={color}
         onChange={(predelayMs) => onChange({ predelayMs })}
       />
-      <Range
+      <Knob
         label={t("voice.lowCut")}
         value={params.lowCutHz}
         min={20}
@@ -409,7 +383,7 @@ export function ReverbControls({
         color={color}
         onChange={(lowCutHz) => onChange({ lowCutHz })}
       />
-      <Range
+      <Knob
         label={mixLabel}
         value={params.mix}
         min={0}

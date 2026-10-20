@@ -52,6 +52,9 @@
   --led-off: oklch(0% 0 0 / 8%);
   --well: oklch(94% 0.006 70);
   --well-shadow: oklch(30% 0.02 60 / 10%);
+  /* Kappe der Drehregler: hell oben links, dunkler zum Rand. */
+  --knob-hi: oklch(99% 0.004 75);
+  --knob-lo: oklch(86% 0.008 70);
 
   --ch-mic: var(--primary);
   --ch-soundboard: oklch(0.6 0.2 295);
@@ -94,6 +97,8 @@
   --led-off: oklch(100% 0 0 / 6%);
   --well: oklch(12% 0.005 60);
   --well-shadow: oklch(0% 0 0 / 35%);
+  --knob-hi: oklch(36% 0.008 60);
+  --knob-lo: oklch(20% 0.006 60);
 
   --ch-soundboard: oklch(0.7 0.18 295);
   --ch-music: oklch(0.78 0.12 195);

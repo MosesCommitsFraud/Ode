@@ -1,4 +1,5 @@
-import { EchoDisplay, EqDisplay, Module, Range, ReverbDisplay } from "~/components/effects/rack";
+import { EchoDisplay, EqDisplay, Module, ReverbDisplay } from "~/components/effects/rack";
+import { Knob } from "~/components/ui/knob";
 import { EchoControls, ReverbControls } from "~/components/voice/SoundModules";
 import { SectionLabel } from "~/components/ui/misc";
 import type { ChannelId } from "~/lib/engine";
@@ -24,8 +25,9 @@ function Sends({ bus, disabled }: { bus: "reverbSend" | "echoSend"; disabled: bo
     <>
       <SectionLabel className="col-span-full -mb-1">{t("mixer.sendTo")}</SectionLabel>
       {CHANNELS.map((c) => (
-        <Range
+        <Knob
           key={c.id}
+          size="sm"
           label={c.name()}
           value={channels[c.id][bus]}
           min={0}
@@ -99,7 +101,7 @@ function ChannelTone({ id }: { id: ChannelId }) {
     <Module
       className="col-span-2"
       title={`${channel.name()} · ${t("mixer.tone")}`}
-      columns={3}
+      columns={5}
       accent={channel.color}
       enabled={fx.eqEnabled}
       onToggle={(eqEnabled) => actions.setChannelFx(id, { eqEnabled })}
@@ -112,20 +114,23 @@ function ChannelTone({ id }: { id: ChannelId }) {
           ["highDb", t("effects.treble")],
         ] as const
       ).map(([key, label]) => (
-        <Range
+        <Knob
           key={key}
           label={label}
           value={fx[key]}
           min={-12}
           max={12}
           step={0.5}
+          bipolar
+          size="sm"
           format={(v) => `${formatDb(v)} dB`}
           color={channel.color}
           disabled={off}
           onChange={(v) => actions.setChannelFx(id, { [key]: v })}
         />
       ))}
-      <Range
+      <Knob
+        size="sm"
         label={t("mixer.lowCut")}
         value={Math.log2(fx.lowCutHz)}
         min={Math.log2(20)}
@@ -137,7 +142,8 @@ function ChannelTone({ id }: { id: ChannelId }) {
         disabled={off}
         onChange={(v) => actions.setChannelFx(id, { lowCutHz: Math.round(Math.pow(2, v)) })}
       />
-      <Range
+      <Knob
+        size="sm"
         label={t("mixer.highCut")}
         value={Math.log2(fx.highCutHz)}
         min={Math.log2(1000)}

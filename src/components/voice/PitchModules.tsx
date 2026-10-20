@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { GridLine, Module, PLOT, Range, Reading, Tick, Toggle, freqX } from "~/components/effects/rack";
+import { GridLine, Module, PLOT, Reading, Tick, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
-import { Pill, PillGroup } from "~/components/ui/pills";
-import { Select } from "~/components/ui/select";
+import { Knob, Lever, StepKnob } from "~/components/ui/knob";
 import type { Chord, Scale } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
@@ -108,22 +107,26 @@ export function PitchModule() {
       }
       display={<PitchDisplay semitones={p.enabled ? p.semitones : 0} formant={p.enabled ? p.formant : 0} pitchHz={pitchHz} />}
     >
-      <Range
+      <Knob
         label={t("voice.semitones")}
         value={p.semitones}
         min={-12}
         max={12}
         step={1}
+        bipolar
+        ticks={25}
         format={(v) => signed(v)}
         disabled={!p.enabled}
         onChange={(semitones) => actions.setVoice("pitch", { semitones })}
       />
-      <Range
+      <Knob
         label={t("voice.formant")}
         value={p.formant}
         min={-8}
         max={8}
         step={0.5}
+        bipolar
+        ticks={17}
         format={(v) => signed(v, 1)}
         disabled={!p.enabled}
         onChange={(formant) => actions.setVoice("pitch", { formant })}
@@ -244,27 +247,21 @@ export function AutotuneModule() {
       }
       display={<TuneDisplay keyNote={p.key} scale={p.scale} enabled={p.enabled} />}
     >
-      <div className={p.enabled ? undefined : "opacity-45"}>
-        <div className="mb-1.5 text-2xs text-muted-foreground">{t("voice.key")}</div>
-        <Select
-          value={String(p.key)}
-          disabled={!p.enabled}
-          onChange={(v) => actions.setVoice("autotune", { key: Number(v) })}
-          options={Array.from({ length: 12 }, (_, k) => ({ value: String(k), label: keyName(k) }))}
-          className="h-8"
-        />
-      </div>
-      <div className={p.enabled ? undefined : "opacity-45"}>
-        <div className="mb-1.5 text-2xs text-muted-foreground">{t("voice.scale")}</div>
-        <Select
-          value={p.scale}
-          disabled={!p.enabled}
-          onChange={(v) => actions.setVoice("autotune", { scale: v as Scale })}
-          options={SCALES.map((s) => ({ value: s, label: t(`voice.scale.${s}`) }))}
-          className="h-8"
-        />
-      </div>
-      <Range
+      <StepKnob
+        label={t("voice.key")}
+        value={p.key}
+        disabled={!p.enabled}
+        onChange={(key) => actions.setVoice("autotune", { key })}
+        options={Array.from({ length: 12 }, (_, k) => ({ value: k, label: keyName(k) }))}
+      />
+      <StepKnob
+        label={t("voice.scale")}
+        value={p.scale}
+        disabled={!p.enabled}
+        onChange={(scale: Scale) => actions.setVoice("autotune", { scale })}
+        options={SCALES.map((s) => ({ value: s, label: t(`voice.scale.${s}`) }))}
+      />
+      <Knob
         label={t("voice.speed")}
         value={p.speed}
         min={0}
@@ -324,7 +321,7 @@ export function HarmonizerModule() {
   return (
     <Module
       title={t("voice.harmonizer")}
-      columns={3}
+      columns={6}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("harmonizer", { enabled })}
       display={<HarmonyDisplay voices={p.voices} enabled={p.enabled} />}
@@ -333,26 +330,30 @@ export function HarmonizerModule() {
         const v = p.voices[i];
         const off = !p.enabled || !v.enabled;
         return [
-          <Toggle
+          <Lever
             key={`t${i}`}
             label={t("voice.voiceN", { n: i + 1 })}
             checked={v.enabled}
             disabled={!p.enabled}
+            on={t("voice.leverOn")}
+            off={t("voice.leverOff")}
             onChange={(enabled) => setVoice(i, { enabled })}
           />,
-          <Range
+          <Knob
             key={`i${i}`}
             label={t("voice.interval")}
             value={v.semitones}
             min={-12}
             max={12}
             step={1}
-            reset={i === 0 ? 4 : 7}
+            bipolar
+            reset={0}
+            ticks={25}
             format={(x) => signed(x)}
             disabled={off}
             onChange={(semitones) => setVoice(i, { semitones })}
           />,
-          <Range
+          <Knob
             key={`l${i}`}
             label={t("voice.level")}
             value={v.level}
@@ -382,7 +383,7 @@ export function VocoderModule() {
   return (
     <Module
       title={t("voice.vocoder")}
-      columns={3}
+      columns={5}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("vocoder", { enabled })}
       status={
@@ -406,17 +407,22 @@ export function VocoderModule() {
         </div>
       }
     >
-      <div className={`col-span-2 ${p.enabled ? "" : "opacity-45"}`}>
-        <PillGroup size="sm" className="w-fit">
-          {CHORDS.map((c) => (
-            <Pill key={c} active={p.chord === c} disabled={!p.enabled} onClick={() => actions.setVoice("vocoder", { chord: c })}>
-              {t(`voice.chord.${c}`)}
-            </Pill>
-          ))}
-        </PillGroup>
-      </div>
-      <Toggle label={t("voice.follow")} checked={p.follow} disabled={!p.enabled} onChange={(follow) => actions.setVoice("vocoder", { follow })} />
-      <Range
+      <StepKnob
+        label={t("voice.chord")}
+        value={p.chord}
+        disabled={!p.enabled}
+        onChange={(chord: Chord) => actions.setVoice("vocoder", { chord })}
+        options={CHORDS.map((c) => ({ value: c, label: t(`voice.chord.${c}`) }))}
+      />
+      <Lever
+        label={t("voice.follow")}
+        checked={p.follow}
+        disabled={!p.enabled}
+        on={t("voice.leverOn")}
+        off={t("voice.leverOff")}
+        onChange={(follow) => actions.setVoice("vocoder", { follow })}
+      />
+      <Knob
         label={t("voice.note")}
         value={p.note}
         min={28}
@@ -427,7 +433,7 @@ export function VocoderModule() {
         disabled={!p.enabled || p.follow}
         onChange={(note) => actions.setVoice("vocoder", { note })}
       />
-      <Range
+      <Knob
         label={t("voice.breath")}
         value={p.breath}
         min={0}
@@ -438,7 +444,7 @@ export function VocoderModule() {
         disabled={!p.enabled}
         onChange={(breath) => actions.setVoice("vocoder", { breath })}
       />
-      <Range
+      <Knob
         label={t("voice.mix")}
         value={p.mix}
         min={0}
