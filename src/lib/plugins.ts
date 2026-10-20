@@ -34,6 +34,10 @@ export interface PluginStatus {
   guiOpen: boolean;
   latencyMs: number;
   loadMs: number;
+  /** Der Plugin-Prozess ist abgestürzt oder hing: die Meldung dazu. */
+  crashed: string | null;
+  /** Zuletzt geladenes Plugin, zum Neu-Laden nach einem Absturz. */
+  last: PluginInfo | null;
 }
 
 interface PluginsState {
@@ -45,7 +49,7 @@ interface PluginsState {
   error: string | null;
 }
 
-const EMPTY: PluginStatus = { available: false, loaded: null, bypass: false, hasGui: false, guiOpen: false, latencyMs: 0, loadMs: 0 };
+const EMPTY: PluginStatus = { available: false, loaded: null, bypass: false, hasGui: false, guiOpen: false, latencyMs: 0, loadMs: 0, crashed: null, last: null };
 
 let state: PluginsState = { status: EMPTY, found: [], params: [], scanning: false, busy: false, error: null };
 const listeners = new Set<() => void>();
@@ -185,6 +189,12 @@ export const plugins = {
     } catch (e) {
       set({ error: message(e) });
     }
+  },
+
+  /** Nach einem Absturz dasselbe Plugin wieder einsetzen. */
+  async reload() {
+    const last = state.status.last;
+    if (last) await plugins.load(last);
   },
 
   dismissError() {

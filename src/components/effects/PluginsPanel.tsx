@@ -1,4 +1,4 @@
-import { AppWindow, CaretLeft, CaretRight, FolderOpen, MagnifyingGlass, Plug, Trash, X } from "@phosphor-icons/react";
+import { AppWindow, ArrowClockwise, CaretLeft, CaretRight, FolderOpen, MagnifyingGlass, Plug, Trash, Warning, X } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Knob, Lever } from "~/components/ui/knob";
@@ -192,7 +192,7 @@ function Rack() {
         )}
       </div>
       <div className="flex items-center gap-3">
-        <span className="flex-1 font-mono text-3xs text-muted-foreground">{t("plugins.warning")}</span>
+        <span className="flex-1 font-mono text-3xs text-muted-foreground">{t("plugins.separate")}</span>
         <Pager page={paged.page} pages={paged.pages} onPage={paged.setPage} />
         <span className="flex-1" />
       </div>
@@ -200,9 +200,37 @@ function Rack() {
   );
 }
 
+/** Meldung nach einem Absturz oder Hänger des Plugin-Prozesses. */
+function Crashed({ message }: { message: string }) {
+  const last = usePlugins((s) => s.status.last);
+  const busy = usePlugins((s) => s.busy);
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-warning/12 px-4 py-2.5 text-sm text-warning-foreground">
+      <Warning weight="fill" className="size-4 shrink-0" />
+      <span className="flex-1">{message}</span>
+      {last && (
+        <Button size="sm" disabled={busy} onClick={() => void plugins.reload()}>
+          <ArrowClockwise /> {t("plugins.reload")}
+        </Button>
+      )}
+      <Button variant="ghost" size="sm" onClick={() => void plugins.unload()}>
+        {t("plugins.dismiss")}
+      </Button>
+    </div>
+  );
+}
+
 export function PluginsPanel() {
   const loaded = usePlugins((s) => s.status.loaded !== null);
+  const crashed = usePlugins((s) => s.status.crashed);
   const error = usePlugins((s) => s.error);
+
+  // Einen Absturz auch dann bemerken, wenn der Slot leer aussieht.
+  useEffect(() => {
+    if (loaded) return;
+    const id = window.setInterval(() => void plugins.refresh(), 2000);
+    return () => window.clearInterval(id);
+  }, [loaded]);
   return (
     <div className="flex min-h-0 flex-1 animate-[layout-in_260ms_var(--ease-drawer)] flex-col gap-3 pr-3 pb-3 pl-6">
       {error && (
@@ -213,6 +241,7 @@ export function PluginsPanel() {
           </button>
         </div>
       )}
+      {crashed && <Crashed message={crashed} />}
       {loaded ? <Rack /> : <Browser />}
     </div>
   );

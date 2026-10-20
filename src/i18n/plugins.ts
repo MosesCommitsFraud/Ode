@@ -19,7 +19,9 @@ export default {
     nothingFound: "Keine CLAP-Plugins gefunden.",
     emptyFile: "In dieser Datei steckt kein Plugin.",
     noParams: "Das Plugin zeigt keine Parameter. Öffne sein Fenster.",
-    warning: "Prototyp: Ein abstürzendes Plugin beendet Ode.",
+    reload: "Neu laden",
+    dismiss: "Schließen",
+    separate: "Läuft in einem eigenen Prozess: Stürzt das Plugin ab, läuft Ode weiter.",
   },
   en: {
     page: "Plugin",
@@ -40,6 +42,8 @@ export default {
     nothingFound: "No CLAP plugins found.",
     emptyFile: "This file contains no plugin.",
     noParams: "The plugin shows no parameters. Open its window.",
-    warning: "Prototype: a crashing plugin closes Ode.",
+    reload: "Reload",
+    dismiss: "Dismiss",
+    separate: "Runs in its own process: if the plugin crashes, Ode keeps running.",
   },
 };
