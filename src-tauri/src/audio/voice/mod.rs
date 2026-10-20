@@ -9,19 +9,23 @@ pub mod character;
 pub mod modulation;
 pub mod pitch;
 pub mod space;
+pub mod stretch;
 pub mod vocoder;
 
 use serde::{Deserialize, Serialize};
 
 use super::ENGINE_RATE;
-use super::dsp::AtomicF32;
+use super::dsp::{AtomicF32, DelayLine};
 use character::{Character, CharacterParams};
 use modulation::{Modulation, ModulationParams};
-use pitch::{Grain, Mark, PitchDetector, Psola, note_of};
+use pitch::{PitchDetector, note_of};
 use space::{Echo, EchoParams, Reverb, ReverbParams};
+use stretch::Stretch;
 use vocoder::{BANDS, Vocoder, VocoderParams};
 
 const RATE: f32 = ENGINE_RATE as f32;
+/// So oft (in Samples) wird die Autotune-Korrektur nachgeführt: 2,5 ms.
+const SUB: usize = 120;
 
 // ------------------------------------------------------------ Parameter
 
@@ -192,7 +196,7 @@ impl VoiceParams {
         self
     }
 
-    /// Braucht den Tonhöhen-Verschieber (und damit 25 ms Verzögerung).
+    /// Braucht den Tonhöhen-Verschieber (und damit etwa 45 ms Verzögerung).
     pub fn shifts(&self) -> bool {
         self.enabled && (self.pitch.enabled || self.autotune.enabled || self.harmonizer.enabled)
     }
@@ -220,6 +224,10 @@ pub struct VoiceMeters {
 struct Tuner {
     target: Option<i32>,
     cents: f32,
+    /// Zuletzt angenommene Note, gegen Oktavsprünge der Erkennung.
+    last: Option<f32>,
+    /// Ein großer Sprung wurde einmal gesehen und wartet auf Bestätigung.
+    jump: Option<f32>,
 }
 
 impl Tuner {
@@ -240,21 +248,42 @@ impl Tuner {
         chosen
     }
 
-    /// Verhältnis für ein Korn der Marke `m`; `dt` ist der Abstand zum letzten Korn in s.
-    fn ratio(&mut self, m: &Mark, p: &AutotuneParams, dt: f32) -> f32 {
-        if !m.voiced {
-            return 2f32.powf(self.cents / 1200.0);
+    /// Filtert einzelne Ausreißer: Ein Sprung um mehr als eine Quinte zählt
+    /// erst, wenn die nächste Messung ihn bestätigt.
+    fn steady(&mut self, note: f32) -> Option<f32> {
+        match self.last {
+            Some(last) if (note - last).abs() > 7.0 => {
+                if self.jump.is_some_and(|j| (j - note).abs() < 1.0) {
+                    self.jump = None;
+                    self.last = Some(note);
+                    Some(note)
+                } else {
+                    self.jump = Some(note);
+                    None
+                }
+            }
+            _ => {
+                self.jump = None;
+                self.last = Some(note);
+                Some(note)
+            }
         }
-        let note = note_of(m.frequency());
-        let target = self.snap(note, p);
-        let desired = (target as f32 - note) * 100.0;
-        // Geschwindigkeit 0–1 → Zeitkonstante 0–400 ms, quadratisch für feine
-        // Einstellung bei den schnellen Werten.
-        let tau = p.speed * p.speed * 0.4;
-        if tau < 0.002 {
-            self.cents = desired;
-        } else {
-            self.cents += (desired - self.cents) * (1.0 - (-dt / tau).exp());
+    }
+
+    /// Korrekturfaktor für die erkannte Tonhöhe; ohne Ton bleibt die letzte
+    /// Korrektur stehen, damit Konsonanten nicht springen. `dt` in s.
+    fn correction(&mut self, hz: Option<f32>, p: &AutotuneParams, dt: f32) -> f32 {
+        if let Some(note) = hz.map(note_of).and_then(|n| self.steady(n)) {
+            let target = self.snap(note, p);
+            let desired = (target as f32 - note) * 100.0;
+            // Geschwindigkeit 0–1 → Zeitkonstante 0–400 ms, quadratisch für
+            // feine Einstellung bei den schnellen Werten.
+            let tau = p.speed * p.speed * 0.4;
+            if tau < 0.002 {
+                self.cents = desired;
+            } else {
+                self.cents += (desired - self.cents) * (1.0 - (-dt / tau).exp());
+            }
         }
         2f32.powf(self.cents / 1200.0)
     }
@@ -265,7 +294,14 @@ impl Tuner {
 pub struct VoiceChain {
     params: VoiceParams,
     detector: PitchDetector,
-    psola: Psola,
+    /// Die eigene Stimme, verschoben (Tonhöhe, Formant, Autotune).
+    main: Stretch,
+    /// Zwei Harmonie-Stimmen; `true` = lief im letzten Block.
+    harmony: [(Stretch, bool); 2],
+    /// Trockene Stimme mit derselben Verzögerung, wenn nur Harmonien laufen.
+    dry: DelayLine,
+    input: Vec<f32>,
+    output: Vec<f32>,
     shifting: bool,
     tuner: Tuner,
     vocoder: Vocoder,
@@ -289,7 +325,11 @@ impl VoiceChain {
                 ..Default::default()
             },
             detector: PitchDetector::new(),
-            psola: Psola::new(3),
+            main: Stretch::new(),
+            harmony: [(Stretch::new(), false), (Stretch::new(), false)],
+            dry: DelayLine::new(stretch::BLOCK * 4),
+            input: vec![0.0; SUB],
+            output: vec![0.0; SUB],
             shifting: false,
             tuner: Tuner::default(),
             vocoder: Vocoder::new(),
@@ -351,7 +391,7 @@ impl VoiceChain {
         let shifts = p.shifts();
         let detects = shifts || (p.enabled && p.vocoder.enabled && p.vocoder.follow);
         meters.latency_ms.store(if shifts {
-            pitch::LATENCY as f32 * 1000.0 / RATE
+            self.main.latency() as f32 * 1000.0 / RATE
         } else {
             0.0
         });
@@ -363,7 +403,12 @@ impl VoiceChain {
         }
 
         if shifts && !self.shifting {
-            self.psola.reset();
+            self.main.reset();
+            self.dry.clear();
+            for (h, on) in &mut self.harmony {
+                h.reset();
+                *on = false;
+            }
         }
         self.shifting = shifts;
         if detects {
@@ -410,7 +455,8 @@ impl VoiceChain {
         }
     }
 
-    /// Tonhöhe, Formant, Autotune und Harmonizer über den PSOLA-Verschieber.
+    /// Tonhöhe, Formant, Autotune und Harmonizer über Signalsmith Stretch.
+    /// Läuft in kurzen Stücken, damit Autotune schnell nachführt.
     fn shift(&mut self, buf: &mut [f32], p: &VoiceParams) {
         let main_shifts = p.pitch.enabled || p.autotune.enabled;
         let (semitones, formant) = if p.pitch.enabled {
@@ -419,46 +465,58 @@ impl VoiceChain {
             (0.0, 0.0)
         };
         let shift_ratio = 2f32.powf(semitones / 12.0);
-        let formant = 2f32.powf(formant / 12.0);
+        // Formanten bleiben beim Transponieren an ihrem Platz; der Regler
+        // verschiebt sie gezielt (Klangfarbe).
+        self.main.set_formant(formant, true);
         let harmonies = p.harmonizer.voices.map(|v| {
             (p.harmonizer.enabled && v.enabled && v.level > 0.0)
                 .then(|| (2f32.powf(v.semitones / 12.0), v.level))
         });
-        let tuner = &mut self.tuner;
-        let mut main_ratio = shift_ratio * 2f32.powf(tuner.cents / 1200.0);
+        let latency = self.main.latency();
 
-        for s in buf.iter_mut() {
-            let x = *s;
-            self.detector.push(x);
-            self.psola.push(x, self.detector.period());
-            let y = self.psola.next(|voice, m| match voice {
-                0 if main_shifts => {
-                    let dt = m.period / main_ratio.max(0.25) / RATE;
-                    let auto = if p.autotune.enabled {
-                        tuner.ratio(m, &p.autotune, dt)
-                    } else {
-                        1.0
-                    };
-                    main_ratio = shift_ratio * auto;
-                    Some(Grain {
-                        ratio: main_ratio,
-                        formant,
-                        level: 1.0,
-                    })
-                }
-                0 => None,
-                v => harmonies[v - 1].map(|(interval, level)| Grain {
-                    ratio: main_ratio * interval,
-                    formant,
-                    level,
-                }),
-            });
-            let dry = if main_shifts {
-                0.0
+        for chunk in buf.chunks_mut(SUB) {
+            let n = chunk.len();
+            for &x in chunk.iter() {
+                self.detector.push(x);
+                self.dry.push(x);
+            }
+            let hz = self.detector.frequency();
+            let auto = if p.autotune.enabled {
+                self.tuner.correction(hz, &p.autotune, n as f32 / RATE)
             } else {
-                self.psola.delayed()
+                1.0
             };
-            *s = y + dry;
+            let ratio = shift_ratio * auto;
+            self.input[..n].copy_from_slice(chunk);
+
+            if main_shifts {
+                self.main.set_formant_base(hz);
+                self.main.set_transpose(ratio);
+                self.main.process(&self.input[..n], &mut self.output[..n]);
+                chunk.copy_from_slice(&self.output[..n]);
+            } else {
+                for (i, s) in chunk.iter_mut().enumerate() {
+                    *s = self.dry.tap(latency + n - 1 - i);
+                }
+            }
+
+            for ((stretch, running), harmony) in self.harmony.iter_mut().zip(harmonies) {
+                let Some((interval, level)) = harmony else {
+                    *running = false;
+                    continue;
+                };
+                if !*running {
+                    stretch.reset();
+                    *running = true;
+                }
+                stretch.set_formant(formant, true);
+                stretch.set_formant_base(hz);
+                stretch.set_transpose(ratio * interval);
+                stretch.process(&self.input[..n], &mut self.output[..n]);
+                for (s, h) in chunk.iter_mut().zip(&self.output[..n]) {
+                    *s += h * level;
+                }
+            }
         }
     }
 }
@@ -571,5 +629,67 @@ mod tests {
         p.reverb.enabled = true;
         let (out, _) = run(p, &saw(180.0, 48_000));
         assert!(out.iter().all(|s| s.is_finite() && s.abs() < 8.0));
+    }
+}
+
+#[cfg(test)]
+mod measure {
+    use super::*;
+    use std::f32::consts::TAU;
+
+    /// Gesungener Vokal: Glottis-Pulse durch drei Formanten, mit Gleiten und Vibrato.
+    fn sung(len: usize) -> Vec<f32> {
+        let mut phase = 0.0f32;
+        let mut f = [
+            crate::audio::dsp::Biquad::new(crate::audio::dsp::Shape::BandPass, 700.0, 5.0, 0.0),
+            crate::audio::dsp::Biquad::new(crate::audio::dsp::Shape::BandPass, 1200.0, 6.0, 0.0),
+            crate::audio::dsp::Biquad::new(crate::audio::dsp::Shape::BandPass, 2600.0, 7.0, 0.0),
+        ];
+        (0..len)
+            .map(|i| {
+                let t = i as f32 / RATE;
+                let hz = 196.0 * 2f32.powf((t * 0.5).sin() * 0.3 + (t * TAU * 5.5).sin() * 0.02);
+                phase = (phase + hz / RATE).fract();
+                let pulse = if phase < 0.08 { 1.0 } else { -0.087 };
+                (f[0].process(pulse) + f[1].process(pulse) * 0.6 + f[2].process(pulse) * 0.3) * 0.25
+            })
+            .collect()
+    }
+
+    #[test]
+    #[ignore]
+    fn measure_engine() {
+        let input = sung(48_000 * 4);
+        let mut p = VoiceParams::default();
+        p.autotune.enabled = true;
+        p.autotune.speed = 0.0;
+        p.harmonizer.enabled = true;
+        let meters = VoiceMeters::default();
+        let mut chain = VoiceChain::new();
+        chain.configure(&p);
+        let mut out = Vec::new();
+        let mut worst = 0.0f64;
+        let mut total = 0.0f64;
+        for block in input.chunks(480) {
+            let mut b = block.to_vec();
+            let t = std::time::Instant::now();
+            chain.process(&mut b, &meters);
+            let ms = t.elapsed().as_secs_f64() * 1000.0;
+            worst = worst.max(ms);
+            total += ms;
+            out.extend(b);
+        }
+        let blocks = input.len() / 480;
+        // Lücken: 10-ms-Fenster nach der Einschwingzeit, die fast still sind.
+        let gaps = out[48_000..]
+            .chunks(480)
+            .filter(|c| c.iter().map(|x| x * x).sum::<f32>() / 480.0 < 1e-6)
+            .count();
+        println!(
+            "latency {:.1} ms, avg {:.3} ms/block, worst {:.3} ms/block (budget 10 ms), silent blocks {gaps}",
+            meters.latency_ms.load(),
+            total / blocks as f64,
+            worst
+        );
     }
 }
