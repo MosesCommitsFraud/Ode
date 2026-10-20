@@ -1,5 +1,5 @@
-import { Console, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
-import { Caption } from "~/components/ui/hardware";
+import { useState } from "react";
+import { Bench, Divider, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
 import { Knob } from "~/components/ui/knob";
 import { EchoControls, ReverbControls } from "~/components/voice/SoundModules";
 import type { ChannelId } from "~/lib/engine";
@@ -24,25 +24,22 @@ const percent = (v: number) => `${Math.round(v * 100)} %`;
 function Sends({ bus }: { bus: "reverbSend" | "echoSend" }) {
   const channels = useStore((s) => s.buses.channels);
   return (
-    <div className="well flex flex-col gap-1 rounded-[10px] px-1 pt-2 pb-1.5">
-      <div className="grid grid-cols-4">
-        {CHANNELS.map((c) => (
-          <Knob
-            key={c.id}
-            size="sm"
-            label={c.short()}
-            value={channels[c.id][bus]}
-            min={0}
-            max={1}
-            step={0.01}
-            format={percent}
-            color={c.color}
-            onChange={(v) => actions.setChannelFx(c.id, { [bus]: v })}
-          />
-        ))}
-      </div>
-      <Caption label={t("mixer.sendTo")} />
-    </div>
+    <>
+      {CHANNELS.map((c) => (
+        <Knob
+          key={c.id}
+          size="sm"
+          label={c.short()}
+          value={channels[c.id][bus]}
+          min={0}
+          max={1}
+          step={0.01}
+          format={percent}
+          color={c.color}
+          onChange={(v) => actions.setChannelFx(c.id, { [bus]: v })}
+        />
+      ))}
+    </>
   );
 }
 
@@ -50,15 +47,15 @@ function ReverbBus() {
   const p = useStore((s) => s.buses.reverb);
   return (
     <Module
-      grow={1.25}
       title={t("mixer.reverbBus")}
       accent="var(--ch-out)"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setBus("reverb", { enabled })}
       display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} color="var(--ch-out)" />}
-      keys={<Sends bus="reverbSend" />}
     >
       <ReverbControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("reverb", patch)} />
+      <Divider />
+      <Sends bus="reverbSend" />
     </Module>
   );
 }
@@ -67,15 +64,15 @@ function EchoBus() {
   const p = useStore((s) => s.buses.echo);
   return (
     <Module
-      grow={1.25}
       title={t("mixer.echoBus")}
       accent="var(--ch-out)"
       enabled={p.enabled}
       onToggle={(enabled) => actions.setBus("echo", { enabled })}
       display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.3, p.mix)} color="var(--ch-out)" />}
-      keys={<Sends bus="echoSend" />}
     >
       <EchoControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("echo", patch)} />
+      <Divider />
+      <Sends bus="echoSend" />
     </Module>
   );
 }
@@ -85,7 +82,7 @@ function ChannelTone({ id }: { id: ChannelId }) {
   const channel = CHANNELS.find((c) => c.id === id)!;
   return (
     <Module
-      title={channel.name()}
+      title={`${channel.name()} · ${t("mixer.tone")}`}
       accent={channel.color}
       enabled={fx.eqEnabled}
       onToggle={(eqEnabled) => actions.setChannelFx(id, { eqEnabled })}
@@ -94,9 +91,9 @@ function ChannelTone({ id }: { id: ChannelId }) {
       <Stack>
         {(
           [
-            ["highDb", t("effects.treble")],
-            ["midDb", t("effects.presence")],
             ["lowDb", t("effects.bass")],
+            ["midDb", t("effects.presence")],
+            ["highDb", t("effects.treble")],
           ] as const
         ).map(([key, label]) => (
           <Knob
@@ -145,14 +142,58 @@ function ChannelTone({ id }: { id: ChannelId }) {
   );
 }
 
+const OPEN_KEY = "ode.buses-open";
+const BUSES = ["reverb", "echo", "soundboard", "music", "live"] as const;
+type BusId = (typeof BUSES)[number];
+
+function readOpen(): BusId {
+  try {
+    const stored = localStorage.getItem(OPEN_KEY);
+    return BUSES.find((b) => b === stored) ?? "reverb";
+  } catch {
+    return "reverb";
+  }
+}
+
+/** Effekt-Busse wie die Effekt-Seiten: links die Liste mit Schaltern, rechts das Gerät groß. */
 export function BusesPanel() {
+  const buses = useStore((s) => s.buses);
+  const [open, setOpen] = useState<BusId>(readOpen);
+  const select = (id: string) => {
+    const next = BUSES.find((b) => b === id) ?? "reverb";
+    setOpen(next);
+    try {
+      localStorage.setItem(OPEN_KEY, next);
+    } catch {
+      // Nur Komfort.
+    }
+  };
+  const tone = (id: "soundboard" | "music" | "live") => {
+    const channel = CHANNELS.find((c) => c.id === id)!;
+    return {
+      id,
+      title: channel.name(),
+      accent: channel.color,
+      enabled: buses.channels[id].eqEnabled,
+      onToggle: (eqEnabled: boolean) => actions.setChannelFx(id, { eqEnabled }),
+    };
+  };
+
   return (
-    <Console>
-      <ReverbBus />
-      <EchoBus />
-      <ChannelTone id="soundboard" />
-      <ChannelTone id="music" />
-      <ChannelTone id="live" />
-    </Console>
+    <Bench
+      open={open}
+      onOpen={select}
+      items={[
+        { group: t("mixer.buses") },
+        { id: "reverb", title: t("mixer.reverbBus"), accent: "var(--ch-out)", enabled: buses.reverb.enabled, onToggle: (enabled) => actions.setBus("reverb", { enabled }) },
+        { id: "echo", title: t("mixer.echoBus"), accent: "var(--ch-out)", enabled: buses.echo.enabled, onToggle: (enabled) => actions.setBus("echo", { enabled }) },
+        { group: t("mixer.tone") },
+        tone("soundboard"),
+        tone("music"),
+        tone("live"),
+      ]}
+    >
+      {open === "reverb" ? <ReverbBus /> : open === "echo" ? <EchoBus /> : <ChannelTone id={open} />}
+    </Bench>
   );
 }

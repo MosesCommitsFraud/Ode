@@ -237,7 +237,7 @@ function useKeyCount() {
  * eingestellte Stimme) und die Presets. Genau eine gilt; mehr Presets als
  * Platz blättern seitenweise. Rechtsklick auf ein Preset bearbeitet es.
  */
-export function PresetBank({ onEdit }: { onEdit: (preset: Preset) => void }) {
+export function PresetBank({ onEdit, aside }: { onEdit: (preset: Preset) => void; aside?: ReactNode }) {
   const presets = useStore((s) => s.presets);
   const active = useStore((s) => s.activePreset);
   const voice = useStore((s) => s.effects.voice);
@@ -303,6 +303,7 @@ export function PresetBank({ onEdit }: { onEdit: (preset: Preset) => void }) {
           </button>
         </div>
       )}
+      {aside}
     </div>
   );
 }

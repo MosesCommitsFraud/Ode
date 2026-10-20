@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { GridLine, Module, PLOT, Stack, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
-import { PushButton, PushButtons, SlideFader } from "~/components/ui/hardware";
+import { PushButton, PushButtons } from "~/components/ui/hardware";
 import { Knob } from "~/components/ui/knob";
 import type { Chord, Scale } from "~/lib/engine";
 import { t } from "~/lib/i18n";
@@ -84,7 +84,6 @@ export function PitchModule() {
     <Module
       title={t("voice.pitch")}
       help="pitch"
-      grow={1.15}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("pitch", { enabled })}
       display={<PitchDisplay semitones={p.enabled ? p.semitones : 0} formant={p.enabled ? p.formant : 0} pitchHz={pitchHz} />}
@@ -104,7 +103,7 @@ export function PitchModule() {
           onChange={(semitones) => actions.setVoice("pitch", { semitones })}
         />
       </Stack>
-      <SlideFader
+      <Knob
         label={t("voice.formant")}
         value={p.formant}
         min={-8}
@@ -238,13 +237,13 @@ function Keyboard({
         className={cn(
           "flex cursor-default flex-col items-center justify-end pb-1 font-mono text-[9px] leading-none font-semibold transition-colors",
           black
-            ? "absolute top-0 z-10 h-[58%] w-[9%] -translate-x-1/2 rounded-b-[4px] bg-[linear-gradient(to_bottom,oklch(30%_0.006_60),oklch(18%_0.006_60))] text-white/70 shadow-[0_2px_4px_oklch(0%_0_0/45%)]"
-            : "relative h-full flex-1 rounded-b-[5px] bg-[linear-gradient(to_bottom,oklch(97%_0.003_75),oklch(88%_0.006_75))] text-black/60 shadow-[0_0_0_1px_oklch(0%_0_0/18%),0_2px_3px_-1px_oklch(0%_0_0/30%)]",
-          on && "!bg-none !bg-[var(--ch-mic)] !text-black/80",
+            ? "absolute top-0 z-10 h-[58%] w-[9%] -translate-x-1/2 rounded-b-[4px] bg-foreground/80 text-background/70"
+            : "relative h-full flex-1 rounded-b-[5px] bg-panel-raised text-muted-foreground shadow-[0_0_0_1px_var(--hairline)]",
+          on && "!bg-[var(--ch-mic)] !text-white",
         )}
         style={black ? { left: `${(blackAt[n] / 7) * 100}%` } : undefined}
       >
-        {inside && !on && <span className={cn("mb-1 h-[3px] w-2.5 rounded-full", black ? "bg-white/50" : "bg-black/35")} />}
+        {inside && !on && <span className={cn("mb-1 size-1 rounded-full", black ? "bg-background/60" : "bg-[var(--ch-mic)]")} />}
         {!black && keyName(n)}
       </button>
     );
@@ -335,7 +334,6 @@ export function HarmonizerModule() {
     <Module
       title={t("voice.harmonizer")}
       help="harmonizer"
-      grow={1.15}
       enabled={p.enabled}
       onToggle={(enabled) => actions.setVoice("harmonizer", { enabled })}
       display={<HarmonyDisplay voices={p.voices} enabled={p.enabled} />}
@@ -366,7 +364,7 @@ export function HarmonizerModule() {
                 onChange={(semitones) => setVoice(i, { semitones })}
               />
             </Stack>
-            <SlideFader
+            <Knob
               label={t("voice.levelN", { n: i + 1 })}
               value={v.level}
               min={0}
@@ -455,7 +453,7 @@ export function VocoderModule() {
           onChange={(breath) => actions.setVoice("vocoder", { breath })}
         />
       </Stack>
-      <SlideFader
+      <Knob
         label={t("voice.mix")}
         value={p.mix}
         min={0}

@@ -252,14 +252,14 @@
 @keyframes page-in {
   from {
     opacity: 0;
-    transform: translateX(calc(var(--dir, 1) * 18px));
+    transform: translate(calc(var(--dir, 1) * var(--sx, 18px)), calc(var(--dir, 1) * var(--sy, 0px)));
   }
 }
 
 @keyframes page-out {
   to {
     opacity: 0;
-    transform: translateX(calc(var(--dir, 1) * -12px));
+    transform: translate(calc(var(--dir, 1) * var(--sx, 18px) * -0.6), calc(var(--dir, 1) * var(--sy, 0px) * -0.6));
   }
 }
 

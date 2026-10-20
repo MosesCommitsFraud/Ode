@@ -1,6 +1,6 @@
 import { EchoDisplay, GridLine, Module, PLOT, ReverbDisplay, Stack } from "~/components/effects/rack";
 import { CassetteTape, Lightning, Megaphone, Phone, Radio, Robot, WaveSquare } from "@phosphor-icons/react";
-import { PushButtons, SlideFader } from "~/components/ui/hardware";
+import { PushButtons } from "~/components/ui/hardware";
 import { Knob } from "~/components/ui/knob";
 import type { CharacterMode, ModulationMode } from "~/lib/engine";
 import { t } from "~/lib/i18n";
@@ -138,7 +138,7 @@ export function CharacterModule() {
           onChange={(v) => actions.setVoice("character", { tone: v })}
         />
       </Stack>
-      <SlideFader
+      <Knob
         label={t("voice.mix")}
         value={p.mix}
         min={0}
@@ -244,7 +244,7 @@ export function ModulationModule() {
           onChange={(feedback) => actions.setVoice("modulation", { feedback })}
         />
       </Stack>
-      <SlideFader
+      <Knob
         label={t("voice.mix")}
         value={p.mix}
         min={0}
@@ -314,7 +314,7 @@ export function EchoControls({
           onChange={(v) => onChange({ toneHz: Math.round(Math.pow(2, v)) })}
         />
       </Stack>
-      <SlideFader
+      <Knob
         label={mixLabel}
         value={params.mix}
         min={0}
@@ -383,7 +383,7 @@ export function ReverbControls({
           onChange={(predelayMs) => onChange({ predelayMs })}
         />
       </Stack>
-      <SlideFader
+      <Knob
         label={mixLabel}
         value={params.mix}
         min={0}

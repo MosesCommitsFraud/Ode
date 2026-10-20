@@ -1,4 +1,4 @@
-import { useId, useRef, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
+import { useRef, type KeyboardEvent, type PointerEvent, type WheelEvent } from "react";
 import { Caption } from "~/components/ui/hardware";
 import { cn } from "~/lib/utils";
 
@@ -42,7 +42,7 @@ export interface KnobProps {
   color?: string;
   /** Bogen von der Mitte (bzw. `reset`) statt vom Anfang, z. B. für ±dB. */
   bipolar?: boolean;
-  /** Anzahl Skalenstriche; bei Stufenschaltern eine pro Stufe. */
+  /** Früher Skalenstriche; der flache Regler zeigt keine. */
   ticks?: number;
   size?: "sm" | "md" | "lg";
 }
@@ -59,10 +59,8 @@ export function Knob({
   disabled,
   color = "var(--ch-mic)",
   bipolar,
-  ticks = 11,
   size = "md",
 }: KnobProps) {
-  const id = useId();
   // Bipolare Regler ruhen in der Mitte, alle anderen am Anfang.
   const reset = resetValue ?? (bipolar ? (min + max) / 2 : min);
   const drag = useRef<{ y: number; x: number; value: number } | null>(null);
@@ -116,9 +114,8 @@ export function Knob({
     e.preventDefault();
   };
 
-  const [px, py] = polar(angle, 23);
-  const [cx, cy] = polar(angle, 9);
-  const marks = Array.from({ length: ticks }, (_, i) => START + (i / Math.max(1, ticks - 1)) * SWEEP);
+  const [px, py] = polar(angle, 25);
+  const [cx, cy] = polar(angle, 11);
 
   return (
     <div className={cn("flex min-w-0 flex-col items-center gap-1 select-none", disabled && "opacity-45")}>
@@ -143,25 +140,19 @@ export function Knob({
           size === "sm" ? "size-9" : size === "lg" ? "size-16" : "size-12",
         )}
       >
+        {/* Flach wie in modernen Plugins: Bahn mit Wertbogen, darin eine Scheibe mit Zeiger. */}
         <svg viewBox="0 0 100 100" className="size-full overflow-visible">
-          <defs>
-            <radialGradient id={`${id}-cap`} cx="38%" cy="30%" r="75%">
-              <stop offset="0%" stopColor="var(--knob-hi)" />
-              <stop offset="100%" stopColor="var(--knob-lo)" />
-            </radialGradient>
-          </defs>
-          {marks.map((a) => {
-            const [x1, y1] = polar(a, 47);
-            const [x2, y2] = polar(a, 50);
-            return <line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--muted-foreground)" strokeOpacity=".5" strokeWidth="2" strokeLinecap="round" />;
-          })}
-          <path d={arc(START, START + SWEEP, 40)} fill="none" stroke="var(--meter-track)" strokeWidth="6" strokeLinecap="round" />
-          <path d={arc(Math.min(origin, angle), Math.max(origin, angle), 40)} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" />
-          {/* Kappe mit Griffrand, darauf der Zeiger. */}
-          <circle cx="50" cy="52" r="30" fill="oklch(0% 0 0 / 30%)" />
-          <circle cx="50" cy="50" r="30" fill={`url(#${id}-cap)`} stroke="var(--hairline)" strokeWidth="1.5" />
-          <circle cx="50" cy="50" r="24" fill="none" stroke="oklch(100% 0 0 / 6%)" strokeWidth="1" />
-          <line x1={cx} y1={cy} x2={px} y2={py} stroke="var(--foreground)" strokeWidth="4.5" strokeLinecap="round" />
+          <path d={arc(START, START + SWEEP, 44)} fill="none" stroke="var(--meter-track)" strokeWidth="8" strokeLinecap="round" />
+          <path
+            d={arc(Math.min(origin, angle), Math.max(origin, angle), 44)}
+            fill="none"
+            stroke={color}
+            strokeWidth="8"
+            strokeLinecap="round"
+            className={cn("transition-opacity", disabled && "opacity-50")}
+          />
+          <circle cx="50" cy="50" r="31" fill="var(--panel-raised)" stroke="var(--hairline)" strokeWidth="1.5" />
+          <line x1={cx} y1={cy} x2={px} y2={py} stroke="var(--foreground)" strokeWidth="5" strokeLinecap="round" />
         </svg>
       </div>
       <Caption label={label} value={format(value)} />

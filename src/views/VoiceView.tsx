@@ -1,8 +1,8 @@
 import { ArrowCounterClockwise, FloppyDisk, X } from "@phosphor-icons/react";
 import { useState } from "react";
 import { HelpIcon } from "~/components/effects/HelpDrawer";
-import { Console, Crossfade } from "~/components/effects/rack";
-import { ActionGroup, ActionPill, Pill, PillGroup } from "~/components/ui/pills";
+import { Bench } from "~/components/effects/rack";
+import { ActionGroup, ActionPill } from "~/components/ui/pills";
 import { AutotuneModule, HarmonizerModule, PitchModule, VocoderModule } from "~/components/voice/PitchModules";
 import { PresetBank, PresetEditor } from "~/components/voice/Presets";
 import { CharacterModule, EchoModule, ModulationModule, ReverbModule } from "~/components/voice/SoundModules";
@@ -30,27 +30,41 @@ function newPreset(): Preset {
   };
 }
 
-type Page = "pitch" | "sound";
-const PAGE_KEY = "ode.voice-page";
+const OPEN_KEY = "ode.voice-open";
+const DEVICES = ["pitch", "autotune", "harmonizer", "vocoder", "character", "modulation", "echo", "reverb"] as const;
+type DeviceId = (typeof DEVICES)[number];
 
-function readPage(): Page {
+function readOpen(): DeviceId {
   try {
-    return localStorage.getItem(PAGE_KEY) === "sound" ? "sound" : "pitch";
+    const stored = localStorage.getItem(OPEN_KEY);
+    return DEVICES.find((d) => d === stored) ?? "pitch";
   } catch {
     return "pitch";
   }
 }
 
+const MODULES: Record<DeviceId, () => React.ReactNode> = {
+  pitch: PitchModule,
+  autotune: AutotuneModule,
+  harmonizer: HarmonizerModule,
+  vocoder: VocoderModule,
+  character: CharacterModule,
+  modulation: ModulationModule,
+  echo: EchoModule,
+  reverb: ReverbModule,
+};
+
 export function VoiceView() {
-  const [page, setPageState] = useState<Page>(readPage);
+  const [open, setOpen] = useState<DeviceId>(readOpen);
   const [editing, setEditing] = useState<Preset | null>(null);
-  const enabled = useStore((s) => s.effects.voice.enabled);
+  const voice = useStore((s) => s.effects.voice);
   const errors = useStore((s) => s.presetErrors);
 
-  const setPage = (next: Page) => {
-    setPageState(next);
+  const select = (id: string) => {
+    const next = DEVICES.find((d) => d === id) ?? "pitch";
+    setOpen(next);
     try {
-      localStorage.setItem(PAGE_KEY, next);
+      localStorage.setItem(OPEN_KEY, next);
     } catch {
       // Nur Komfort.
     }
@@ -60,30 +74,16 @@ export function VoiceView() {
     await actions.savePreset(preset);
     setEditing(preset);
   };
+  const item = (id: DeviceId) => ({
+    id,
+    title: t(`voice.${id}`),
+    enabled: voice[id].enabled,
+    onToggle: (enabled: boolean) => actions.setVoice(id, { enabled }),
+  });
+  const Device = MODULES[open];
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-hidden pt-3 pr-3 pb-3 pl-6">
-      <div className="flex shrink-0 items-center gap-2">
-        <PillGroup>
-          <Pill active={page === "pitch"} onClick={() => setPage("pitch")}>
-            {t("voice.pitchPage")}
-          </Pill>
-          <Pill active={page === "sound"} onClick={() => setPage("sound")}>
-            {t("voice.soundPage")}
-          </Pill>
-        </PillGroup>
-        <HelpIcon topic="presets" />
-        <div className="flex-1" />
-        <ActionGroup>
-          <ActionPill title={t("voice.restore")} onClick={() => void actions.restorePresets()}>
-            <ArrowCounterClockwise />
-          </ActionPill>
-          <ActionPill primary onClick={() => void save()}>
-            <FloppyDisk /> {t("voice.savePreset")}
-          </ActionPill>
-        </ActionGroup>
-      </div>
-
       {errors.map((e, i) => (
         <div key={`${i}-${e}`} className="flex shrink-0 items-center gap-3 rounded-2xl bg-error/10 px-4 py-2 text-sm text-error-foreground">
           <span className="flex-1">{e}</span>
@@ -93,28 +93,43 @@ export function VoiceView() {
         </div>
       ))}
 
-      <PresetBank onEdit={setEditing} />
+      <PresetBank
+        onEdit={setEditing}
+        aside={
+          <div className="flex shrink-0 flex-col items-end justify-between gap-2 self-stretch py-1 pr-1 pl-2">
+            <HelpIcon topic="presets" />
+            <ActionGroup>
+              <ActionPill title={t("voice.restore")} onClick={() => void actions.restorePresets()}>
+                <ArrowCounterClockwise />
+              </ActionPill>
+              <ActionPill primary onClick={() => void save()}>
+                <FloppyDisk /> {t("voice.savePreset")}
+              </ActionPill>
+            </ActionGroup>
+          </div>
+        }
+      />
 
-      {/* Bei ausgeschalteter Stimme bleibt das Pult bedienbar, wirkt aber erst mit „Eigene“ oder einem Preset. */}
-      <Crossfade id={page} order={["pitch", "sound"]} className={cn("transition-opacity duration-300", !enabled && "opacity-55")}>
-        <Console>
-          {page === "pitch" ? (
-            <>
-              <PitchModule />
-              <AutotuneModule />
-              <HarmonizerModule />
-              <VocoderModule />
-            </>
-          ) : (
-            <>
-              <CharacterModule />
-              <ModulationModule />
-              <EchoModule />
-              <ReverbModule />
-            </>
-          )}
-        </Console>
-      </Crossfade>
+      {/* Bei ausgeschalteter Stimme bleibt alles bedienbar, wirkt aber erst mit „Eigene“ oder einem Preset. */}
+      <Bench
+        className={cn("transition-opacity duration-300", !voice.enabled && "opacity-60")}
+        open={open}
+        onOpen={select}
+        items={[
+          { group: t("voice.pitchPage") },
+          item("pitch"),
+          item("autotune"),
+          item("harmonizer"),
+          item("vocoder"),
+          { group: t("voice.soundPage") },
+          item("character"),
+          item("modulation"),
+          item("echo"),
+          item("reverb"),
+        ]}
+      >
+        <Device />
+      </Bench>
 
       {editing && <PresetEditor key={editing.id} preset={editing} onClose={() => setEditing(null)} />}
     </div>

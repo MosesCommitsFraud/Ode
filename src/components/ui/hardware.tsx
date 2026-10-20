@@ -207,7 +207,28 @@ export function HardwareKey({
   );
 }
 
-/** Tastenreihe, von der genau eine eingerastet ist (wie Wahltasten am Gerät). */
+/** Taste in einer Mulde: gewählt hebt sie sich hell heraus und trägt die Gerätefarbe. */
+function WellKey({ on, onClick, disabled, title, children }: { on: boolean; onClick: () => void; disabled?: boolean; title?: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex h-7 min-w-0 flex-1 cursor-default items-center justify-center gap-1 truncate rounded-[6px] px-2 text-xs font-medium transition-[background-color,color,box-shadow] duration-200 [&_svg]:size-4 [&_svg]:shrink-0",
+        on
+          ? "bg-panel-raised text-[var(--ch-mic)] shadow-[0_1px_0_var(--hairline),0_3px_8px_-4px_oklch(0%_0_0/40%)]"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Wahltasten, von denen genau eine gilt; in einer Reihe oder als Block mit `columns` Spalten. */
 export function PushButtons<T extends string | number>({
   label,
   value,
@@ -223,16 +244,15 @@ export function PushButtons<T extends string | number>({
   onChange: (v: T) => void;
   disabled?: boolean;
   className?: string;
-  /** Tasten als Block mit so vielen Spalten statt in einer Reihe. */
   columns?: number;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col gap-1", disabled && "opacity-45", className)}>
-      <div className="grid auto-rows-[34px] gap-1.5" style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}>
+    <div className={cn("flex min-w-0 flex-col items-center gap-1.5", disabled && "opacity-45", className)}>
+      <div className="well grid w-full gap-1 rounded-[10px] p-1" style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}>
         {options.map((o) => (
-          <HardwareKey key={String(o.value)} on={o.value === value} disabled={disabled} title={o.title} onClick={() => onChange(o.value)}>
+          <WellKey key={String(o.value)} on={o.value === value} disabled={disabled} title={o.title} onClick={() => onChange(o.value)}>
             {o.label}
-          </HardwareKey>
+          </WellKey>
         ))}
       </div>
       {label && <Caption label={label} />}
@@ -240,7 +260,7 @@ export function PushButtons<T extends string | number>({
   );
 }
 
-/** Einzelner Rasttaster für An/Aus einer Option. */
+/** Einzelne Taste für An/Aus einer Option. */
 export function PushButton({
   label,
   caption,
@@ -260,11 +280,11 @@ export function PushButton({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col items-center gap-1", disabled && "opacity-45", className)}>
-      <div className="flex h-[34px] w-full min-w-11">
-        <HardwareKey on={on} disabled={disabled} title={title} onClick={() => onChange(!on)}>
+    <div className={cn("flex min-w-0 flex-col items-center gap-1.5", disabled && "opacity-45", className)}>
+      <div className="well flex w-full rounded-[10px] p-1">
+        <WellKey on={on} disabled={disabled} title={title} onClick={() => onChange(!on)}>
           {label}
-        </HardwareKey>
+        </WellKey>
       </div>
       {caption && <Caption label={caption} />}
     </div>
@@ -272,11 +292,12 @@ export function PushButton({
 }
 
 /**
- * Aktivierungsknopf eines Geräts wie in einer DAW: ein kleiner Kreis vor dem
- * Namen. An füllt er sich von der Mitte her in der Gerätefarbe und federt
- * kurz nach, aus bleibt nur der Ring. Die Trefferfläche ist größer als der Kreis.
+ * Kleiner Schalter für An/Aus eines Geräts: die Bahn färbt sich in der
+ * Gerätefarbe, der Knopf springt mit etwas Schwung hinüber und streckt sich
+ * beim Drücken.
  */
-export function Activator({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
+export function Toggle({ on, onChange, label, size = "md" }: { on: boolean; onChange: (on: boolean) => void; label: string; size?: "sm" | "md" }) {
+  const sm = size === "sm";
   return (
     <button
       type="button"
@@ -284,45 +305,23 @@ export function Activator({ on, onChange, label }: { on: boolean; onChange: (on:
       aria-checked={on}
       aria-label={label}
       title={label}
-      onClick={() => onChange(!on)}
-      className="group -ml-1 flex size-7 shrink-0 cursor-default items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange(!on);
+      }}
+      className={cn(
+        "group relative flex shrink-0 cursor-default items-center rounded-full p-0.5 outline-none transition-[background-color,box-shadow] duration-300 focus-visible:ring-2 focus-visible:ring-ring",
+        sm ? "h-[18px] w-[30px]" : "h-[22px] w-[38px]",
+        on ? "bg-[var(--ch-mic)]" : "bg-[oklch(0%_0_0/12%)] shadow-[inset_0_1px_2px_oklch(0%_0_0/18%)] dark:bg-[oklch(100%_0_0/12%)]",
+      )}
     >
       <span
         className={cn(
-          "relative flex size-[15px] items-center justify-center rounded-full transition-[box-shadow,transform] duration-300 group-active:scale-90",
-          on ? "shadow-[inset_0_0_0_1.5px_var(--ch-mic)]" : "shadow-[inset_0_0_0_1.5px_var(--muted-foreground)] group-hover:shadow-[inset_0_0_0_1.5px_var(--foreground)]",
+          "h-full rounded-full bg-white shadow-[0_1px_3px_oklch(0%_0_0/35%)] transition-[transform,width] duration-[420ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]",
+          sm ? "w-[14px] group-active:w-[18px]" : "w-[18px] group-active:w-[22px]",
+          on && (sm ? "translate-x-[12px] group-active:translate-x-[8px]" : "translate-x-[16px] group-active:translate-x-[12px]"),
         )}
-      >
-        <span
-          className={cn(
-            "size-full rounded-full bg-[var(--ch-mic)] transition-[transform,opacity]",
-            on ? "scale-100 opacity-100 duration-[380ms] ease-[cubic-bezier(0.34,1.56,0.64,1)]" : "scale-0 opacity-0 duration-200 ease-out",
-          )}
-        />
-      </span>
+      />
     </button>
-  );
-}
-
-/**
- * Große Signallampe mit Fassung, wie die Anzeige „Signal“ an einem Gerät:
- * leuchtet grün, solange zutrifft, was darunter steht.
- */
-export function Lamp({ on, label }: { on: boolean; label: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1.5">
-      <span className="flex size-14 items-center justify-center rounded-full bg-[conic-gradient(from_210deg,oklch(94%_0.004_75),oklch(72%_0.006_75),oklch(96%_0.004_75),oklch(70%_0.006_75),oklch(94%_0.004_75))] shadow-[0_3px_6px_-2px_oklch(0%_0_0/45%),0_0_0_1px_oklch(0%_0_0/18%)] dark:bg-[conic-gradient(from_210deg,oklch(54%_0.006_60),oklch(32%_0.006_60),oklch(58%_0.006_60),oklch(30%_0.006_60),oklch(54%_0.006_60))]">
-        {/* Dunkles Glas, darüber das leuchtende, das weich ein- und ausblendet. */}
-        <span className="relative size-10 rounded-full bg-[radial-gradient(circle_at_40%_32%,oklch(55%_0.02_150),oklch(30%_0.02_150)_75%)] shadow-[inset_0_1px_3px_oklch(0%_0_0/50%)]">
-          <span
-            className={cn(
-              "absolute inset-0 rounded-full bg-[radial-gradient(circle_at_40%_32%,oklch(92%_0.12_150),var(--success)_70%)] transition-opacity",
-              on ? "opacity-100 duration-75" : "opacity-0 duration-300",
-            )}
-          />
-        </span>
-      </span>
-      <Caption label={label} />
-    </div>
   );
 }

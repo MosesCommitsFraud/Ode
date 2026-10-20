@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Activator } from "~/components/ui/hardware";
+import { Toggle } from "~/components/ui/hardware";
+import { SectionLabel } from "~/components/ui/misc";
 import { HelpIcon } from "./HelpDrawer";
 import { t } from "~/lib/i18n";
 import { cn } from "~/lib/utils";
@@ -7,9 +8,9 @@ import { cn } from "~/lib/utils";
 /* Bausteine der Effekt-Seiten: Module als Karten mit Anzeige und Reglern. */
 
 /**
- * Ein Effekt als Gerät im Pult: Aktivierungsknopf vor dem Namen, ein Fenster,
- * das zeigt, was das Gerät tut, darunter Tasten, Drehregler und Fader. Aus ist
- * das Gerät blass und grau, an trägt es seine Farbe.
+ * Ein Effekt als Gerät: Name mit Schalter rechts, eine große Anzeige, in der
+ * sich oft direkt ziehen lässt, darunter wenige Regler. Aus ist das Gerät
+ * blass und grau, an trägt es seine Farbe.
  */
 export function Module({
   title,
@@ -21,55 +22,51 @@ export function Module({
   accent,
   help,
   keys,
-  grow = 1,
-  framed,
 }: {
   title: string;
   enabled: boolean;
   onToggle: (on: boolean) => void;
   display: ReactNode;
   className?: string;
-  /** Bedienelemente in einer Reihe; Fader nehmen die volle Höhe, `Stack` stapelt Drehregler. */
+  /** Regler in einer Reihe unter der Anzeige. */
   children?: ReactNode;
   /** Farbe für Anzeige und Regler, z. B. die Kanalfarbe. */
   accent?: string;
   /** Werkzeug für die Erklärung hinter dem „?“ am Titel (siehe i18n/help.ts). */
   help?: string;
-  /** Tasten über den Reglern, z. B. Modus oder Tonart; volle Breite. */
+  /** Wahltasten über den Reglern, z. B. Modus oder Tonart. */
   keys?: ReactNode;
-  /** Anteil an der Breite im Pult, nach Menge der Bedienelemente. */
-  grow?: number;
-  /** Als eigene Karte statt als Zug in einem `Console`. */
-  framed?: boolean;
 }) {
   // Ohne eigene Farbe bleibt --ch-mic geerbt; sich selbst zuweisen wäre ungültig.
-  const style: Record<string, string | number> = accent ? { "--ch-mic": accent, "--ch": accent, flexGrow: grow } : { "--ch": "var(--ch-mic)", flexGrow: grow };
+  const style: Record<string, string> = accent ? { "--ch-mic": accent, "--ch": accent } : { "--ch": "var(--ch-mic)" };
   return (
-    <section style={style} className={cn("flex min-h-0 min-w-0 basis-0 flex-col gap-3 px-3 pt-3.5 pb-3", framed && "panel rounded-2xl", className)}>
-      <div className="flex h-7 shrink-0 items-center gap-1">
-        <Activator label={title} on={enabled} onChange={onToggle} />
-        <h3 className={cn("min-w-0 truncate font-display text-[17px] font-semibold tracking-tight transition-colors duration-300", !enabled && "text-muted-foreground")}>
+    <section style={style} className={cn("panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 rounded-2xl p-4", className)}>
+      <div className="flex h-7 shrink-0 items-center gap-1.5">
+        <h3 className={cn("min-w-0 truncate font-display text-xl font-semibold tracking-tight transition-colors duration-300", !enabled && "text-muted-foreground")}>
           {title}
         </h3>
         {help && <HelpIcon topic={help} />}
+        <div className="flex-1" />
+        <Toggle label={title} on={enabled} onChange={onToggle} />
       </div>
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-3 transition-[opacity,filter] duration-300", !enabled && "opacity-50 grayscale")}>
-        <div className={cn("well relative overflow-hidden rounded-lg", children ? "h-[clamp(72px,16vh,150px)] shrink-0" : "min-h-0 flex-1")}>{display}</div>
-        {keys && <div className="flex shrink-0 flex-col gap-2">{keys}</div>}
-        {children && <div className="flex min-h-0 flex-1 items-stretch justify-evenly gap-2 [&>*]:min-w-0">{children}</div>}
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-4 transition-[opacity,filter] duration-300", !enabled && "opacity-50 grayscale")}>
+        {/* Mulde: Rundung der Karte (16) minus Innenabstand, damit beide konzentrisch wirken. */}
+        <div className="well relative min-h-[110px] flex-1 overflow-hidden rounded-[10px]">{display}</div>
+        {keys && <div className="flex shrink-0 justify-center gap-3 [&>*]:max-w-md [&>*]:flex-1">{keys}</div>}
+        {children && <div className="flex shrink-0 flex-wrap items-start justify-center gap-x-7 gap-y-3 px-2">{children}</div>}
       </div>
     </section>
   );
 }
 
-/** Drehregler übereinander, gleichmäßig über die Höhe verteilt. */
+/** Früher gestapelte Regler; jetzt stehen alle in einer Reihe. */
 export function Stack({ children }: { children: ReactNode }) {
-  // Reicht die Höhe nicht, laufen die übrigen in eine zweite Spalte.
-  return (
-    <div className="grid min-h-0 grid-flow-col content-evenly items-center justify-items-center gap-x-3" style={{ gridTemplateRows: "repeat(auto-fit, minmax(84px, max-content))" }}>
-      {children}
-    </div>
-  );
+  return <>{children}</>;
+}
+
+/** Senkrechter Strich zwischen Reglergruppen. */
+export function Divider() {
+  return <div aria-hidden className="w-px self-stretch bg-hairline" />;
 }
 
 /** Mehrere Geräte nebeneinander auf einem Pult, getrennt durch feine Linien. */
@@ -77,12 +74,74 @@ export function Console({ children, className }: { children: ReactNode; classNam
   return <div className={cn("panel flex min-h-0 flex-1 divide-x divide-hairline rounded-2xl p-1.5", className)}>{children}</div>;
 }
 
+export type BenchItem = { id: string; title: string; enabled: boolean; onToggle?: (on: boolean) => void; accent?: string } | { group: string };
+
+/**
+ * Links eine schmale Liste aller Geräte mit Schalter, rechts das gewählte
+ * groß. Pfeiltasten wandern durch die Liste; der Wechsel blendet weich über.
+ */
+export function Bench({ items, open, onOpen, children, className }: { items: BenchItem[]; open: string; onOpen: (id: string) => void; children: ReactNode; className?: string }) {
+  const ids = items.flatMap((i) => ("id" in i ? [i.id] : []));
+  const rows = useRef(new Map<string, HTMLElement>());
+  const step = (delta: number) => {
+    const next = ids[(ids.indexOf(open) + delta + ids.length) % ids.length];
+    onOpen(next);
+    rows.current.get(next)?.focus();
+  };
+  return (
+    <div className={cn("flex min-h-0 flex-1 gap-3", className)}>
+      <nav
+        role="listbox"
+        aria-orientation="vertical"
+        className="panel flex w-52 shrink-0 flex-col gap-px self-start overflow-hidden rounded-2xl p-1.5"
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+          e.preventDefault();
+          step(e.key === "ArrowDown" ? 1 : -1);
+        }}
+      >
+        {items.map((item) =>
+          "group" in item ? (
+            <SectionLabel key={`g-${item.group}`} className="px-2.5 pt-2.5 pb-1 first:pt-1.5">
+              {item.group}
+            </SectionLabel>
+          ) : (
+            <div
+              key={item.id}
+              ref={(el) => {
+                if (el) rows.current.set(item.id, el);
+                else rows.current.delete(item.id);
+              }}
+              role="option"
+              aria-selected={open === item.id}
+              tabIndex={open === item.id ? 0 : -1}
+              onClick={() => onOpen(item.id)}
+              style={item.accent ? ({ "--ch-mic": item.accent } as React.CSSProperties) : undefined}
+              className={cn(
+                // Rundung der Liste (16) minus Innenabstand (6).
+                "flex h-9 shrink-0 cursor-default items-center gap-2 rounded-[10px] pr-2 pl-2.5 text-[13px] outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+                open === item.id ? "bg-accent font-semibold text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
+            >
+              <span className={cn("min-w-0 flex-1 truncate transition-opacity", !item.enabled && open !== item.id && "opacity-70")}>{item.title}</span>
+              {item.onToggle && <Toggle size="sm" label={item.title} on={item.enabled} onChange={item.onToggle} />}
+            </div>
+          ),
+        )}
+      </nav>
+      <Crossfade id={open} order={ids} axis="y">
+        {children}
+      </Crossfade>
+    </div>
+  );
+}
+
 /**
  * Weicher Wechsel zwischen Seiten: die alte blendet aus, während die neue
  * schon darüber einblendet; nie ein leerer Moment. Die Richtung folgt der
  * Reihenfolge in `order`.
  */
-export function Crossfade({ id, order, children, className }: { id: string; order: string[]; children: ReactNode; className?: string }) {
+export function Crossfade({ id, order, children, className, axis = "x" }: { id: string; order: string[]; children: ReactNode; className?: string; axis?: "x" | "y" }) {
   const [shown, setShown] = useState(id);
   const last = useRef<ReactNode>(children);
   const [leaving, setLeaving] = useState<{ id: string; node: ReactNode; dir: number } | null>(null);
@@ -99,17 +158,61 @@ export function Crossfade({ id, order, children, className }: { id: string; orde
     return () => window.clearTimeout(timer);
   }, [leaving]);
 
-  const dir = leaving?.dir ?? 1;
+  const shift = { "--dir": leaving?.dir ?? 1, "--sx": axis === "x" ? "18px" : "0px", "--sy": axis === "y" ? "14px" : "0px" } as React.CSSProperties;
   return (
-    <div className={cn("relative grid min-h-0 flex-1", className)} style={{ "--dir": dir } as React.CSSProperties}>
+    <div className={cn("relative grid min-h-0 min-w-0 flex-1", className)} style={shift}>
       {leaving && (
-        <div key={leaving.id} aria-hidden className="pointer-events-none col-start-1 row-start-1 flex min-h-0 animate-[page-out_280ms_ease-in_forwards]">
+        <div key={leaving.id} aria-hidden className="pointer-events-none col-start-1 row-start-1 flex min-h-0 min-w-0 animate-[page-out_260ms_ease-in_forwards]">
           {leaving.node}
         </div>
       )}
-      <div key={id} className={cn("col-start-1 row-start-1 flex min-h-0", leaving && "animate-[page-in_320ms_var(--ease-drawer)]")}>
+      <div key={id} className={cn("col-start-1 row-start-1 flex min-h-0 min-w-0", leaving && "animate-[page-in_340ms_var(--ease-drawer)]")}>
         {children}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Fläche in einer Anzeige, in der man zieht: meldet die Zeigerposition als
+ * 0–1 (x nach rechts, y nach oben), beim Drücken und beim Ziehen.
+ */
+export function DragArea({ onDrag, className, title }: { onDrag: (x: number, y: number) => void; className?: string; title?: string }) {
+  const at = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    onDrag(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, 1 - (e.clientY - r.top) / r.height)));
+  };
+  return (
+    <div
+      title={title}
+      className={cn("absolute touch-none", className)}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        at(e);
+      }}
+      onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && at(e)}
+    />
+  );
+}
+
+/** Griff in einer Anzeige an Position x/y in Prozent (y von oben). */
+export function Handle({ x, y }: { x: number; y: number }) {
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--ch-mic)] shadow-[0_1px_4px_oklch(0%_0_0/45%)] transition-[left,top] duration-75"
+      style={{ left: `${x}%`, top: `${y}%` }}
+    />
+  );
+}
+
+/** Waagrechte Linie zum Ziehen, z. B. eine Schwelle; `y` in Prozent von oben. */
+export function HandleLine({ y }: { y: number }) {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 transition-[top] duration-75" style={{ top: `${y}%` }}>
+      <div className="border-t-2 border-dashed border-[var(--ch-mic)]" />
+      <span className="absolute right-2 h-4 w-8 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--ch-mic)] shadow-[0_1px_4px_oklch(0%_0_0/45%)]" />
     </div>
   );
 }
@@ -173,9 +276,9 @@ const EQ_FREQ_TICKS: [number, string][] = [
 
 /** Wo die drei Regler des EQ greifen, mit ihren Namen statt Frequenzen. */
 const EQ_BANDS: [number, string][] = [
-  [90, "effects.bass"],
-  [1200, "effects.presence"],
-  [11000, "effects.treble"],
+  [120, "effects.bass"],
+  [2500, "effects.presence"],
+  [8000, "effects.treble"],
 ];
 
 /** 20 Hz … 20 kHz logarithmisch auf 0–100. */
