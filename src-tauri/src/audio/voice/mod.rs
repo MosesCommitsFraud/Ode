@@ -736,11 +736,12 @@ mod measure {
         let mut cents = Vec::new();
         for (i, &x) in signal.iter().enumerate() {
             d.push(x);
-            if i > 48_000 && i % 240 == 0 {
-                if let Some(hz) = d.frequency() {
-                    let n = note_of(hz);
-                    cents.push((n - n.round()).abs() * 100.0);
-                }
+            if i > 48_000
+                && i % 240 == 0
+                && let Some(hz) = d.frequency()
+            {
+                let n = note_of(hz);
+                cents.push((n - n.round()).abs() * 100.0);
             }
         }
         cents.iter().sum::<f32>() / cents.len() as f32

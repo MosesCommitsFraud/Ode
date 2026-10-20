@@ -202,7 +202,13 @@ mod tests {
             producer.push_slice(block);
             let start = i * BLOCK_FRAMES;
             let mut mic: Vec<f32> = (start..start + block.len())
-                .map(|n| if n >= delay { far[n - delay] * 0.5 } else { 0.0 })
+                .map(|n| {
+                    if n >= delay {
+                        far[n - delay] * 0.5
+                    } else {
+                        0.0
+                    }
+                })
                 .collect();
             input.extend_from_slice(&mic);
             aec.process(&mut mic);

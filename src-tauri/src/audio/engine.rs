@@ -615,13 +615,10 @@ fn build_echo_reference(
             && id.as_deref() != config.cable_id.as_deref()
             && !devices::is_virtual_cable(&devices::name_of(device))
     };
-    let device = host
-        .default_output_device()
-        .filter(&usable)
-        .or_else(|| {
-            let id = config.monitor_id.as_deref()?;
-            devices::find(host, id).ok().filter(&usable)
-        })?;
+    let device = host.default_output_device().filter(usable).or_else(|| {
+        let id = config.monitor_id.as_deref()?;
+        devices::find(host, id).ok().filter(usable)
+    })?;
     let supported = pick_config(
         device.default_input_config().ok()?,
         device.supported_input_configs().ok()?,

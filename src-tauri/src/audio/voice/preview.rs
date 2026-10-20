@@ -43,7 +43,10 @@ pub fn render(preview: Preview) -> Vec<Vec<f32>> {
             reverb.configure(&params);
             // Wie `Reverb::process`: auch bei vollem Hall bleibt die halbe Stimme.
             let word = word(RATE * 4);
-            let wet: Vec<f32> = word.iter().map(|&x| reverb.wet(x) * params.mix * 3.0).collect();
+            let wet: Vec<f32> = word
+                .iter()
+                .map(|&x| reverb.wet(x) * params.mix * 3.0)
+                .collect();
             let dry: Vec<f32> = word.iter().map(|&x| x * (1.0 - params.mix * 0.5)).collect();
             curves(&dry, &wet)
         }
@@ -72,7 +75,9 @@ fn word(len: usize) -> Vec<f32> {
         if t <= from || t >= to {
             0.0
         } else {
-            (std::f32::consts::PI * (t - from) / (to - from)).sin().powi(2)
+            (std::f32::consts::PI * (t - from) / (to - from))
+                .sin()
+                .powi(2)
         }
     };
     let mut seed = 0x1234_5678u32;
@@ -157,7 +162,12 @@ mod tests {
         let bright = echo(500.0, 16_000.0);
         let dark = echo(500.0, 1_000.0);
         let mean = |c: &[Vec<f32>]| c[2][80..160].iter().sum::<f32>();
-        assert!(mean(&dark) < mean(&bright) * 0.7, "{} {}", mean(&dark), mean(&bright));
+        assert!(
+            mean(&dark) < mean(&bright) * 0.7,
+            "{} {}",
+            mean(&dark),
+            mean(&bright)
+        );
     }
 
     #[test]
