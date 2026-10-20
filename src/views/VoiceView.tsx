@@ -1,21 +1,19 @@
-import { ArrowCounterClockwise, ArrowsDownUp, Church, FloppyDisk, MaskHappy, Microphone, MusicNotes, Repeat, Robot, SpeakerHigh, UsersThree, WaveSine, X } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { ArrowCounterClockwise, FloppyDisk, X } from "@phosphor-icons/react";
+import { useState } from "react";
+import { Crossfade, DeviceBar, useSelected } from "~/components/effects/device";
 import { HelpIcon } from "~/components/effects/HelpDrawer";
-import { ActiveGrid, ChainList, smooth } from "~/components/effects/rack";
-import { EmptyState } from "~/components/ui/misc";
 import { ActionGroup, ActionPill } from "~/components/ui/pills";
-import { AutotuneModule, HarmonizerModule, PitchModule, VocoderModule } from "~/components/voice/PitchModules";
 import { PresetBank, PresetEditor } from "~/components/voice/Presets";
-import { CharacterModule, EchoModule, ModulationModule, ReverbModule } from "~/components/voice/SoundModules";
+import { VOICE_DEVICES, VOICE_ICONS, VoiceDevice, type VoiceDeviceId } from "~/components/voice/VoiceDevices";
 import type { Preset } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, getState, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 
 /* Stimme: Voice-Changer mit einer Reihe Wahltasten (Aus, Eigene, Presets,
-   per Hotkey umschaltbar) und darunter den Effekten als Pult auf zwei Seiten,
-   Tonhöhe und Klang. Läuft im Mikrofon-Pfad nach der Aufbereitung auf der
-   Effekte-Seite. */
+   per Hotkey umschaltbar), darunter die Stimm-Effekte zum Durchschalten und
+   der gewählte Effekt mit allen Einstellungen. Läuft im Mikrofon-Pfad nach
+   der Aufbereitung auf der Effekte-Seite. */
 
 function newPreset(): Preset {
   const { effects } = getState();
@@ -31,56 +29,18 @@ function newPreset(): Preset {
   };
 }
 
-const GROUPS = {
-  pitch: ["pitch", "autotune", "harmonizer", "vocoder"],
-  sound: ["character", "modulation", "echo", "reverb"],
-} as const;
-type DeviceId = (typeof GROUPS)[keyof typeof GROUPS][number];
-
-const ICONS: Record<DeviceId, React.ReactNode> = {
-  pitch: <ArrowsDownUp />,
-  autotune: <MusicNotes />,
-  harmonizer: <UsersThree />,
-  vocoder: <Robot />,
-  character: <MaskHappy />,
-  modulation: <WaveSine />,
-  echo: <Repeat />,
-  reverb: <Church />,
-};
-
-/** Welche Anzeige am meisten Platz verdient, wenn welcher übrig ist. */
-const WEIGHT: Record<DeviceId, number> = { autotune: 8, reverb: 7, pitch: 6, vocoder: 5, harmonizer: 4, echo: 3, character: 2, modulation: 1 };
-
-const MODULES: Record<DeviceId, (props: { highlight?: boolean; className?: string }) => React.ReactNode> = {
-  pitch: PitchModule,
-  autotune: AutotuneModule,
-  harmonizer: HarmonizerModule,
-  vocoder: VocoderModule,
-  character: CharacterModule,
-  modulation: ModulationModule,
-  echo: EchoModule,
-  reverb: ReverbModule,
-};
-
 export function VoiceView() {
-  const [flash, setFlash] = useState<string | null>(null);
+  const [open, select] = useSelected<VoiceDeviceId>("ode.voice-device", VOICE_DEVICES, "pitch");
   const [editing, setEditing] = useState<Preset | null>(null);
   const voice = useStore((s) => s.effects.voice);
   const errors = useStore((s) => s.presetErrors);
-  useEffect(() => {
-    if (!flash) return;
-    const timer = window.setTimeout(() => setFlash(null), 900);
-    return () => window.clearTimeout(timer);
-  }, [flash]);
 
   const save = async () => {
     const preset = newPreset();
     await actions.savePreset(preset);
     setEditing(preset);
   };
-  const toggle = (id: DeviceId, enabled: boolean) => smooth(() => actions.setVoice(id, { enabled }));
-  const chain = (id: DeviceId) => ({ id, title: t(`voice.${id}`), icon: ICONS[id], enabled: voice[id].enabled, onToggle: (on: boolean) => toggle(id, on) });
-  const active = [...GROUPS.pitch, ...GROUPS.sound].filter((id) => voice[id].enabled);
+  const key = (id: VoiceDeviceId) => ({ id, title: t(`voice.${id}`), icon: VOICE_ICONS[id], enabled: voice[id].enabled });
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-hidden pt-3 pr-3 pb-3 pl-6">
@@ -110,31 +70,16 @@ export function VoiceView() {
         }
       />
 
+      <DeviceBar
+        value={open}
+        onChange={select}
+        groups={[(["pitch", "autotune", "harmonizer", "vocoder"] as const).map(key), (["character", "modulation", "echo", "reverb"] as const).map(key)]}
+      />
+
       {/* Bei ausgeschalteter Stimme bleibt alles bedienbar, wirkt aber erst mit „Eigene“ oder einem Preset. */}
-      <div className={cn("flex min-h-0 flex-1 gap-3 transition-opacity duration-300", !voice.enabled && "opacity-60")}>
-        <ChainList
-          start={{ label: t("effects.input"), icon: <Microphone /> }}
-          end={{ label: t("effects.output"), icon: <SpeakerHigh /> }}
-          groups={[
-            { title: t("voice.pitchPage"), devices: GROUPS.pitch.map(chain) },
-            { title: t("voice.soundPage"), devices: GROUPS.sound.map(chain) },
-          ]}
-          onFocus={setFlash}
-        />
-        <ActiveGrid
-          // Stimm-Geräte haben viele Regler: lieber schmaler als zu flach.
-          min={{ width: 180, height: 220 }}
-          empty={
-            <EmptyState icon={<Microphone weight="duotone" />} title={t("voice.noneTitle")}>
-              {t("voice.noneHint")}
-            </EmptyState>
-          }
-          items={active.map((id) => {
-            const Device = MODULES[id];
-            return { id, weight: WEIGHT[id], render: (className: string) => <Device highlight={flash === id} className={className} /> };
-          })}
-        />
-      </div>
+      <Crossfade id={open} order={VOICE_DEVICES} className={cn("transition-opacity duration-300", !voice.enabled && "opacity-60")}>
+        <VoiceDevice id={open} />
+      </Crossfade>
 
       {editing && <PresetEditor key={editing.id} preset={editing} onClose={() => setEditing(null)} />}
     </div>

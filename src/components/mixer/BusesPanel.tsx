@@ -1,228 +1,188 @@
-import { Church, Equalizer, Microphone, Repeat, SpeakerHigh } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
-import { EmptyState } from "~/components/ui/misc";
-import { ActiveGrid, ChainList, smooth, EchoDisplay, EqDisplay, Module, ReverbDisplay, Stack } from "~/components/effects/rack";
-import { Knob, parseNumber } from "~/components/ui/knob";
-import { EchoControls, ReverbControls } from "~/components/voice/SoundModules";
+import { Church, Equalizer, Repeat } from "@phosphor-icons/react";
+import type { ReactNode } from "react";
+import { Crossfade, DeviceBar, DevicePage, ParamRow, Slider, useSelected } from "~/components/effects/device";
+import { parseNumber } from "~/components/ui/knob";
+import { EchoRows, ReverbRows } from "~/components/voice/VoiceDevices";
+import { BUS_DEFAULTS, CHANNEL_FX_DEFAULTS } from "~/lib/defaults";
 import type { ChannelId } from "~/lib/engine";
 import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
 import { formatDb } from "~/lib/utils";
 
-/* Effekt-Busse als Pult: ein gemeinsamer Hall und ein Echo, auf die jeder
-   Kanal mit eigenem Send schickt, dazu ein Klang-EQ für Soundboard, Musik und
-   Live. Gleiche Geräte wie auf den Effekt-Seiten. */
+/* Effekt-Busse wie die Effekt-Seiten: oben Hall, Echo und die Klang-EQs der
+   Kanäle zum Durchschalten, darunter das gewählte Gerät mit allen
+   Einstellungen. Jeder Kanal schickt mit eigenem Send auf Hall und Echo. */
 
-const CHANNELS: { id: ChannelId; name: () => string; short: () => string; color: string }[] = [
-  { id: "mic", name: () => t("mixer.microphone"), short: () => t("mixer.shortMic"), color: "var(--ch-mic)" },
-  { id: "soundboard", name: () => t("mixer.soundboard"), short: () => t("mixer.shortSoundboard"), color: "var(--ch-soundboard)" },
-  { id: "music", name: () => t("mixer.music"), short: () => t("mixer.shortMusic"), color: "var(--ch-music)" },
-  { id: "live", name: () => t("mixer.live"), short: () => t("mixer.shortLive"), color: "var(--ch-live)" },
+const CHANNELS: { id: ChannelId; name: () => string; color: string }[] = [
+  { id: "mic", name: () => t("mixer.microphone"), color: "var(--ch-mic)" },
+  { id: "soundboard", name: () => t("mixer.soundboard"), color: "var(--ch-soundboard)" },
+  { id: "music", name: () => t("mixer.music"), color: "var(--ch-music)" },
+  { id: "live", name: () => t("mixer.live"), color: "var(--ch-live)" },
 ];
 
 const percent = (v: number) => `${Math.round(v * 100)} %`;
+const parseLogHz = (text: string) => {
+  const value = parseNumber(text, /k/i.test(text) ? "kHz" : "Hz");
+  return value && value > 0 ? Math.log2(value) : null;
+};
 
-/** Wie viel jeder Kanal auf den Bus schickt: kleine Drehregler in Kanalfarbe. */
+type BusId = "reverb" | "echo" | "soundboard" | "music" | "live";
+const BUSES: BusId[] = ["reverb", "echo", "soundboard", "music", "live"];
+
+/** Wie viel jeder Kanal auf den Bus schickt, je eine Zeile in Kanalfarbe. */
 function Sends({ bus }: { bus: "reverbSend" | "echoSend" }) {
   const channels = useStore((s) => s.buses.channels);
   return (
     <>
       {CHANNELS.map((c) => (
-        <Knob
-          key={c.id}
-          size="sm"
-          label={c.short()}
-          value={channels[c.id][bus]}
-          min={0}
-          max={1}
-          step={0.01}
-          format={percent}
-          color={c.color}
-          onChange={(v) => actions.setChannelFx(c.id, { [bus]: v })}
-        />
+        <ParamRow key={c.id} label={`${t("mixer.sendTo")} · ${c.name()}`} hint={c.id === "mic" ? t("devices.bus.sends") : undefined}>
+          <div style={{ "--ch-mic": c.color } as React.CSSProperties}>
+            <Slider
+              label={c.name()}
+              value={channels[c.id][bus]}
+              min={0}
+              max={1}
+              step={0.01}
+              reset={0}
+              format={percent}
+              onChange={(v) => actions.setChannelFx(c.id, { [bus]: v })}
+            />
+          </div>
+        </ParamRow>
       ))}
     </>
   );
 }
 
-function ReverbBus({ highlight }: { highlight: boolean }) {
-  const p = useStore((s) => s.buses.reverb);
-  return (
-    <Module
-      highlight={highlight}
-      title={t("mixer.reverbBus")}
-      accent="var(--ch-out)"
-      enabled={p.enabled}
-      name="bus-reverb"
-      onToggle={(enabled) => smooth(() => actions.setBus("reverb", { enabled }))}
-      display={<ReverbDisplay size={p.size} damping={p.damping} predelayMs={p.predelayMs} mix={p.mix} color="var(--ch-out)" />}
-    >
-      <ReverbControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("reverb", patch)} />
-      <Sends bus="reverbSend" />
-    </Module>
-  );
-}
+function Bus({ id }: { id: BusId }) {
+  const buses = useStore((s) => s.buses);
+  if (id === "reverb" || id === "echo") {
+    const p = buses[id];
+    return (
+      <DevicePage
+        icon={id === "reverb" ? <Church /> : <Repeat />}
+        title={t(id === "reverb" ? "mixer.reverbBus" : "mixer.echoBus")}
+        about={t(`devices.${id}.about`)}
+        accent="var(--ch-out)"
+        columns={2}
+        enabled={p.enabled}
+        onToggle={(enabled) => actions.setBus(id, { enabled })}
+        onReset={() => actions.setBus(id, { ...BUS_DEFAULTS[id], enabled: p.enabled })}
+      >
+        <div className="flex min-w-0 flex-col">
+          {id === "reverb" ? (
+            <ReverbRows params={buses.reverb} mixLabel={t("mixer.returnLevel")} onChange={(patch) => actions.setBus("reverb", patch)} />
+          ) : (
+            <EchoRows params={buses.echo} mixLabel={t("mixer.returnLevel")} onChange={(patch) => actions.setBus("echo", patch)} />
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <Sends bus={id === "reverb" ? "reverbSend" : "echoSend"} />
+        </div>
+      </DevicePage>
+    );
+  }
 
-function EchoBus({ highlight }: { highlight: boolean }) {
-  const p = useStore((s) => s.buses.echo);
-  return (
-    <Module
-      highlight={highlight}
-      title={t("mixer.echoBus")}
-      accent="var(--ch-out)"
-      enabled={p.enabled}
-      name="bus-echo"
-      onToggle={(enabled) => smooth(() => actions.setBus("echo", { enabled }))}
-      display={<EchoDisplay timeMs={p.timeMs} feedback={p.feedback} toneHz={p.toneHz} mix={Math.max(0.3, p.mix)} color="var(--ch-out)" />}
-    >
-      <EchoControls params={p} mixLabel={t("mixer.returnLevel")} color="var(--ch-out)" onChange={(patch) => actions.setBus("echo", patch)} />
-      <Sends bus="echoSend" />
-    </Module>
-  );
-}
-
-function ChannelTone({ id, highlight }: { id: ChannelId; highlight: boolean }) {
-  const fx = useStore((s) => s.buses.channels[id]);
   const channel = CHANNELS.find((c) => c.id === id)!;
+  const fx = buses.channels[id];
+  const set = (patch: Partial<typeof fx>) => actions.setChannelFx(id, patch);
   return (
-    <Module
-      highlight={highlight}
+    <DevicePage
+      icon={<Equalizer />}
       title={`${channel.name()} · ${t("mixer.tone")}`}
+      about={t("devices.tone.about")}
       accent={channel.color}
+      columns={2}
       enabled={fx.eqEnabled}
-      name={`tone-${id}`}
-      onToggle={(eqEnabled) => smooth(() => actions.setChannelFx(id, { eqEnabled }))}
-      display={<EqDisplay low={fx.lowDb} mid={fx.midDb} high={fx.highDb} lowCut={fx.lowCutHz} highCut={fx.highCutHz} color={channel.color} />}
+      onToggle={(eqEnabled) => set({ eqEnabled })}
+      onReset={() => {
+        const { lowDb, midDb, highDb, lowCutHz, highCutHz } = CHANNEL_FX_DEFAULTS;
+        set({ lowDb, midDb, highDb, lowCutHz, highCutHz });
+      }}
     >
-      <Stack>
+      <div className="flex min-w-0 flex-col">
         {(
           [
-            ["lowDb", t("effects.bass")],
-            ["midDb", t("effects.presence")],
-            ["highDb", t("effects.treble")],
+            ["lowDb", "effects.bass", "devices.eq.low"],
+            ["midDb", "effects.presence", "devices.eq.mid"],
+            ["highDb", "effects.treble", "devices.eq.high"],
           ] as const
-        ).map(([key, label]) => (
-          <Knob
-            key={key}
-            label={label}
-            value={fx[key]}
-            min={-12}
-            max={12}
-            step={0.5}
-            reset={0}
-            bipolar
-            ticks={9}
-            format={(v) => `${formatDb(v)} dB`}
-            color={channel.color}
-            onChange={(v) => actions.setChannelFx(id, { [key]: v })}
-          />
+        ).map(([key, label, hint]) => (
+          <ParamRow key={key} label={t(label)} hint={t(hint)}>
+            <Slider
+              label={t(label)}
+              value={fx[key]}
+              min={-12}
+              max={12}
+              step={0.5}
+              reset={0}
+              bipolar
+              format={(v) => `${formatDb(v)} dB`}
+              marks={[
+                [-12, "−12"],
+                [0, "0"],
+                [12, "+12"],
+              ]}
+              onChange={(v) => set({ [key]: v })}
+            />
+          </ParamRow>
         ))}
-      </Stack>
-      <Stack>
-        <Knob
-          size="sm"
-          label={t("mixer.highCut")}
-          value={Math.log2(fx.highCutHz)}
-          parse={(text) => {
-            const hz = parseNumber(text, /k/i.test(text) ? "kHz" : "Hz");
-            return hz && hz > 0 ? Math.log2(hz) : null;
-          }}
-          min={Math.log2(1000)}
-          max={Math.log2(20000)}
-          step={0.01}
-          reset={Math.log2(20000)}
-          format={(v) => (Math.pow(2, v) >= 19900 ? t("mixer.cutOff") : `${(Math.pow(2, v) / 1000).toFixed(1)} kHz`)}
-          color={channel.color}
-          onChange={(v) => actions.setChannelFx(id, { highCutHz: Math.round(Math.pow(2, v)) })}
-        />
-        <Knob
-          size="sm"
-          label={t("mixer.lowCut")}
-          value={Math.log2(fx.lowCutHz)}
-          parse={(text) => {
-            const hz = parseNumber(text, /k/i.test(text) ? "kHz" : "Hz");
-            return hz && hz > 0 ? Math.log2(hz) : null;
-          }}
-          min={Math.log2(20)}
-          max={Math.log2(1000)}
-          step={0.01}
-          reset={Math.log2(20)}
-          format={(v) => (Math.pow(2, v) <= 20.5 ? t("mixer.cutOff") : `${Math.round(Math.pow(2, v))} Hz`)}
-          color={channel.color}
-          onChange={(v) => actions.setChannelFx(id, { lowCutHz: Math.round(Math.pow(2, v)) })}
-        />
-      </Stack>
-    </Module>
+      </div>
+      <div className="flex min-w-0 flex-col">
+        <ParamRow label={t("mixer.lowCut")} hint={t("devices.tone.lowCut")}>
+          <Slider
+            label={t("mixer.lowCut")}
+            value={Math.log2(fx.lowCutHz)}
+            min={Math.log2(20)}
+            max={Math.log2(1000)}
+            step={0.01}
+            reset={Math.log2(20)}
+            parse={parseLogHz}
+            format={(v) => (Math.pow(2, v) <= 20.5 ? t("mixer.cutOff") : `${Math.round(Math.pow(2, v))} Hz`)}
+            onChange={(v) => set({ lowCutHz: Math.round(Math.pow(2, v)) })}
+          />
+        </ParamRow>
+        <ParamRow label={t("mixer.highCut")} hint={t("devices.tone.highCut")}>
+          <Slider
+            label={t("mixer.highCut")}
+            value={Math.log2(fx.highCutHz)}
+            min={Math.log2(1000)}
+            max={Math.log2(20000)}
+            step={0.01}
+            reset={Math.log2(20000)}
+            parse={parseLogHz}
+            format={(v) => (Math.pow(2, v) >= 19900 ? t("mixer.cutOff") : `${(Math.pow(2, v) / 1000).toFixed(1)} kHz`)}
+            onChange={(v) => set({ highCutHz: Math.round(Math.pow(2, v)) })}
+          />
+        </ParamRow>
+      </div>
+    </DevicePage>
   );
 }
 
-/** Effekt-Busse wie die Effekt-Seiten: links der Signalweg mit Schaltern, rechts nur, was an ist. */
 export function BusesPanel() {
   const buses = useStore((s) => s.buses);
-  const [flash, setFlash] = useState<string | null>(null);
-  useEffect(() => {
-    if (!flash) return;
-    const timer = window.setTimeout(() => setFlash(null), 900);
-    return () => window.clearTimeout(timer);
-  }, [flash]);
+  const [open, select] = useSelected<BusId>("ode.bus-device", BUSES, "reverb");
   const tone = (id: "soundboard" | "music" | "live") => {
     const channel = CHANNELS.find((c) => c.id === id)!;
-    return {
-      id,
-      title: channel.name(),
-      icon: <Equalizer />,
-      accent: channel.color,
-      enabled: buses.channels[id].eqEnabled,
-      onToggle: (eqEnabled: boolean) => smooth(() => actions.setChannelFx(id, { eqEnabled })),
-    };
+    return { id, title: channel.name(), icon: <Equalizer /> as ReactNode, accent: channel.color, enabled: buses.channels[id].eqEnabled };
   };
-  const items = [
-    ...(buses.reverb.enabled ? [{ id: "reverb", weight: 3, render: () => <ReverbBus highlight={flash === "reverb"} /> }] : []),
-    ...(buses.echo.enabled ? [{ id: "echo", weight: 2, render: () => <EchoBus highlight={flash === "echo"} /> }] : []),
-    ...(["soundboard", "music", "live"] as const)
-      .filter((id) => buses.channels[id].eqEnabled)
-      .map((id) => ({ id, weight: 1, render: () => <ChannelTone id={id} highlight={flash === id} /> })),
-  ];
-
   return (
-    <div className="flex min-h-0 flex-1 gap-3">
-      <ChainList
-        start={{ label: t("mixer.inputs"), icon: <Microphone /> }}
-        end={{ label: t("mixer.outputs"), icon: <SpeakerHigh /> }}
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <DeviceBar
+        value={open}
+        onChange={select}
         groups={[
-          {
-            title: t("mixer.buses"),
-            devices: [
-              {
-                id: "reverb",
-                title: t("mixer.reverbBus"),
-                icon: <Church />,
-                accent: "var(--ch-out)",
-                enabled: buses.reverb.enabled,
-                onToggle: (enabled: boolean) => smooth(() => actions.setBus("reverb", { enabled })),
-              },
-              {
-                id: "echo",
-                title: t("mixer.echoBus"),
-                icon: <Repeat />,
-                accent: "var(--ch-out)",
-                enabled: buses.echo.enabled,
-                onToggle: (enabled: boolean) => smooth(() => actions.setBus("echo", { enabled })),
-              },
-            ],
-          },
-          { title: t("mixer.tone"), devices: [tone("soundboard"), tone("music"), tone("live")] },
+          [
+            { id: "reverb", title: t("mixer.reverbBus"), icon: <Church />, accent: "var(--ch-out)", enabled: buses.reverb.enabled },
+            { id: "echo", title: t("mixer.echoBus"), icon: <Repeat />, accent: "var(--ch-out)", enabled: buses.echo.enabled },
+          ],
+          [tone("soundboard"), tone("music"), tone("live")],
         ]}
-        onFocus={setFlash}
       />
-      <ActiveGrid
-        empty={
-          <EmptyState icon={<Church weight="duotone" />} title={t("mixer.noBusTitle")}>
-            {t("mixer.noBusHint")}
-          </EmptyState>
-        }
-        items={items}
-      />
+      <Crossfade id={open} order={BUSES}>
+        <Bus id={open} />
+      </Crossfade>
     </div>
   );
 }

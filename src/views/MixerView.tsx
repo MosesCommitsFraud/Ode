@@ -8,7 +8,7 @@ import {
   Waveform as AudioWaveform,
 } from "@phosphor-icons/react";
 import { useState, type ReactNode } from "react";
-import { Crossfade } from "~/components/effects/rack";
+import { Crossfade } from "~/components/effects/device";
 import { BusesPanel } from "~/components/mixer/BusesPanel";
 import { ChannelStrip, StripToggle } from "~/components/mixer/ChannelStrip";
 import { CHANNEL_DEFAULTS, OUTPUT_DEFAULTS, same } from "~/components/mixer/PageChannel";

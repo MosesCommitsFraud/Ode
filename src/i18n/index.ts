@@ -1,5 +1,6 @@
 /** Alle Wörterbücher, je Bereich eine Datei (vermeidet Konflikte beim Bearbeiten). */
 import common from "./common";
+import devices from "./devices";
 import downloads from "./downloads";
 import editor from "./editor";
 import help from "./help";
@@ -19,6 +20,7 @@ export type Dictionary = { de: Record<string, string>; en: Record<string, string
 
 export const dictionaries: Record<string, Dictionary> = {
   common,
+  devices,
   downloads,
   editor,
   help,

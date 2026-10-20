@@ -1,0 +1,198 @@
+/**
+ * Texte der Geräte-Seiten (Effekte, Stimme, Busse): `<id>.about` sagt in
+ * einem Satz, was das Gerät tut, `<id>.<einstellung>` erklärt eine Zeile.
+ */
+export default {
+  de: {
+    reset: "Zurücksetzen",
+    level: "Mikrofon",
+    reduction: "Absenkung",
+    gain: "Anhebung",
+    open: "Mikrofon offen",
+    speech: "Sprache erkannt",
+    quick: "Schnellwahl",
+
+    "gate.about": "Schaltet das Mikrofon stumm, solange du nicht sprichst – gegen Lüfter, Rauschen und Tippen in Pausen.",
+    "gate.threshold": "Alles, was leiser ist, wird stumm. Knapp über das Grundrauschen in Pausen stellen.",
+
+    "denoise.about": "Eine KI trennt deine Stimme von Geräuschen und entfernt Rauschen, Lüfter und Straßenlärm.",
+    "denoise.strength": "Wie viel entfernt wird. Weniger klingt natürlicher, mehr ist ruhiger.",
+    "denoise.mode": "„Nur Sprache“ senkt zusätzlich alles ab, was nicht nach Stimme klingt, z. B. Klicks zwischen Wörtern.",
+
+    "eq.about": "Formt den Klang deiner Stimme: mehr oder weniger Tiefe, Verständlichkeit und Glanz.",
+    "eq.low": "Wärme und Fülle. Weniger, wenn es dröhnt.",
+    "eq.mid": "Verständlichkeit. Mehr, wenn du dumpf klingst.",
+    "eq.high": "Glanz und Luft. Weniger, wenn es zischelt.",
+    "eq.neutral": "Neutral",
+    "eq.warm": "Wärmer",
+    "eq.clear": "Klarer",
+    "eq.bright": "Heller",
+    "eq.thin": "Weniger Bass",
+
+    "agc.about": "Gleicht deine Lautstärke automatisch an: leise Stellen werden angehoben, laute abgesenkt.",
+    "agc.target": "Wie laut deine Stimme im Mittel sein soll.",
+    "agc.maxGain": "Höchstens so viel wird angehoben, damit Rauschen in Pausen nicht hochkommt.",
+
+    "compressor.about": "Macht laute Stellen leiser und gleicht die Stimme so aus – sie klingt dichter und gleichmäßiger.",
+    "compressor.ratio": "Wie stark laute Stellen abgesenkt werden.",
+    "compressor.threshold": "Ab diesem Pegel greift er ein.",
+    "compressor.makeup": "Hebt danach alles an, damit es nicht leiser wird.",
+
+    "deEsser.about": "Dämpft scharfe S- und Zischlaute, ohne den Rest der Stimme zu verändern.",
+    "deEsser.threshold": "Ab dieser Lautstärke der Zischlaute wird gedämpft.",
+    "deEsser.frequency": "Wo die Zischlaute sitzen; meist zwischen 5 und 8 kHz.",
+
+    "exciter.about": "Fügt den Höhen feine Obertöne hinzu – die Stimme klingt frischer und präsenter.",
+    "exciter.frequency": "Ab welcher Tonhöhe Obertöne hinzukommen.",
+    "exciter.amount": "Wie deutlich. Wenig reicht meist.",
+
+    "limiter.about": "Eine feste Obergrenze: nichts wird lauter, auch nicht bei Schreien oder Lachen.",
+    "limiter.ceiling": "Lauter geht es nicht hinaus.",
+
+    "pitch.about": "Verschiebt deine Stimme höher oder tiefer – von Mickey Maus bis Riese.",
+    "pitch.semitones": "Tonhöhe in Halbtönen. 12 ist eine Oktave.",
+    "pitch.formant": "Klangfarbe ohne Tonhöhe: höher klingt kleiner und heller, tiefer größer.",
+
+    "autotune.about": "Zieht deine Stimme auf die nächste Note der gewählten Tonart.",
+    "autotune.key": "Grundton der Tonart.",
+    "autotune.scale": "Welche Noten erlaubt sind.",
+    "autotune.speed": "Wie schnell korrigiert wird. Sofort klingt nach Roboter, langsam natürlich.",
+
+    "harmonizer.about": "Singt mit dir: bis zu zwei zusätzliche Stimmen im Abstand, den du wählst.",
+    "harmonizer.interval": "Abstand zur eigenen Stimme in Halbtönen: +4 große Terz, +7 Quinte.",
+    "harmonizer.level": "Wie laut die Stimme mitsingt.",
+
+    "vocoder.about": "Lässt deine Stimme durch einen Synthesizer sprechen – der klassische Roboter-Chor.",
+    "vocoder.chord": "Ein Ton oder ein Akkord.",
+    "vocoder.note": "Welche Note der Synthesizer spielt.",
+    "vocoder.follow": "Folgt deiner gesungenen Tonhöhe statt einer festen Note.",
+    "vocoder.breath": "Mischt Rauschen für S- und T-Laute dazu.",
+    "vocoder.mix": "Anteil des Vocoders gegenüber deiner Stimme.",
+
+    "character.about": "Verwandelt den Klang: Roboter, Radio, Telefon, Megafon, Verzerrung und mehr.",
+    "character.mode": "Welcher Effekt.",
+    "character.amount": "Wie stark.",
+    "character.mix": "Anteil gegenüber deiner Stimme.",
+
+    "modulation.about": "Bewegung im Klang: Chorus macht breit, Flanger und Phaser lassen ihn schweben.",
+    "modulation.mode": "Welche Art.",
+    "modulation.rate": "Wie schnell die Bewegung ist.",
+    "modulation.depth": "Wie weit sie ausschlägt.",
+    "modulation.feedback": "Verstärkt den Effekt; beim Chorus ohne Wirkung.",
+    "modulation.mix": "Anteil gegenüber deiner Stimme.",
+
+    "echo.about": "Wiederholt, was du sagst, wie in einer Schlucht.",
+    "echo.time": "Abstand zwischen den Wiederholungen.",
+    "echo.feedback": "Wie viele Wiederholungen nachklingen.",
+    "echo.tone": "Höhen der Wiederholungen; weniger klingt wärmer und weiter weg.",
+    "echo.mix": "Lautstärke des Echos.",
+
+    "reverb.about": "Setzt dich in einen Raum – vom Badezimmer bis zur Kathedrale.",
+    "reverb.size": "Größe des Raums und wie lange er nachklingt.",
+    "reverb.damping": "Wie weich der Raum ist: mehr schluckt die Höhen.",
+    "reverb.predelay": "Pause, bevor der Hall einsetzt; hält die Stimme klar.",
+    "reverb.lowCut": "Entfernt Bass aus dem Hall, damit es nicht dröhnt.",
+    "reverb.mix": "Lautstärke des Halls.",
+
+    "bus.sends": "Wie viel jeder Kanal auf diesen Bus schickt.",
+    "tone.about": "Formt den Klang dieses Kanals, bevor er zu den Ausgängen geht.",
+    "tone.lowCut": "Schneidet Tiefen unter dieser Frequenz ab.",
+    "tone.highCut": "Schneidet Höhen über dieser Frequenz ab.",
+  },
+  en: {
+    reset: "Reset",
+    level: "Microphone",
+    reduction: "Reduction",
+    gain: "Boost",
+    open: "Mic open",
+    speech: "Speech detected",
+    quick: "Quick pick",
+
+    "gate.about": "Mutes your microphone while you are not talking – against fans, hiss and typing in pauses.",
+    "gate.threshold": "Anything quieter is muted. Set it just above the noise in pauses.",
+
+    "denoise.about": "An AI separates your voice from noise and removes hiss, fans and street noise.",
+    "denoise.strength": "How much is removed. Less sounds more natural, more is quieter.",
+    "denoise.mode": "“Speech only” also lowers anything that does not sound like a voice, e.g. clicks between words.",
+
+    "eq.about": "Shapes the sound of your voice: more or less depth, clarity and sparkle.",
+    "eq.low": "Warmth and body. Less if it booms.",
+    "eq.mid": "Clarity. More if you sound muffled.",
+    "eq.high": "Sparkle and air. Less if it hisses.",
+    "eq.neutral": "Neutral",
+    "eq.warm": "Warmer",
+    "eq.clear": "Clearer",
+    "eq.bright": "Brighter",
+    "eq.thin": "Less bass",
+
+    "agc.about": "Evens out your volume automatically: quiet parts are raised, loud ones lowered.",
+    "agc.target": "How loud your voice should be on average.",
+    "agc.maxGain": "Never boosts more than this, so noise in pauses stays down.",
+
+    "compressor.about": "Turns loud parts down and evens out your voice – it sounds denser and steadier.",
+    "compressor.ratio": "How strongly loud parts are lowered.",
+    "compressor.threshold": "It acts above this level.",
+    "compressor.makeup": "Raises everything afterwards so it does not get quieter.",
+
+    "deEsser.about": "Softens sharp S and hissing sounds without changing the rest of your voice.",
+    "deEsser.threshold": "Hissing above this level is softened.",
+    "deEsser.frequency": "Where the hissing sits; usually between 5 and 8 kHz.",
+
+    "exciter.about": "Adds subtle overtones to the highs – your voice sounds fresher and more present.",
+    "exciter.frequency": "Above which pitch overtones are added.",
+    "exciter.amount": "How much. A little is usually enough.",
+
+    "limiter.about": "A hard ceiling: nothing gets louder, not even shouting or laughing.",
+    "limiter.ceiling": "Nothing goes above this.",
+
+    "pitch.about": "Moves your voice higher or lower – from Mickey Mouse to giant.",
+    "pitch.semitones": "Pitch in semitones. 12 is an octave.",
+    "pitch.formant": "Tone colour without pitch: higher sounds smaller and brighter, lower bigger.",
+
+    "autotune.about": "Pulls your voice to the nearest note of the chosen key.",
+    "autotune.key": "Root of the key.",
+    "autotune.scale": "Which notes are allowed.",
+    "autotune.speed": "How fast it corrects. Instant sounds robotic, slow natural.",
+
+    "harmonizer.about": "Sings along: up to two extra voices at the interval you choose.",
+    "harmonizer.interval": "Distance to your voice in semitones: +4 major third, +7 fifth.",
+    "harmonizer.level": "How loud the voice sings along.",
+
+    "vocoder.about": "Makes your voice speak through a synthesizer – the classic robot choir.",
+    "vocoder.chord": "A single note or a chord.",
+    "vocoder.note": "Which note the synthesizer plays.",
+    "vocoder.follow": "Follows the pitch you sing instead of a fixed note.",
+    "vocoder.breath": "Mixes in noise for S and T sounds.",
+    "vocoder.mix": "Share of the vocoder against your voice.",
+
+    "character.about": "Transforms the sound: robot, radio, telephone, megaphone, distortion and more.",
+    "character.mode": "Which effect.",
+    "character.amount": "How strong.",
+    "character.mix": "Share against your voice.",
+
+    "modulation.about": "Movement in the sound: chorus widens, flanger and phaser make it swirl.",
+    "modulation.mode": "Which kind.",
+    "modulation.rate": "How fast the movement is.",
+    "modulation.depth": "How far it swings.",
+    "modulation.feedback": "Intensifies the effect; no effect on chorus.",
+    "modulation.mix": "Share against your voice.",
+
+    "echo.about": "Repeats what you say, like in a canyon.",
+    "echo.time": "Time between the repeats.",
+    "echo.feedback": "How many repeats ring on.",
+    "echo.tone": "Highs of the repeats; less sounds warmer and further away.",
+    "echo.mix": "Volume of the echo.",
+
+    "reverb.about": "Puts you in a room – from bathroom to cathedral.",
+    "reverb.size": "Size of the room and how long it rings.",
+    "reverb.damping": "How soft the room is: more absorbs the highs.",
+    "reverb.predelay": "Pause before the reverb starts; keeps your voice clear.",
+    "reverb.lowCut": "Removes bass from the reverb so it does not boom.",
+    "reverb.mix": "Volume of the reverb.",
+
+    "bus.sends": "How much each channel sends to this bus.",
+    "tone.about": "Shapes the sound of this channel before it reaches the outputs.",
+    "tone.lowCut": "Cuts lows below this frequency.",
+    "tone.highCut": "Cuts highs above this frequency.",
+  },
+};
