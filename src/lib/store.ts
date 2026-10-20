@@ -420,7 +420,7 @@ function demoVoice(t: number, level: number) {
     pitchHz: voiced ? 440 * Math.pow(2, (sung - 69) / 12) : 0,
     targetNote: voiced && v.autotune.enabled ? target : -1,
     correctionCents: voiced && v.autotune.enabled ? (target - sung) * 100 * (1 - v.autotune.speed * 0.6) : 0,
-    voiceLatencyMs: shifts ? 25 : 0,
+    voiceLatencyMs: shifts ? 40 : 0,
     vocoder: Array.from({ length: 16 }, (_, i) =>
       v.enabled && v.vocoder.enabled ? level * Math.max(0, 0.6 + 0.4 * Math.sin(t * 3 + i * 0.7)) * Math.exp(-i / 9) * 0.3 : 0,
     ),

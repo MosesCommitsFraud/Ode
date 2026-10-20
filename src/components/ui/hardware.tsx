@@ -1,10 +1,10 @@
+import { Power } from "@phosphor-icons/react";
 import { useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 
 /*
  * Bedienelemente wie an Rack-Geräten: Schiebefader, Drucktasten mit
- * Leuchtstreifen, Kippschalter mit Kontrolllampe und eingravierte
- * Beschriftung. Leuchten sind flache Farbflächen, ohne Schein.
+ * Leuchtstreifen, Einschalttaste und eingravierte Beschriftung. Leuchten sind flache Farbflächen, ohne Schein.
  */
 
 /** Beschriftung wie auf eine Frontplatte gedruckt. */
@@ -26,6 +26,9 @@ export function Caption({ label, value }: { label: string; value?: ReactNode }) 
   );
 }
 
+/** Höhe der Faderkappe in px; der Weg endet je eine halbe Kappe vor dem Rand. */
+const CAP = 28;
+
 /** Senkrechter Fader mit Skala, Kappe wie am Pult; Füllung in `color`. */
 export function SlideFader({
   label,
@@ -41,6 +44,7 @@ export function SlideFader({
   ticks = 5,
   tickLabel,
   scale,
+  size = "md",
 }: {
   label: string;
   value: number;
@@ -57,6 +61,8 @@ export function SlideFader({
   tickLabel?: (v: number) => string;
   /** Werte der Skalenstriche; ohne gleichmäßig `ticks` Stück. */
   scale?: number[];
+  /** `lg` füllt die Höhe neben einem Instrument, `md` passt unter eine Anzeige. */
+  size?: "md" | "lg";
 }) {
   const track = useRef<HTMLDivElement>(null);
   const range = max - min;
@@ -70,8 +76,8 @@ export function SlideFader({
   const fromPointer = (clientY: number) => {
     const rect = track.current?.getBoundingClientRect();
     if (!rect) return;
-    // Die Kappe ist 22 px hoch; der Weg endet je eine halbe Kappe vor dem Rand.
-    const p = 1 - (clientY - rect.top - 11) / Math.max(1, rect.height - 22);
+    // Der Weg endet je eine halbe Kappe vor dem Rand.
+    const p = 1 - (clientY - rect.top - CAP / 2) / Math.max(1, rect.height - CAP);
     set(min + Math.min(1, Math.max(0, p)) * range);
   };
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -97,13 +103,13 @@ export function SlideFader({
   const marks = scale
     ? scale.map((v) => (v - min) / range)
     : Array.from({ length: ticks }, (_, i) => i / Math.max(1, ticks - 1));
-  const at = (p: number) => `calc(11px + (100% - 22px) * ${p})`;
+  const at = (p: number) => `calc(${CAP / 2}px + (100% - ${CAP}px) * ${p})`;
 
   return (
     <div className={cn("flex min-w-0 flex-col items-center gap-1 select-none", disabled && "opacity-45")} style={{ "--ch": color } as CSSProperties}>
-      <div className="flex h-[76px] items-stretch gap-1">
+      <div className={cn("flex items-stretch gap-1", size === "lg" ? "h-[clamp(96px,16vh,136px)]" : "h-[88px]")}>
         {tickLabel && (
-          <div className="relative w-5 font-mono text-[8px] leading-none text-muted-foreground/70 tabular-nums">
+          <div className="relative w-6 font-mono text-[9px] leading-none text-muted-foreground/70 tabular-nums">
             {marks.map((p) => (
               <span key={p} className="absolute right-0 translate-y-1/2 whitespace-nowrap" style={{ bottom: at(p) }}>
                 {tickLabel(min + p * range)}
@@ -126,23 +132,25 @@ export function SlideFader({
           onPointerMove={onPointerMove}
           onDoubleClick={() => !disabled && reset !== undefined && set(reset)}
           onKeyDown={onKeyDown}
-          className="group relative w-7 cursor-default touch-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="group relative w-10 cursor-default touch-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {marks.map((p) => (
-            <span key={p} className="absolute left-1/2 h-px w-5 -translate-x-1/2 bg-muted-foreground/30" style={{ bottom: at(p) }} />
+            <span key={p} className="absolute left-1/2 h-px w-7 -translate-x-1/2 bg-muted-foreground/30" style={{ bottom: at(p) }} />
           ))}
-          <div className="well absolute inset-y-[9px] left-1/2 w-1 -translate-x-1/2 rounded-full" />
-          <div className="absolute bottom-[9px] left-1/2 w-1 -translate-x-1/2 rounded-full bg-[var(--ch)]" style={{ height: `calc((100% - 18px) * ${pos})` }} />
+          <div className="well absolute inset-y-3 left-1/2 w-1.5 -translate-x-1/2 rounded-full" />
+          <div className="absolute bottom-3 left-1/2 w-1.5 -translate-x-1/2 rounded-full bg-[var(--ch)]" style={{ height: `calc((100% - 24px) * ${pos})` }} />
           <div
             className={cn(
-              "absolute left-1/2 h-[22px] w-7 -translate-x-1/2 translate-y-1/2 rounded-[6px]",
+              "absolute left-1/2 h-7 w-10 -translate-x-1/2 translate-y-1/2 rounded-[7px]",
               "bg-[linear-gradient(to_bottom,oklch(98%_0.003_75),oklch(86%_0.006_75))] dark:bg-[linear-gradient(to_bottom,oklch(40%_0.006_60),oklch(26%_0.006_60))]",
               "shadow-[0_1px_0_oklch(100%_0_0/35%)_inset,0_5px_12px_-4px_oklch(0%_0_0/55%),0_0_0_1px_oklch(0%_0_0/18%)]",
               !disabled && "group-active:scale-95",
             )}
             style={{ bottom: at(pos) }}
           >
-            <span className="absolute inset-x-1 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-[var(--ch)]" />
+            <span className="absolute inset-x-1.5 top-[5px] h-px bg-black/10 dark:bg-white/8" />
+            <span className="absolute inset-x-1.5 top-1/2 h-0.5 -translate-y-1/2 rounded-full bg-[var(--ch)]" />
+            <span className="absolute inset-x-1.5 bottom-[5px] h-px bg-black/10 dark:bg-white/8" />
           </div>
         </div>
       </div>
@@ -259,27 +267,13 @@ export function PushButton({
   );
 }
 
-/** Kippschalter mit Kontrolllampe zum Einschalten eines Geräts. */
+/** Einschalttaste eines Geräts: eingerastet leuchtet ihr Streifen. */
 export function PowerSwitch({ on, onChange, label }: { on: boolean; onChange: (on: boolean) => void; label: string }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={() => onChange(!on)}
-      className="group flex h-7 shrink-0 cursor-default items-center gap-1.5 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <span className={cn("size-2 rounded-full transition-colors duration-150", on ? "bg-[var(--ch-mic)]" : "bg-[var(--led-off)] shadow-[inset_0_1px_1px_oklch(0%_0_0/35%)]")} />
-      <svg viewBox="0 0 20 28" className="h-7 w-5">
-        <rect x="2" y="6" width="16" height="16" rx="3.5" fill="var(--well)" stroke="var(--hairline)" />
-        <circle cx="10" cy="14" r="3.5" fill="var(--knob-lo)" />
-        {/* Hebel: oben = an */}
-        <g style={{ transform: `rotate(${on ? 0 : 180}deg)`, transformOrigin: "10px 14px", transition: "transform 140ms cubic-bezier(.3,.7,.4,1)" }}>
-          <line x1="10" y1="14" x2="10" y2="3.5" stroke="var(--knob-hi)" strokeWidth="3.4" strokeLinecap="round" />
-          <circle cx="10" cy="3.5" r="2.6" fill="var(--knob-hi)" stroke="var(--hairline)" />
-        </g>
-      </svg>
-    </button>
+    <div className="flex h-7 w-9 shrink-0">
+      <HardwareKey on={on} title={label} onClick={() => onChange(!on)} className="pt-2 pb-1 [&_svg]:size-3.5">
+        <Power weight="bold" className={cn(on && "text-[var(--ch-mic)]")} />
+      </HardwareKey>
+    </div>
   );
 }

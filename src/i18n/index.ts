@@ -2,6 +2,7 @@
 import common from "./common";
 import downloads from "./downloads";
 import editor from "./editor";
+import help from "./help";
 import effects from "./effects";
 import live from "./live";
 import messages from "./messages";
@@ -20,6 +21,7 @@ export const dictionaries: Record<string, Dictionary> = {
   common,
   downloads,
   editor,
+  help,
   effects,
   live,
   messages,

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { HelpButton } from "~/components/effects/HelpDrawer";
 import { PluginsPanel } from "~/components/effects/PluginsPanel";
 import { EqDisplay, GridLine, Module, PageBar, PLOT, Reading, Tick, freqX } from "~/components/effects/rack";
 import { Bars, cssColor } from "~/components/ui/canvas";
@@ -207,6 +208,10 @@ export function EffectsView() {
             </Pill>
           )}
         </PillGroup>
+        <div className="flex-1" />
+        {page !== "plugin" && (
+          <HelpButton topics={page === "clean" ? ["gate", "denoise", "eq", "agc"] : ["compressor", "deEsser", "exciter", "limiter"]} />
+        )}
       </PageBar>
 
       {page === "plugin" ? (
@@ -239,6 +244,7 @@ export function EffectsView() {
                   format={db}
                   tickLabel={dbTick}
                   scale={[-80, -60, -40, -20, -10]}
+                  size="lg"
                   disabled={!fx.gate.enabled}
                   onChange={(thresholdDb) => actions.setEffect("gate", { thresholdDb })}
                 />
@@ -318,6 +324,7 @@ export function EffectsView() {
                   format={(v) => `${v} dB`}
                   tickLabel={dbTick}
                   scale={[-30, -20, -10]}
+                  size="lg"
                   disabled={!fx.agc.enabled}
                   onChange={(targetDb) => actions.setEffect("agc", { targetDb })}
                 />
@@ -331,6 +338,7 @@ export function EffectsView() {
                   format={(v) => `+${v} dB`}
                   tickLabel={dbTick}
                   scale={[0, 10, 20, 30]}
+                  size="lg"
                   disabled={!fx.agc.enabled}
                   onChange={(maxGainDb) => actions.setEffect("agc", { maxGainDb })}
                 />
@@ -363,6 +371,7 @@ export function EffectsView() {
                   format={(v) => `${v} dB`}
                   tickLabel={dbTick}
                   scale={[-50, -40, -30, -20, -10, 0]}
+                  size="lg"
                   disabled={!fx.compressor.enabled}
                   onChange={(thresholdDb) => actions.setEffect("compressor", { thresholdDb })}
                 />
@@ -409,6 +418,7 @@ export function EffectsView() {
                   format={(v) => `${v} dB`}
                   tickLabel={dbTick}
                   scale={[-60, -40, -20, 0]}
+                  size="lg"
                   disabled={!fx.deEsser.enabled}
                   onChange={(thresholdDb) => actions.setEffect("deEsser", { thresholdDb })}
                 />
@@ -476,6 +486,7 @@ export function EffectsView() {
                   format={db}
                   tickLabel={dbTick}
                   scale={[-20, -15, -10, -5, 0]}
+                  size="lg"
                   disabled={!fx.limiter.enabled}
                   onChange={(ceilingDb) => actions.setEffect("limiter", { ceilingDb })}
                 />
