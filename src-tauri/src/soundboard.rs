@@ -12,9 +12,17 @@ use crate::audio::engine::Engine;
 use crate::audio::sampler::SamplerCommand;
 use crate::library::{Library, Sound, SoundPatch};
 
-/// Hotkey-ID → Sound-ID.
+/// Was ein Hotkey auslöst.
+#[derive(Debug, Clone)]
+pub enum HotkeyTarget {
+    Sound(i64),
+    /// Stimm-Preset ein- oder ausschalten.
+    Preset(String),
+}
+
+/// Hotkey-ID → Ziel.
 #[derive(Default)]
-pub struct Hotkeys(Mutex<HashMap<u32, i64>>);
+pub struct Hotkeys(Mutex<HashMap<u32, HotkeyTarget>>);
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -27,16 +35,21 @@ pub fn play<R: Runtime>(app: &AppHandle<R>, id: i64) -> Result<(), String> {
     app.state::<Engine>().sampler(SamplerCommand::Play(request))
 }
 
-/// Plugin mit Handler: Hotkeys spielen den zugeordneten Sound.
+/// Plugin mit Handler: Hotkeys spielen den zugeordneten Sound oder schalten
+/// ein Stimm-Preset um.
 pub fn hotkey_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, shortcut, event| {
             if event.state != ShortcutState::Pressed {
                 return;
             }
-            let id = app.state::<Hotkeys>().0.lock().get(&shortcut.id()).copied();
-            if let Some(id) = id {
-                let _ = play(app, id);
+            let target = app.state::<Hotkeys>().0.lock().get(&shortcut.id()).cloned();
+            match target {
+                Some(HotkeyTarget::Sound(id)) => {
+                    let _ = play(app, id);
+                }
+                Some(HotkeyTarget::Preset(id)) => crate::presets::toggle(app, &id),
+                None => {}
             }
         })
         .build()
@@ -50,18 +63,28 @@ pub fn sync_hotkeys<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
     let mut map = hotkeys.0.lock();
     map.clear();
 
+    let sounds = app
+        .state::<Library>()
+        .list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|s| {
+            s.hotkey
+                .map(|hotkey| (s.name, hotkey, HotkeyTarget::Sound(s.id)))
+        });
+    let presets = crate::presets::hotkeys(app)
+        .into_iter()
+        .map(|(name, hotkey, id)| (name, hotkey, HotkeyTarget::Preset(id)));
+
     let mut errors = Vec::new();
-    for sound in app.state::<Library>().list().unwrap_or_default() {
-        let Some(hotkey) = &sound.hotkey else {
-            continue;
-        };
+    for (name, hotkey, target) in sounds.chain(presets) {
         let shortcut: Shortcut = match hotkey.parse() {
             Ok(s) => s,
             Err(_) => {
                 errors.push(crate::tr!(
                     "{}: Hotkey „{hotkey}“ ist ungültig",
                     "{}: hotkey “{hotkey}” is invalid",
-                    sound.name
+                    name
                 ));
                 continue;
             }
@@ -70,18 +93,18 @@ pub fn sync_hotkeys<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
             errors.push(crate::tr!(
                 "{}: „{hotkey}“ ist schon vergeben",
                 "{}: “{hotkey}” is already in use",
-                sound.name
+                name
             ));
             continue;
         }
         match shortcuts.register(shortcut) {
             Ok(()) => {
-                map.insert(shortcut.id(), sound.id);
+                map.insert(shortcut.id(), target);
             }
             Err(_) => errors.push(crate::tr!(
                 "{}: „{hotkey}“ wird von einem anderen Programm benutzt",
                 "{}: “{hotkey}” is used by another program",
-                sound.name
+                name
             )),
         }
     }

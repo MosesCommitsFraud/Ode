@@ -5,6 +5,7 @@ pub mod downloader;
 pub mod i18n;
 pub mod library;
 pub mod music;
+mod presets;
 mod shell;
 mod soundboard;
 
@@ -31,7 +32,7 @@ const MIXER_KEY: &str = "mixer";
 
 /// Merkt sich, dass das Mischpult gespeichert werden muss.
 #[derive(Default)]
-struct MixerDirty(AtomicBool);
+pub(crate) struct MixerDirty(pub(crate) AtomicBool);
 
 fn load_mixer(app: &AppHandle) {
     let saved = app.state::<Library>().setting(MIXER_KEY);
@@ -334,6 +335,7 @@ pub fn run() {
         .manage(live)
         .manage(soundboard::Hotkeys::default())
         .manage(MixerDirty::default())
+        .manage(presets::Presets::default())
         .manage(Player::default())
         .on_window_event(shell::on_window_event)
         .setup(|app| {
@@ -346,6 +348,8 @@ pub fn run() {
             downloader::start(app.handle());
             Player::spawn_monitor(app.handle().clone());
             load_mixer(app.handle());
+            app.state::<presets::Presets>()
+                .load(&app.state::<Library>());
             spawn_mixer_saver(app.handle().clone());
             soundboard::sync_hotkeys(app.handle());
             let handle = app.handle().clone();
@@ -406,6 +410,13 @@ pub fn run() {
             cable::cable_status,
             cable::cable_install,
             cable::open_sound_settings,
+            presets::presets_state,
+            presets::preset_apply,
+            presets::preset_off,
+            presets::preset_save,
+            presets::preset_delete,
+            presets::presets_reorder,
+            presets::presets_restore,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
