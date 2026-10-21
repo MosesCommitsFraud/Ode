@@ -1,17 +1,18 @@
 //! Kurven für die Anzeige, gerechnet mit den echten Effekten: ein kurzes
-//! gesprochenes Wort durch Echo oder Hall, ein Testton durch den Charakter.
+//! gesprochenes Wort durch das Echo, ein Testton durch den Charakter. Der
+//! Hall zeigt stattdessen live die Pegel der echten Stimme.
 //! So zeigt die Oberfläche genau, was der Effekt mit diesen Einstellungen tut.
 
 use serde::Deserialize;
 
 use super::character::{Character, CharacterParams};
-use super::space::{Echo, EchoParams, Reverb, ReverbParams};
+use super::space::{Echo, EchoParams};
 use crate::audio::ENGINE_RATE;
 
 const RATE: usize = ENGINE_RATE as usize;
 /// Punkte der Charakter-Welle.
 const POINTS: usize = 200;
-/// Punkte je Kurve bei Echo und Hall.
+/// Punkte je Kurve beim Echo.
 const WAVE_POINTS: usize = 400;
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -19,13 +20,11 @@ const WAVE_POINTS: usize = 400;
 pub enum Preview {
     /// Ein Wort und seine Wiederholungen über 2,5 s.
     Echo { params: EchoParams },
-    /// Ein Wort und sein Nachhall über 4 s.
-    Reverb { params: ReverbParams },
     /// Zwei Schwingungen eines 150-Hz-Tons nach dem Effekt, −1 … 1.
     Character { params: CharacterParams },
 }
 
-/// Echo und Hall: drei Kurven mit je `WAVE_POINTS` Werten – Spitzenpegel
+/// Echo: drei Kurven mit je `WAVE_POINTS` Werten – Spitzenpegel
 /// des trockenen Worts, Spitzenpegel des Effekts (mit Anteil, wie er im Mix
 /// landet) und die Helligkeit des Effekts 0–1 (1 = so hell wie das Wort).
 /// Charakter: eine Kurve, die Welle.
@@ -36,18 +35,6 @@ pub fn render(preview: Preview) -> Vec<Vec<f32>> {
             echo.configure(&params);
             let dry = word(RATE * 5 / 2);
             let wet: Vec<f32> = dry.iter().map(|&x| echo.wet(x) * params.mix).collect();
-            curves(&dry, &wet)
-        }
-        Preview::Reverb { params } => {
-            let mut reverb = Reverb::new();
-            reverb.configure(&params);
-            // Wie `Reverb::process`: auch bei vollem Hall bleibt die halbe Stimme.
-            let word = word(RATE * 4);
-            let wet: Vec<f32> = word
-                .iter()
-                .map(|&x| reverb.wet(x) * params.mix * 3.0)
-                .collect();
-            let dry: Vec<f32> = word.iter().map(|&x| x * (1.0 - params.mix * 0.5)).collect();
             curves(&dry, &wet)
         }
         Preview::Character { params } => {
@@ -168,17 +155,5 @@ mod tests {
             mean(&dark),
             mean(&bright)
         );
-    }
-
-    #[test]
-    fn reverb_decays() {
-        let curves = render(Preview::Reverb {
-            params: ReverbParams {
-                enabled: true,
-                ..Default::default()
-            },
-        });
-        let wet = &curves[1];
-        assert!(wet[WAVE_POINTS - 1] < wet[60] * 0.1, "{:?}", &wet[..80]);
     }
 }

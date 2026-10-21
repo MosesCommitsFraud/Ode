@@ -416,6 +416,8 @@ function startDemo() {
           limiterDb: state.effects.limiter.enabled && voice > 0.6 ? -1.2 : 0,
           ...demoVoice(t, voice),
           ...demoSpectrum(t, voice),
+          voiceReverb: demoReverb(state.effects.voice.enabled && state.effects.voice.reverb.enabled, voice, state.effects.voice.reverb),
+          busReverb: [0, 0],
         },
         duckingDb: state.ducking.enabled && voice > 0.05 ? -state.ducking.amountDb : 0,
       },
@@ -448,6 +450,18 @@ function demoSpectrum(t: number, level: number) {
     return [input, tone ? input.map((v, i) => Math.max(SPECTRUM_FLOOR, v + tone[i])) : input];
   });
   return { spectrumIn, spectrumOut: spectrumIn.map((v, i) => Math.max(SPECTRUM_FLOOR, v + eq[i])), busSpectra };
+}
+
+/** Nachhall der Demo-Stimme: folgt dem Pegel und klingt je nach Größe ab. */
+let demoTail = 0;
+function demoReverb(on: boolean, voice: number, p: VoiceParams["reverb"]): [number, number] {
+  if (!on) {
+    demoTail = 0;
+    return [0, 0];
+  }
+  const rt60 = 0.3 + 5.7 * p.size * p.size;
+  demoTail = Math.max(voice * p.mix * 0.6, demoTail * 10 ** ((-3 * 0.033) / rt60));
+  return [voice, demoTail];
 }
 
 /** Simulierte Anzeigen der Stimm-Effekte für die Vorschau im Browser. */

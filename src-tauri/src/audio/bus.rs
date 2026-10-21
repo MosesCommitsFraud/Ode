@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
+use super::dsp::AtomicF32;
 use super::eq::{EqSettings, ParamEq};
 use super::mixer::ChannelId;
 use super::spectrum::{FFT_SIZE, SpectrumTap};
@@ -122,6 +123,9 @@ pub struct BusShared {
     version: AtomicU64,
     /// Spektrum vor und nach dem Klang-EQ von Soundboard, Musik und Live.
     pub spectra: [(SpectrumTap, SpectrumTap); 3],
+    /// Spitzenpegel in den Hall-Bus hinein und seiner Rückführung seit dem
+    /// letzten Auslesen.
+    pub reverb: [AtomicF32; 2],
 }
 
 impl BusShared {
@@ -188,6 +192,8 @@ pub struct BusChain {
     eqs: [ChannelEq; 3],
     /// Nur ein Ausgang liefert die Spektren.
     record: bool,
+    /// Spitzenpegel in den Hall hinein und heraus seit dem letzten Callback.
+    reverb_peaks: (f32, f32),
 }
 
 impl Default for BusChain {
@@ -213,6 +219,7 @@ impl BusChain {
             echo: Echo::new(),
             eqs: Default::default(),
             record: false,
+            reverb_peaks: (0.0, 0.0),
         };
         for eq in &mut chain.eqs {
             eq.before.reserve_exact(FFT_SIZE);
@@ -270,7 +277,10 @@ impl BusChain {
             for (eq, taps) in self.eqs.iter_mut().zip(&shared.spectra) {
                 eq.publish(taps, frames);
             }
+            shared.reverb[0].fetch_max(self.reverb_peaks.0);
+            shared.reverb[1].fetch_max(self.reverb_peaks.1);
         }
+        self.reverb_peaks = (0.0, 0.0);
         self.record = record;
     }
 
@@ -279,7 +289,12 @@ impl BusChain {
     pub fn returns(&mut self, reverb_in: f32, echo_in: f32) -> f32 {
         let mut out = 0.0;
         if self.params.reverb.enabled {
-            out += self.reverb.wet(reverb_in) * self.params.reverb.mix * 3.0;
+            let wet = self.reverb.wet(reverb_in) * self.params.reverb.mix * 3.0;
+            self.reverb_peaks = (
+                self.reverb_peaks.0.max(reverb_in.abs()),
+                self.reverb_peaks.1.max(wet.abs()),
+            );
+            out += wet;
         }
         if self.params.echo.enabled {
             out += self.echo.wet(echo_in) * self.params.echo.mix;

@@ -709,7 +709,7 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
       );
     case "reverb":
       return page(
-        { graph: <DecayChart params={voice.reverb} onChange={(patch) => set("reverb", patch)} /> },
+        { graph: <DecayChart enabled={voice.enabled && voice.reverb.enabled} source="voice" /> },
         <ReverbRows params={voice.reverb} onChange={(patch) => set("reverb", patch)} />,
       );
   }

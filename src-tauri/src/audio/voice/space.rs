@@ -145,14 +145,18 @@ impl Reverb {
     }
 
     /// Mischt trocken und Hall nach `mix`; auch bei vollem Hall bleibt die
-    /// halbe Stimme stehen, damit man verständlich bleibt.
-    pub fn process(&mut self, buf: &mut [f32]) {
+    /// halbe Stimme stehen, damit man verständlich bleibt. Gibt die
+    /// Spitzenpegel von Eingang und Hallanteil (wie er im Mix landet) zurück.
+    pub fn process(&mut self, buf: &mut [f32]) -> (f32, f32) {
         let mix = self.params.mix;
         let dry = 1.0 - mix * 0.5;
+        let mut peaks = (0.0f32, 0.0f32);
         for s in buf.iter_mut() {
-            let wet = self.wet(*s);
-            *s = *s * dry + wet * mix * 3.0;
+            let wet = self.wet(*s) * mix * 3.0;
+            peaks = (peaks.0.max(s.abs()), peaks.1.max(wet.abs()));
+            *s = *s * dry + wet;
         }
+        peaks
     }
 
     pub fn clear(&mut self) {

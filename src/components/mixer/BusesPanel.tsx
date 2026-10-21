@@ -81,7 +81,7 @@ function Bus({ id }: { id: BusId }) {
       accent="var(--ch-fx)"
       graph={
         id === "reverb" ? (
-          <DecayChart params={buses.reverb} onChange={(patch) => actions.setBus("reverb", patch)} />
+          <DecayChart enabled={buses.reverb.enabled} source="bus" />
         ) : (
           <TapsChart params={buses.echo} onChange={(patch) => actions.setBus("echo", patch)} />
         )

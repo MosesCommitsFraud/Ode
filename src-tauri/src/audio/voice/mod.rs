@@ -216,6 +216,8 @@ pub struct VoiceMeters {
     pub latency_ms: AtomicF32,
     /// Pegel der Vocoder-Bänder (Höchstwert seit dem letzten Auslesen).
     pub vocoder: [AtomicF32; BANDS],
+    /// Spitzenpegel in den Hall hinein und des Nachhalls seit dem letzten Auslesen.
+    pub reverb: [AtomicF32; 2],
 }
 
 // ------------------------------------------------------------ Autotune
@@ -487,7 +489,9 @@ impl VoiceChain {
             self.echo.process(buf);
         }
         if p.reverb.enabled {
-            self.reverb.process(buf);
+            let (input, wet) = self.reverb.process(buf);
+            meters.reverb[0].fetch_max(input);
+            meters.reverb[1].fetch_max(wet);
         }
     }
 

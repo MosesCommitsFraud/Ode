@@ -7,10 +7,11 @@ import { useStore } from "~/lib/store";
 import { inScale, noteName, noteOf } from "./icons";
 
 /*
- * Bedienbare Grafiken der Stimm-Effekte (uPlot). Echo, Hall und Charakter
- * zeigen Kurven, die die Engine mit dem echten Effekt rechnet: Echo und Hall
- * ein gesprochenes Wort samt Wiederholungen bzw. Nachhall, der Charakter eine
- * Welle. Ziehen stellt die wichtigsten Werte direkt ein.
+ * Bedienbare Grafiken der Stimm-Effekte (uPlot). Echo und Charakter zeigen
+ * Kurven, die die Engine mit dem echten Effekt rechnet: das Echo ein
+ * gesprochenes Wort samt Wiederholungen, der Charakter eine Welle. Der Hall
+ * zeigt live, was gerade hinein- und herausgeht. Ziehen stellt die
+ * wichtigsten Werte direkt ein.
  */
 
 const signed = (v: number, digits = 0) => `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v).toFixed(digits)}`;
@@ -308,9 +309,9 @@ export function LfoChart({ rate, depth, onChange }: { rate: number; depth: numbe
   );
 }
 
-/* ---------- Echo und Hall: ein Wort durch den Effekt ---------- */
+/* ---------- Echo und Hall: Wellenform ---------- */
 
-/** Punkte je Kurve, wie in `preview.rs`. */
+/** Punkte je Echo-Kurve, wie in `preview.rs`. */
 const WAVE_POINTS = 400;
 /** Dynamik der Wellenform: so viele dB unter Vollpegel liegt die Mittellinie. */
 const WAVE_DB = 48;
@@ -402,42 +403,43 @@ export function TapsChart({ params, onChange }: { params: VoiceParams["echo"]; o
 }
 
 /**
- * „Hallo“ und sein Nachhall über 4 s, mit dem echten Hall gerechnet. Ziehen:
- * waagrecht die Größe (Nachhallzeit, gestrichelt), senkrecht der Anteil.
+ * Live, die letzten 4 s: was in den Hall hineingeht (hell) und der Nachhall,
+ * der herauskommt (Gerätefarbe), so wie er im Mix landet. Ist der Hall aus
+ * oder kommt nichts an, bleibt die Fläche leer.
  */
-export function DecayChart({ params, onChange }: { params: VoiceParams["reverb"]; onChange: (patch: { size: number; mix: number }) => void }) {
+export function DecayChart({ enabled, source }: { enabled: boolean; source: "voice" | "bus" }) {
   const seconds = 4;
-  const rt60 = 0.3 + 5.7 * params.size * params.size;
-  const curves = usePreview({ kind: "reverb", params }, () => {
-    const at = Array.from({ length: WAVE_POINTS }, (_, i) => (i / WAVE_POINTS) * seconds);
-    const start = params.predelayMs / 1000;
-    return [
-      at.map((t) => wordLevel(t) * (1 - params.mix * 0.5)),
-      at.map((t) => {
-        const after = t - start;
-        if (after <= 0) return 0;
-        return params.mix * 0.35 * Math.min(1, after / 0.3) * 10 ** ((-3 * Math.max(0, after - 0.3)) / rt60);
-      }),
-      at.map(() => 0.6 * (1 - params.damping * 0.7)),
-    ];
-  });
+  const levels = useStore((s) => (s.info && enabled ? s.meters?.effects[source === "voice" ? "voiceReverb" : "busReverb"] : undefined));
+  const input = useHistory(levels?.[0] ?? 0, seconds, 0);
+  const wet = useHistory(levels?.[1] ?? 0, seconds, 0);
+  const idle = !levels || !input.concat(wet).some((v) => waveHeight(v) > 0.02);
   return (
     <Pad
       x={[0, seconds]}
       y={[-1.1, 1.1]}
-      axes={waveAxes(seconds)}
+      axes={(el) => [
+        {
+          ...axisStyle(el),
+          size: 22,
+          // Rechts ist jetzt; nur die inneren Marken, die äußeren würden abgeschnitten.
+          splits: () => Array.from({ length: seconds - 1 }, (_, i) => i + 1),
+          values: (_u, s) => s.map((v) => `−${seconds - v} s`),
+        },
+        { show: false },
+      ]}
       draw={(u, el) => {
-        drawWord(u, el, curves, seconds);
-        // Griff dort, wo der Hall um 60 dB gefallen ist; seine Höhe zeigt den Anteil.
-        const px = u.valToPos(Math.min(rt60, seconds), "x", true);
-        const py = u.valToPos(Math.max(params.mix, 0.02), "y", true);
-        line(u, px, u.bbox.top, px, u.bbox.top + u.bbox.height, token(el, "--ch-mic", 0.5), 1, [4, 3]);
-        dot(u, px, py, token(el, "--ch-mic"), "white");
-        tag(u, px, py, `${rt60.toFixed(1)} s · ${t("voice.mix")} ${Math.round(params.mix * 100)} %`, token(el, "--foreground"), token(el, "--panel-raised", 0.92));
-      }}
-      onDrag={(s, m) => {
-        const size = Math.sqrt(clamp((clamp(s, 0.3, 4) - 0.3) / 5.7, 0, 1));
-        onChange({ size: Math.round(size * 100) / 100, mix: Math.round(clamp(m, 0, 1) * 100) / 100 });
+        if (!idle) {
+          drawWord(u, el, [input, wet, []], seconds);
+          return;
+        }
+        const ctx = u.ctx;
+        ctx.save();
+        ctx.font = FONT.replace("10px", `${11 * pr()}px`);
+        ctx.fillStyle = token(el, "--muted-foreground");
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(t(enabled ? "voice.reverbIdle" : "voice.reverbOff"), u.bbox.left + u.bbox.width / 2, u.bbox.top + u.bbox.height / 2);
+        ctx.restore();
       }}
     />
   );
