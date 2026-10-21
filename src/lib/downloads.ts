@@ -115,6 +115,16 @@ export const downloads = {
     await invoke("download_cancel", { id });
   },
 
+  /** Öffnet den Ordner mit den fertigen MP3s im Explorer. */
+  async openFolder() {
+    if (!isTauri) return;
+    try {
+      await invoke("downloads_open_folder");
+    } catch (e) {
+      set({ error: typeof e === "string" ? e : String(e) });
+    }
+  },
+
   async clearFinished() {
     if (!isTauri) return set({ jobs: state.jobs.filter((j) => ACTIVE.includes(j.status)) });
     await invoke("downloads_clear");

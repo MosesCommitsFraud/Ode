@@ -5,6 +5,7 @@ import {
   CaretRight as ChevronRight,
   CircleNotch as Loader2,
   DownloadSimple as Download,
+  FolderOpen,
   LinkSimple as Link2,
   Package,
   Stack as Layers,
@@ -335,11 +336,13 @@ export function DownloadsView() {
       <Card className="flex min-h-0 flex-1 flex-col p-3">
         <div className="flex h-9 items-center justify-between px-2 pb-1">
           <span className="font-mono text-3xs text-muted-foreground uppercase">{t("downloads.queue", { count: jobs.length })}</span>
-          {finished && (
-            <ActionGroup>
-              <ActionPill onClick={() => downloads.clearFinished()}>{t("downloads.clearFinished")}</ActionPill>
-            </ActionGroup>
-          )}
+          <ActionGroup>
+            {finished && <ActionPill onClick={() => downloads.clearFinished()}>{t("downloads.clearFinished")}</ActionPill>}
+            <ActionPill title={t("downloads.openFolderHint")} onClick={() => downloads.openFolder()}>
+              <FolderOpen />
+              {t("downloads.openFolder")}
+            </ActionPill>
+          </ActionGroup>
         </div>
         <div ref={ref} onWheel={onWheel} className="min-h-0 flex-1 overflow-hidden">
           {jobs.length === 0 ? (

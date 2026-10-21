@@ -410,7 +410,13 @@ pub fn run() {
             app.manage(MusicLibrary::open(&data_dir)?);
             app.manage(Tools::new(&data_dir)?);
             app.manage(cable::Cable::new(&data_dir));
-            app.manage(Downloads::new(&data_dir)?);
+            // Fertige MP3s landen sichtbar unter Downloads\Ode.
+            let export_dir = app
+                .path()
+                .download_dir()
+                .map(|d| d.join("Ode"))
+                .unwrap_or_else(|_| data_dir.join("exports"));
+            app.manage(Downloads::new(&data_dir, export_dir)?);
             downloader::start(app.handle());
             Player::spawn_monitor(app.handle().clone());
             load_mixer(app.handle());
@@ -472,6 +478,7 @@ pub fn run() {
             downloader::download_add,
             downloader::download_cancel,
             downloader::downloads_clear,
+            downloader::downloads_open_folder,
             downloader::download_set_target,
             shell::app_settings,
             shell::set_app_settings,

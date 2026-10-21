@@ -1,6 +1,6 @@
-//! Downloader: holt Audio per yt-dlp, wandelt es mit FFmpeg in 48 kHz mit
-//! angeglichener Lautheit (loudnorm) und importiert es ins Soundboard oder in
-//! die Musik. yt-dlp und FFmpeg lädt die App beim ersten Gebrauch selbst in
+//! Downloader: holt Audio per yt-dlp, wandelt es mit FFmpeg in eine MP3 mit
+//! 48 kHz und angeglichener Lautheit (loudnorm), legt sie im Download-Ordner
+//! ab und importiert sie ins Soundboard oder in die Musik. yt-dlp und FFmpeg lädt die App beim ersten Gebrauch selbst in
 //! ihren Datenordner; yt-dlp aktualisiert sich bei Bedarf.
 
 use std::fs::{self, File};
@@ -323,6 +323,8 @@ pub struct Downloads {
     /// Laufender Prozess des aktuellen Auftrags, zum Abbrechen.
     child: Mutex<Option<(u64, Child)>>,
     work_dir: PathBuf,
+    /// Sichtbarer Ordner, in dem jede fertige MP3 als Kopie landet.
+    export_dir: PathBuf,
     notify_jobs: Mutex<Option<Notify<Vec<Job>>>>,
     notify_imported: Mutex<Option<Notify<Target>>>,
 }
@@ -359,6 +361,17 @@ fn safe_name(name: &str) -> String {
     }
 }
 
+/// Freier Dateiname im Ordner: „Name.mp3“, sonst „Name (2).mp3“ usw.
+fn free_path(dir: &Path, name: &str, ext: &str) -> PathBuf {
+    let mut path = dir.join(format!("{name}.{ext}"));
+    let mut n = 2;
+    while path.exists() {
+        path = dir.join(format!("{name} ({n}).{ext}"));
+        n += 1;
+    }
+    path
+}
+
 /// "  42.3%" → 0.423
 fn parse_percent(line: &str) -> Option<f32> {
     let value = line.trim().trim_end_matches('%').trim();
@@ -369,7 +382,7 @@ fn parse_percent(line: &str) -> Option<f32> {
 }
 
 impl Downloads {
-    pub fn new(data_dir: &Path) -> anyhow::Result<Self> {
+    pub fn new(data_dir: &Path, export_dir: PathBuf) -> anyhow::Result<Self> {
         let work_dir = data_dir.join("downloads");
         // Reste abgebrochener Läufe entfernen.
         let _ = fs::remove_dir_all(&work_dir);
@@ -382,9 +395,14 @@ impl Downloads {
             receiver: Mutex::new(Some(receiver)),
             child: Mutex::new(None),
             work_dir,
+            export_dir,
             notify_jobs: Mutex::new(None),
             notify_imported: Mutex::new(None),
         })
+    }
+
+    pub fn export_dir(&self) -> &Path {
+        &self.export_dir
     }
 
     pub fn jobs(&self) -> Vec<Job> {
@@ -624,7 +642,7 @@ impl Downloads {
         };
         let (source, duration) = fetched?;
 
-        // 3. FFmpeg: 48 kHz, Lautheit angleichen, verlustfrei als FLAC.
+        // 3. FFmpeg: 48 kHz, Lautheit angleichen, MP3 mit Titel, Künstler und Cover.
         self.update(id, |j| {
             j.status = JobStatus::Converting;
             j.progress = 0.0;
@@ -638,24 +656,49 @@ impl Downloads {
                 j.and_then(|j| j.artist.clone()),
             )
         };
-        let output = dir.join(format!("{}.flac", safe_name(&title)));
+        let name = match &artist {
+            Some(artist) => safe_name(&format!("{artist} - {title}")),
+            None => safe_name(&title),
+        };
+        let output = dir.join(format!("{name}.mp3"));
+        let cover = dir.join("cover.jpg");
         let mut cmd = command(&tools.ffmpeg());
         cmd.args(["-hide_banner", "-nostats", "-y", "-i"])
-            .arg(&source)
-            .args([
-                "-vn",
-                "-af",
-                "loudnorm=I=-16:TP=-1.5:LRA=11",
-                "-ar",
-                "48000",
-                "-ac",
-                "2",
-                "-c:a",
-                "flac",
-                "-progress",
-                "pipe:1",
-            ])
-            .arg(&output);
+            .arg(&source);
+        if cover.is_file() {
+            cmd.arg("-i").arg(&cover).args([
+                "-map",
+                "0:a:0",
+                "-map",
+                "1:v:0",
+                "-c:v",
+                "copy",
+                "-disposition:v",
+                "attached_pic",
+            ]);
+        } else {
+            cmd.arg("-vn");
+        }
+        cmd.args([
+            "-af",
+            "loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            "320k",
+            "-id3v2_version",
+            "3",
+        ])
+        .arg("-metadata")
+        .arg(format!("title={title}"));
+        if let Some(artist) = &artist {
+            cmd.arg("-metadata").arg(format!("artist={artist}"));
+        }
+        cmd.args(["-progress", "pipe:1"]).arg(&output);
         self.run(id, cmd, |line| {
             if let Some(us) = line
                 .strip_prefix("out_time_us=")
@@ -667,12 +710,13 @@ impl Downloads {
             }
         })?;
 
-        // 4. In die Bibliothek.
+        // 4. Kopie in den Download-Ordner, dann in die Bibliothek.
         self.update(id, |j| {
             j.status = JobStatus::Importing;
             j.progress = 1.0;
         });
-        let cover = dir.join("cover.jpg");
+        fs::create_dir_all(&self.export_dir)?;
+        fs::copy(&output, free_path(&self.export_dir, &name, "mp3"))?;
         let meta = ImportMeta {
             name: Some(title.clone()),
             artist: artist.clone(),
@@ -916,6 +960,18 @@ pub fn download_set_target(app: AppHandle, id: u64, target: Target) -> Result<()
 #[tauri::command]
 pub fn download_cancel(downloads: State<Downloads>, id: u64) {
     downloads.cancel(id);
+}
+
+/// Öffnet den Download-Ordner im Explorer.
+#[tauri::command]
+pub fn downloads_open_folder(downloads: State<Downloads>) -> Result<(), String> {
+    let dir = downloads.export_dir();
+    fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    std::process::Command::new("explorer")
+        .arg(dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

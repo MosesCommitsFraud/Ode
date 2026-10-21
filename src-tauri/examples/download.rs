@@ -29,7 +29,7 @@ fn main() -> anyhow::Result<()> {
     let tools = Arc::new(Tools::new(&app_dir)?);
     let library = Arc::new(Library::open(&temp)?);
     let music = Arc::new(MusicLibrary::open(&temp)?);
-    let downloads = Arc::new(Downloads::new(&temp)?);
+    let downloads = Arc::new(Downloads::new(&temp, temp.join("export"))?);
     let started = Instant::now();
 
     if !tools.ready() {
