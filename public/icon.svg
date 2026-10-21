@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <!-- App-Symbol: Ring, der wie eine Schallwelle aufgeht; die Welle in Ode-Orange. -->
+  <!-- App-Symbol: Strophe, Wendung, Gegenstrophe und die kurze Schlusszeile (Epode) einer Ode, zugleich lesbar als Verszeilen; der Schluss in Ode-Orange. -->
   <rect width="1024" height="1024" rx="224" fill="#1d1a17"/>
-  <circle cx="452" cy="512" r="226" fill="none" stroke="#f5f1ec" stroke-width="100"/>
-  <path d="M736 272A370 370 0 0 1 736 752" fill="none" stroke="#f26b21" stroke-width="72" stroke-linecap="round"/>
+  <path d="M292 352H652A80 80 0 0 1 652 512H372" fill="none" stroke="#f5f1ec" stroke-width="64" stroke-linecap="round"/>
+  <path d="M292 672H492" fill="none" stroke="#f26b21" stroke-width="64" stroke-linecap="round"/>
 </svg>
