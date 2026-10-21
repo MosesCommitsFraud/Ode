@@ -119,7 +119,9 @@ struct EffectMeters {
     /// Zusätzliche Verzögerung der Stimm-Effekte.
     voice_latency_ms: f32,
     vocoder: Vec<f32>,
-    /// Spitzenpegel in den Hall hinein und des Nachhalls: Stimm-Hall und Hall-Bus.
+    /// Spitzenpegel in den Effekt hinein und heraus: Stimm-Effekt und Bus.
+    voice_echo: [f32; 2],
+    bus_echo: [f32; 2],
     voice_reverb: [f32; 2],
     bus_reverb: [f32; 2],
     /// Spektrum vor dem EQ und am Ende der Kette, je `spectrum::BANDS` Werte in dB.
@@ -204,6 +206,8 @@ fn snapshot(engine: &Engine, analyzers: &mut Analyzers) -> Meters {
             correction_cents: voice.correction_cents.load(),
             voice_latency_ms: voice.latency_ms.load(),
             vocoder: voice.vocoder.iter().map(|b| b.take()).collect(),
+            voice_echo: voice.echo.each_ref().map(|m| m.take()),
+            bus_echo: mixer.buses.echo.each_ref().map(|m| m.take()),
             voice_reverb: voice.reverb.each_ref().map(|m| m.take()),
             bus_reverb: mixer.buses.reverb.each_ref().map(|m| m.take()),
             spectrum_in: if running {

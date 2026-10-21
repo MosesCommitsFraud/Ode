@@ -416,6 +416,8 @@ function startDemo() {
           limiterDb: state.effects.limiter.enabled && voice > 0.6 ? -1.2 : 0,
           ...demoVoice(t, voice),
           ...demoSpectrum(t, voice),
+          voiceEcho: demoEcho(state.effects.voice.enabled && state.effects.voice.echo.enabled, voice, state.effects.voice.echo),
+          busEcho: [0, 0],
           voiceReverb: demoReverb(state.effects.voice.enabled && state.effects.voice.reverb.enabled, voice, state.effects.voice.reverb),
           busReverb: [0, 0],
         },
@@ -450,6 +452,18 @@ function demoSpectrum(t: number, level: number) {
     return [input, tone ? input.map((v, i) => Math.max(SPECTRUM_FLOOR, v + tone[i])) : input];
   });
   return { spectrumIn, spectrumOut: spectrumIn.map((v, i) => Math.max(SPECTRUM_FLOOR, v + eq[i])), busSpectra };
+}
+
+/** Wiederholungen der Demo-Stimme: die letzten Pegel, je eine Echo-Zeit später und leiser. */
+const demoPast: number[] = [];
+function demoEcho(on: boolean, voice: number, p: VoiceParams["echo"]): [number, number] {
+  demoPast.unshift(voice);
+  demoPast.length = Math.min(demoPast.length, 200);
+  if (!on) return [0, 0];
+  const ticks = Math.max(1, Math.round(p.timeMs / 33));
+  let wet = 0;
+  for (let n = 1; n * ticks < demoPast.length; n++) wet += (demoPast[n * ticks] ?? 0) * p.feedback ** (n - 1);
+  return [voice, wet * p.mix];
 }
 
 /** Nachhall der Demo-Stimme: folgt dem Pegel und klingt je nach Größe ab. */

@@ -123,9 +123,10 @@ pub struct BusShared {
     version: AtomicU64,
     /// Spektrum vor und nach dem Klang-EQ von Soundboard, Musik und Live.
     pub spectra: [(SpectrumTap, SpectrumTap); 3],
-    /// Spitzenpegel in den Hall-Bus hinein und seiner Rückführung seit dem
-    /// letzten Auslesen.
+    /// Spitzenpegel in Hall- und Echo-Bus hinein und ihrer Rückführung seit
+    /// dem letzten Auslesen.
     pub reverb: [AtomicF32; 2],
+    pub echo: [AtomicF32; 2],
 }
 
 impl BusShared {
@@ -192,8 +193,9 @@ pub struct BusChain {
     eqs: [ChannelEq; 3],
     /// Nur ein Ausgang liefert die Spektren.
     record: bool,
-    /// Spitzenpegel in den Hall hinein und heraus seit dem letzten Callback.
+    /// Spitzenpegel in Hall und Echo hinein und heraus seit dem letzten Callback.
     reverb_peaks: (f32, f32),
+    echo_peaks: (f32, f32),
 }
 
 impl Default for BusChain {
@@ -220,6 +222,7 @@ impl BusChain {
             eqs: Default::default(),
             record: false,
             reverb_peaks: (0.0, 0.0),
+            echo_peaks: (0.0, 0.0),
         };
         for eq in &mut chain.eqs {
             eq.before.reserve_exact(FFT_SIZE);
@@ -279,8 +282,11 @@ impl BusChain {
             }
             shared.reverb[0].fetch_max(self.reverb_peaks.0);
             shared.reverb[1].fetch_max(self.reverb_peaks.1);
+            shared.echo[0].fetch_max(self.echo_peaks.0);
+            shared.echo[1].fetch_max(self.echo_peaks.1);
         }
         self.reverb_peaks = (0.0, 0.0);
+        self.echo_peaks = (0.0, 0.0);
         self.record = record;
     }
 
@@ -297,7 +303,12 @@ impl BusChain {
             out += wet;
         }
         if self.params.echo.enabled {
-            out += self.echo.wet(echo_in) * self.params.echo.mix;
+            let wet = self.echo.wet(echo_in) * self.params.echo.mix;
+            self.echo_peaks = (
+                self.echo_peaks.0.max(echo_in.abs()),
+                self.echo_peaks.1.max(wet.abs()),
+            );
+            out += wet;
         }
         out
     }

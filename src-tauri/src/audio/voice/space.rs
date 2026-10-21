@@ -272,12 +272,17 @@ impl Echo {
         self.unit.tick(x).clamp(-1.5, 1.5)
     }
 
-    pub fn process(&mut self, buf: &mut [f32]) {
+    /// Gibt die Spitzenpegel von Eingang und Wiederholungen (wie sie im Mix
+    /// landen) zurück.
+    pub fn process(&mut self, buf: &mut [f32]) -> (f32, f32) {
         let mix = self.params.mix;
+        let mut peaks = (0.0f32, 0.0f32);
         for s in buf.iter_mut() {
-            let wet = self.wet(*s);
-            *s += wet * mix;
+            let wet = self.wet(*s) * mix;
+            peaks = (peaks.0.max(s.abs()), peaks.1.max(wet.abs()));
+            *s += wet;
         }
+        peaks
     }
 
     pub fn clear(&mut self) {

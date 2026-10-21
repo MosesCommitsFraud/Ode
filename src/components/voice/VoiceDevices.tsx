@@ -27,7 +27,7 @@ import { t } from "~/lib/i18n";
 import { actions, useStore } from "~/lib/store";
 import { cn } from "~/lib/utils";
 import { inScale, keyName, noteName, noteOf } from "./icons";
-import { DecayChart, IntervalChart, LfoChart, PitchPad, PitchTrack, TapsChart, WaveChart } from "./VoiceCharts";
+import { IntervalChart, LfoChart, LiveChart, PitchPad, PitchTrack, WaveChart } from "./VoiceCharts";
 
 /* Die Stimm-Effekte als Geräte-Seiten: je Effekt Erklärung, Live-Werte, wo
    es welche gibt, und alle Einstellungen als Zeilen. Echo und Hall teilen
@@ -704,12 +704,12 @@ export function VoiceDevice({ id }: { id: VoiceDeviceId }) {
       );
     case "echo":
       return page(
-        { graph: <TapsChart params={voice.echo} onChange={(patch) => set("echo", patch)} /> },
+        { graph: <LiveChart effect="echo" enabled={voice.enabled && voice.echo.enabled} source="voice" /> },
         <EchoRows params={voice.echo} onChange={(patch) => set("echo", patch)} />,
       );
     case "reverb":
       return page(
-        { graph: <DecayChart enabled={voice.enabled && voice.reverb.enabled} source="voice" /> },
+        { graph: <LiveChart effect="reverb" enabled={voice.enabled && voice.reverb.enabled} source="voice" /> },
         <ReverbRows params={voice.reverb} onChange={(patch) => set("reverb", patch)} />,
       );
   }

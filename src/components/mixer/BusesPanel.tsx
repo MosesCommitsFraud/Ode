@@ -2,7 +2,7 @@ import { Church, Equalizer, Repeat } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { EqControls, EqGraph, useEqTarget } from "~/components/effects/EqEditor";
 import { Crossfade, DeviceBar, DevicePage, KnobDeck, useSelected } from "~/components/effects/device";
-import { DecayChart, TapsChart } from "~/components/voice/VoiceCharts";
+import { LiveChart } from "~/components/voice/VoiceCharts";
 import { EchoRows, ReverbRows } from "~/components/voice/VoiceDevices";
 import { BUS_DEFAULTS, EQ_DEFAULTS } from "~/lib/defaults";
 import type { ChannelId } from "~/lib/engine";
@@ -80,11 +80,7 @@ function Bus({ id }: { id: BusId }) {
       about={t(`devices.${id}.about`)}
       accent="var(--ch-fx)"
       graph={
-        id === "reverb" ? (
-          <DecayChart enabled={buses.reverb.enabled} source="bus" />
-        ) : (
-          <TapsChart params={buses.echo} onChange={(patch) => actions.setBus("echo", patch)} />
-        )
+        <LiveChart effect={id} enabled={p.enabled} source="bus" />
       }
       enabled={p.enabled}
       onToggle={(enabled) => actions.setBus(id, { enabled })}

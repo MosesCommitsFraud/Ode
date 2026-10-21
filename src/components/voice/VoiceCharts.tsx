@@ -7,11 +7,10 @@ import { useStore } from "~/lib/store";
 import { inScale, noteName, noteOf } from "./icons";
 
 /*
- * Bedienbare Grafiken der Stimm-Effekte (uPlot). Echo und Charakter zeigen
- * Kurven, die die Engine mit dem echten Effekt rechnet: das Echo ein
- * gesprochenes Wort samt Wiederholungen, der Charakter eine Welle. Der Hall
- * zeigt live, was gerade hinein- und herausgeht. Ziehen stellt die
- * wichtigsten Werte direkt ein.
+ * Bedienbare Grafiken der Stimm-Effekte (uPlot). Der Charakter zeigt eine
+ * Welle, die die Engine mit dem echten Effekt rechnet; Echo und Hall zeigen
+ * live, was gerade hinein- und herausgeht. Ziehen stellt die wichtigsten
+ * Werte direkt ein.
  */
 
 const signed = (v: number, digits = 0) => `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v).toFixed(digits)}`;
@@ -309,107 +308,28 @@ export function LfoChart({ rate, depth, onChange }: { rate: number; depth: numbe
   );
 }
 
-/* ---------- Echo und Hall: Wellenform ---------- */
+/* ---------- Echo und Hall: live ---------- */
 
-/** Punkte je Echo-Kurve, wie in `preview.rs`. */
-const WAVE_POINTS = 400;
 /** Dynamik der Wellenform: so viele dB unter Vollpegel liegt die Mittellinie. */
 const WAVE_DB = 48;
 
 /** Spitzenpegel als Höhe 0–1, in dB gestaucht, damit leise Wiederholungen sichtbar bleiben. */
 const waveHeight = (v: number) => clamp((20 * Math.log10(Math.max(v, 1e-6)) + WAVE_DB) / WAVE_DB, 0, 1);
 
-/** Hüllkurve des Test-Worts „Hallo“ wie in `preview.rs`: Hauch, dann zwei Silben. */
-function wordLevel(t: number) {
-  const win = (from: number, to: number) => (t <= from || t >= to ? 0 : Math.sin((Math.PI * (t - from)) / (to - from)) ** 2);
-  return 0.9 * Math.max(win(0, 0.05) * 0.6, win(0.03, 0.2), win(0.24, 0.44) * 0.8);
-}
+const LIVE_METERS = {
+  echo: { voice: "voiceEcho", bus: "busEcho" },
+  reverb: { voice: "voiceReverb", bus: "busReverb" },
+} as const;
 
 /**
- * Wort und Effekt als gespiegelte Wellenform: das Wort in der
- * Vordergrundfarbe, der Effekt in der Gerätefarbe – je blasser, desto
- * dumpfer klingt er an der Stelle. `curves` = trocken, Effekt, Helligkeit.
+ * Live, die letzten 4 s, als gespiegelte Wellenform: was in den Effekt
+ * hineingeht (hell) und was herauskommt – Wiederholungen bzw. Nachhall – in
+ * der Gerätefarbe, so wie es im Mix landet. Ist der Effekt aus oder kommt
+ * nichts an, bleibt die Fläche leer.
  */
-function drawWord(u: uPlot, el: HTMLElement, curves: number[][], seconds: number) {
-  const [dry, wet, bright] = curves;
-  const ctx = u.ctx;
-  const mid = u.valToPos(0, "y", true);
-  const full = mid - u.valToPos(1, "y", true);
-  const step = seconds / dry.length;
-  // Auf ganze Pixel, damit zwischen den Balken keine Streifen entstehen.
-  const edge = (i: number) => Math.round(u.valToPos(i * step, "x", true));
-  const bar = (i: number, v: number, color: string) => {
-    const h = waveHeight(v) * full;
-    if (h < 0.5) return;
-    ctx.fillStyle = color;
-    ctx.fillRect(edge(i), mid - h, Math.max(1, edge(i + 1) - edge(i)), h * 2);
-  };
-  ctx.save();
-  line(u, u.bbox.left, mid, u.bbox.left + u.bbox.width, mid, token(el, "--muted-foreground", 0.25));
-  wet.forEach((v, i) => bar(i, v, token(el, "--ch-mic", 0.25 + 0.75 * Math.sqrt(bright[i] ?? 1))));
-  dry.forEach((v, i) => bar(i, v, token(el, "--foreground", 0.55)));
-  ctx.restore();
-}
-
-const waveAxes =
-  (seconds: number) =>
-  (el: HTMLElement): uPlot.Axis[] => [
-    {
-      ...axisStyle(el),
-      size: 22,
-      splits: () => Array.from({ length: Math.floor(seconds * 2) + 1 }, (_, i) => i / 2),
-      values: (_u, s) => s.map((v) => `${String(v).replace(".", ",")} s`),
-    },
-    { show: false },
-  ];
-
-/**
- * „Hallo“ und seine Wiederholungen über 2,5 s, mit dem echten Echo gerechnet.
- * Ziehen: waagrecht die Zeit bis zur ersten Wiederholung, senkrecht die
- * Rückkopplung.
- */
-export function TapsChart({ params, onChange }: { params: VoiceParams["echo"]; onChange: (patch: { timeMs: number; feedback: number }) => void }) {
-  const seconds = 2.5;
-  const time = params.timeMs / 1000;
-  const curves = usePreview({ kind: "echo", params }, () => {
-    const at = Array.from({ length: WAVE_POINTS }, (_, i) => (i / WAVE_POINTS) * seconds);
-    const repeats = (t: number) => Array.from({ length: Math.floor(t / time) }, (_, k) => k + 1);
-    return [
-      at.map(wordLevel),
-      at.map((t) => repeats(t).reduce((sum, n) => sum + wordLevel(t - n * time) * params.feedback ** (n - 1) * 0.7, 0) * params.mix),
-      at.map((t) => Math.min(1, 0.35 * (params.toneHz / 4000) ** 0.3) * 0.9 ** Math.max(0, Math.floor(t / time) - 1)),
-    ];
-  });
-  return (
-    <Pad
-      x={[0, seconds]}
-      y={[-1.1, 1.1]}
-      axes={waveAxes(seconds)}
-      draw={(u, el) => {
-        // Jede Wiederholung beginnt an einem Vielfachen der Zeit.
-        for (let n = 1; n * time < seconds; n++) {
-          const x = u.valToPos(n * time, "x", true);
-          line(u, x, u.bbox.top, x, u.bbox.top + u.bbox.height, token(el, "--ch-mic", n === 1 ? 0.5 : 0.2), 1, [4, 3]);
-        }
-        drawWord(u, el, curves, seconds);
-        const px = u.valToPos(time, "x", true);
-        const py = u.valToPos(Math.max(params.feedback, 0.02), "y", true);
-        dot(u, px, py, token(el, "--ch-mic"), "white");
-        tag(u, px, py, `${Math.round(params.timeMs)} ms · ${t("voice.feedback")} ${Math.round(params.feedback * 100)} %`, token(el, "--foreground"), token(el, "--panel-raised", 0.92));
-      }}
-      onDrag={(s, f) => onChange({ timeMs: Math.round(clamp(s * 1000, 20, 1500) / 5) * 5, feedback: Math.round(clamp(f, 0, 0.95) * 100) / 100 })}
-    />
-  );
-}
-
-/**
- * Live, die letzten 4 s: was in den Hall hineingeht (hell) und der Nachhall,
- * der herauskommt (Gerätefarbe), so wie er im Mix landet. Ist der Hall aus
- * oder kommt nichts an, bleibt die Fläche leer.
- */
-export function DecayChart({ enabled, source }: { enabled: boolean; source: "voice" | "bus" }) {
+export function LiveChart({ effect, enabled, source }: { effect: "echo" | "reverb"; enabled: boolean; source: "voice" | "bus" }) {
   const seconds = 4;
-  const levels = useStore((s) => (s.info && enabled ? s.meters?.effects[source === "voice" ? "voiceReverb" : "busReverb"] : undefined));
+  const levels = useStore((s) => (s.info && enabled ? s.meters?.effects[LIVE_METERS[effect][source]] : undefined));
   const input = useHistory(levels?.[0] ?? 0, seconds, 0);
   const wet = useHistory(levels?.[1] ?? 0, seconds, 0);
   const idle = !levels || !input.concat(wet).some((v) => waveHeight(v) > 0.02);
@@ -428,17 +348,32 @@ export function DecayChart({ enabled, source }: { enabled: boolean; source: "voi
         { show: false },
       ]}
       draw={(u, el) => {
-        if (!idle) {
-          drawWord(u, el, [input, wet, []], seconds);
-          return;
-        }
         const ctx = u.ctx;
         ctx.save();
-        ctx.font = FONT.replace("10px", `${11 * pr()}px`);
-        ctx.fillStyle = token(el, "--muted-foreground");
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(t(enabled ? "voice.reverbIdle" : "voice.reverbOff"), u.bbox.left + u.bbox.width / 2, u.bbox.top + u.bbox.height / 2);
+        if (idle) {
+          ctx.font = FONT.replace("10px", `${11 * pr()}px`);
+          ctx.fillStyle = token(el, "--muted-foreground");
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(t(`voice.${effect}${enabled ? "Idle" : "Off"}`), u.bbox.left + u.bbox.width / 2, u.bbox.top + u.bbox.height / 2);
+          ctx.restore();
+          return;
+        }
+        const mid = u.valToPos(0, "y", true);
+        const full = mid - u.valToPos(1, "y", true);
+        const step = seconds / input.length;
+        // Auf ganze Pixel, damit zwischen den Balken keine Streifen entstehen.
+        const edge = (i: number) => Math.round(u.valToPos(i * step, "x", true));
+        const bars = (values: number[], color: string) => {
+          ctx.fillStyle = color;
+          values.forEach((v, i) => {
+            const h = waveHeight(v) * full;
+            if (h >= 0.5) ctx.fillRect(edge(i), mid - h, Math.max(1, edge(i + 1) - edge(i)), h * 2);
+          });
+        };
+        line(u, u.bbox.left, mid, u.bbox.left + u.bbox.width, mid, token(el, "--muted-foreground", 0.25));
+        bars(wet, token(el, "--ch-mic"));
+        bars(input, token(el, "--foreground", 0.55));
         ctx.restore();
       }}
     />

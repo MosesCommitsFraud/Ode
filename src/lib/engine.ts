@@ -227,7 +227,9 @@ export interface Meters {
     voiceLatencyMs: number;
     /** 16 Bandpegel des Vocoders. */
     vocoder: number[];
-    /** Spitzenpegel in den Hall hinein und des Nachhalls: Stimm-Hall und Hall-Bus. */
+    /** Spitzenpegel in den Effekt hinein und heraus: Stimm-Effekt und Bus. */
+    voiceEcho: [number, number];
+    busEcho: [number, number];
     voiceReverb: [number, number];
     busReverb: [number, number];
     /** Spektrum vor dem EQ und am Ende der Kette, je 120 Bänder 20 Hz – 20 kHz in dB. */
@@ -274,5 +276,4 @@ export const engine = {
 
 /** Was `voicePreview` rechnen soll. */
 export type VoicePreview =
-  | { kind: "echo"; params: VoiceParams["echo"] }
   | { kind: "character"; params: VoiceParams["character"] };
