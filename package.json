@@ -13,17 +13,17 @@
     "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@phosphor-icons/react": "^2.1.10",
-    "@radix-ui/react-popover": "1.1.15",
-    "@radix-ui/react-slider": "1.3.6",
-    "@radix-ui/react-switch": "1.2.6",
-    "@radix-ui/react-toggle-group": "1.1.11",
+    "@radix-ui/react-popover": "1.3.1",
+    "@radix-ui/react-slider": "1.6.1",
+    "@radix-ui/react-switch": "1.4.1",
+    "@radix-ui/react-toggle-group": "1.2.1",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-clipboard-manager": "^2.5.0",
-    "@tauri-apps/plugin-dialog": "^2.8.3",
+    "@tauri-apps/plugin-dialog": "^2.8.4",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2.4.0",
-    "@tauri-apps/plugin-updater": "^2.14.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "klavier": "2.0.1",
@@ -36,11 +36,11 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
     "typescript": "~7.0.2",
-    "vite": "^8.0.16"
+    "vite": "^8.3.5"
   }
 }
