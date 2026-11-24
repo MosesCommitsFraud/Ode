@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use parking_lot::Mutex;
 use serde::Serialize;
 use tauri::{AppHandle, Manager, Runtime, State};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::audio::engine::Engine;
 use crate::audio::sampler::SamplerCommand;
+use crate::keyhook::Combo;
 use crate::library::{Library, Sound, SoundPatch};
 
 /// Was ein Hotkey auslöst.
@@ -20,9 +20,9 @@ pub enum HotkeyTarget {
     Preset(String),
 }
 
-/// Hotkey-ID → Ziel.
+/// Tastenkombination → Ziel.
 #[derive(Default)]
-pub struct Hotkeys(Mutex<HashMap<u32, HotkeyTarget>>);
+pub struct Hotkeys(Mutex<HashMap<Combo, HotkeyTarget>>);
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -35,30 +35,25 @@ pub fn play<R: Runtime>(app: &AppHandle<R>, id: i64) -> Result<(), String> {
     app.state::<Engine>().sampler(SamplerCommand::Play(request))
 }
 
-/// Plugin mit Handler: Hotkeys spielen den zugeordneten Sound oder schalten
-/// ein Stimm-Preset um.
-pub fn hotkey_plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    tauri_plugin_global_shortcut::Builder::new()
-        .with_handler(|app, shortcut, event| {
-            if event.state != ShortcutState::Pressed {
-                return;
+/// Startet den Tastatur-Hook: Hotkeys spielen den zugeordneten Sound oder
+/// schalten ein Stimm-Preset um. Die Taste selbst bleibt für andere Programme
+/// nutzbar (siehe keyhook).
+pub fn start_hotkeys<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    crate::keyhook::start(move |combo| {
+        let target = app.state::<Hotkeys>().0.lock().get(&combo).cloned();
+        match target {
+            Some(HotkeyTarget::Sound(id)) => {
+                let _ = play(&app, id);
             }
-            let target = app.state::<Hotkeys>().0.lock().get(&shortcut.id()).cloned();
-            match target {
-                Some(HotkeyTarget::Sound(id)) => {
-                    let _ = play(app, id);
-                }
-                Some(HotkeyTarget::Preset(id)) => crate::presets::toggle(app, &id),
-                None => {}
-            }
-        })
-        .build()
+            Some(HotkeyTarget::Preset(id)) => crate::presets::toggle(&app, &id),
+            None => {}
+        }
+    });
 }
 
 /// Meldet alle Hotkeys neu an; liefert Fehler für belegte oder ungültige.
 pub fn sync_hotkeys<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
-    let shortcuts = app.global_shortcut();
-    let _ = shortcuts.unregister_all();
     let hotkeys = app.state::<Hotkeys>();
     let mut map = hotkeys.0.lock();
     map.clear();
@@ -78,9 +73,9 @@ pub fn sync_hotkeys<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
 
     let mut errors = Vec::new();
     for (name, hotkey, target) in sounds.chain(presets) {
-        let shortcut: Shortcut = match hotkey.parse() {
-            Ok(s) => s,
-            Err(_) => {
+        let combo = match crate::keyhook::parse(&hotkey) {
+            Some(c) => c,
+            None => {
                 errors.push(crate::tr!(
                     "{}: Hotkey „{hotkey}“ ist ungültig",
                     "{}: hotkey “{hotkey}” is invalid",
@@ -89,7 +84,7 @@ pub fn sync_hotkeys<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
                 continue;
             }
         };
-        if map.contains_key(&shortcut.id()) {
+        if map.contains_key(&combo) {
             errors.push(crate::tr!(
                 "{}: „{hotkey}“ ist schon vergeben",
                 "{}: “{hotkey}” is already in use",
@@ -97,17 +92,9 @@ pub fn sync_hotkeys<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
             ));
             continue;
         }
-        match shortcuts.register(shortcut) {
-            Ok(()) => {
-                map.insert(shortcut.id(), target);
-            }
-            Err(_) => errors.push(crate::tr!(
-                "{}: „{hotkey}“ wird von einem anderen Programm benutzt",
-                "{}: “{hotkey}” is used by another program",
-                name
-            )),
-        }
+        map.insert(combo, target);
     }
+    crate::keyhook::set_active(map.keys().copied().collect());
     errors
 }
 

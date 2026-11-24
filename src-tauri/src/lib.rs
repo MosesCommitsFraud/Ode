@@ -3,6 +3,7 @@ mod cable;
 pub mod covers;
 pub mod downloader;
 pub mod i18n;
+mod keyhook;
 pub mod library;
 pub mod music;
 pub mod plugins;
@@ -404,7 +405,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(soundboard::hotkey_plugin())
         .manage(engine)
         .manage(live)
         .manage(plugins)
@@ -433,6 +433,7 @@ pub fn run() {
                 .load(&app.state::<Library>());
             spawn_mixer_saver(app.handle().clone());
             soundboard::sync_hotkeys(app.handle());
+            soundboard::start_hotkeys(app.handle());
             let handle = app.handle().clone();
             thread::spawn(move || handle.state::<Library>().preload());
             spawn_meter_loop(app.handle().clone());
